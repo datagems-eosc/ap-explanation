@@ -69,13 +69,25 @@ class ProvenanceService:
 
         # Detect if the outer select contains aggregates
         if any(outer_select.find_all(AggFunc)):
-            return self._rewrite_sql_aggregate(query)
+            return self._rewrite_sql_select_aggregate(query)
         else:
-            return self._rewrite_sql_non_aggregate(query)
+            return self._rewrite_sql_select_non_aggregate(query)
 
-    def _rewrite_sql_non_aggregate(self, query: str) -> str:
+    def _rewrite_sql_select_non_aggregate(self, query: str) -> str:
         """
-        Rewrite a non-aggregate query by adding whyPROV_now to the select list.
+        Rewrite a non-aggregate SELECT query by adding whyPROV_now to the select list.
+
+        Example :
+        Original query:
+        SELECT col1, col2
+        FROM table
+        WHERE condition;
+
+        Rewritten query:
+        SELECT col1, col2, whyPROV_now(provenance(), 'why_mapping')
+        FROM table
+        WHERE condition;
+
         Args:
             query (str): Original SQL query
         Returns:
@@ -98,10 +110,24 @@ class ProvenanceService:
 
         return ast.sql()
 
-    def _rewrite_sql_aggregate(self, query: str) -> str:
+    def _rewrite_sql_select_aggregate(self, query: str) -> str:
         """
-        Rewrite an aggregate query by wrapping it as a subquery and adding
+        Rewrite an aggregate SELECT query by wrapping it as a subquery and adding
         aggregation_formula on the outer select.
+
+        Example :
+        Original query:
+        SELECT col1, SUM(col2) AS total
+        FROM table
+        GROUP BY col1;
+
+        Rewritten query:
+        SELECT col1, aggregation_formula(total, 'formula_mapping')
+        FROM (
+            SELECT col1, SUM(col2) AS total
+            FROM table
+            GROUP BY col1
+        ) AS x;
 
         Args:
             query (str): Original SQL query
@@ -110,35 +136,46 @@ class ProvenanceService:
         """
         ast = parse_one(query)
 
-        outer_select = ast.find(Select)
-        if outer_select is None:
-            raise ValueError("Expected outer SELECT")
+        initial_select = ast.find(Select)
+        if initial_select is None:
+            raise ValueError("Expected query to be a SELECT query")
 
-        # Find the first aggregate in the outer select
-        agg_alias = None
-        for proj in outer_select.expressions:
-            if isinstance(proj.this, AggFunc):
-                agg_alias = proj.alias
-                break
+        # Process projections to separate aggregate and non-aggregate projections
+        proj_agg = []
+        proj_non_agg = []
+        for e in initial_select.expressions:
+            if e.find(AggFunc):
+                proj_agg.append(e)
+            else:
+                proj_non_agg.append(e)
 
-        if agg_alias is None:
+        # Find the first aggregate projection, this is the one that will be used in aggregation_formula
+        # TODO : what if there are multiple aggregates  or nested aggregates ?
+        if len(proj_agg) == 0:
             raise ValueError("No aggregate found in query")
+        agg = proj_agg[0]
 
-        # Wrap the original query as a subquery
+        # Wrap the original query in a subquery
         subquery_alias = "x"
-        subquery = Subquery(this=outer_select.copy(), alias=subquery_alias)
+        subquery = Subquery(this=initial_select.copy(), alias=subquery_alias)
 
-        outer_columns = [
-            col for col in outer_select.expressions if not isinstance(col.this, AggFunc)]
+        # Copy all non-aggregate projections attributes from the inital select to the wrapper select
+        outer_columns = []
+        for attr in proj_non_agg:
+            outer_columns.append(
+                Column(this=attr.alias_or_name, table=subquery_alias)
+            )
+
         outer_columns.append(
             Anonymous(
                 this="aggregation_formula",
-                expressions=[Column(this=agg_alias),
-                             Literal.string("formula_mapping")]
+                expressions=[
+                    Column(this=agg.alias_or_name),
+                    Literal.string("formula_mapping")
+                ]
             )
         )
 
-        new_outer_select = exp.Select(
-            expressions=outer_columns, from_=subquery)
+        wrapper = Select(expressions=outer_columns).from_(subquery)
 
-        return new_outer_select.sql()
+        return wrapper.sql()
