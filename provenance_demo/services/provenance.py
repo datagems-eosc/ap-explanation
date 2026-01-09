@@ -1,6 +1,9 @@
+from json import dumps, loads
 from typing import LiteralString, cast
+from uuid import UUID
 
 from psycopg import AsyncConnection
+from psycopg.rows import dict_row
 from psycopg.sql import SQL
 from sqlglot import exp, parse_one
 from sqlglot.expressions import (
@@ -29,13 +32,16 @@ class ProvenanceService:
         # Note: psycopg's SQL class requires LiteralString for raw SQL strings
         # This is to prevent user SQL injection, which is not a concern here since
         # the queries are internal. We cast to satisfy the type checker.
-        cursor = await self._conn.execute(SQL(cast(LiteralString, edited_query)))
-        row = await cursor.fetchone()
+        cursor = await self._conn.cursor(row_factory=dict_row).execute(SQL(cast(LiteralString, edited_query)))
+        rows = await cursor.fetchall()
 
-        if row is None:
-            return None
+        # convert UUIDs to str for JSON serialization
+        for row in rows:
+            for k, v in row.items():
+                if isinstance(v, UUID):
+                    row[k] = str(v)
 
-        return row[1]
+        return dumps(rows)
 
     def rewrite_sql(self, query: str) -> str:
         """
