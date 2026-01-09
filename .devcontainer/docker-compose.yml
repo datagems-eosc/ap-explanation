@@ -1,0 +1,41 @@
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/python:3.13-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    #    network_mode: service:db
+    command: sleep infinity
+    environment:
+      - POSTGRES_HOST=postgres-provsql
+      - POSTGRES_DB=mathe
+      - POSTGRES_USER=provdemo
+      - POSTGRES_PASSWORD=provdemo
+    depends_on:
+      # Ensures that the databases are started before the API
+      postgres-provsql:
+        condition: service_healthy
+
+  # --- PostgreSQL Service with ProvSQL compiled from source ---
+  postgres-provsql:
+    build:
+      context: ../dependencies/postgres-provsql
+      dockerfile: Dockerfile
+    container_name: postgres-provsql
+    ports:
+      - "5432:5432"
+    volumes:
+      - wp4_poc_postgres_data:/var/lib/postgresql/data
+      - ../fixtures/postgres-seed:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_USER=provdemo
+      - POSTGRES_PASSWORD=provdemo
+      - POSTGRES_DB=mathe
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U provdemo -d mathe" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  wp4_poc_postgres_data:

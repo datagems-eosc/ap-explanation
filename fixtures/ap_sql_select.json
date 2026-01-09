@@ -1,0 +1,163 @@
+{
+  "edges": [
+    {
+      "from": "a51f3e82-ca74-4ef6-8d1e-2bb08f4df6cf",
+      "labels": [
+        "consist_of"
+      ],
+      "to": "437e473a-bc17-46ce-8b36-a8b48cb2ef75"
+    },
+    {
+      "from": "437e473a-bc17-46ce-8b36-a8b48cb2ef75",
+      "labels": [
+        "input"
+      ],
+      "properties": {"argname": "arg1"},
+      "to": "aca33450-d1b4-4721-af00-7f1a73d5e34f"
+    },
+    {
+      "from": "437e473a-bc17-46ce-8b36-a8b48cb2ef75",
+      "labels": [
+        "input"
+      ],
+      "properties": {"argname": "arg2"},
+      "to": "c5a06fbd-887f-4562-8121-55dfe5a658c7"
+    },
+    {
+      "from": "437e473a-bc17-46ce-8b36-a8b48cb2ef75",
+      "labels": [
+        "output"
+      ],
+      "to": "8756aa7a-2436-48c7-afb0-0f99401392ad"
+    },
+    {
+      "from": "38b5aafb-184d-4b1e-9e9e-5541afca2c96",
+      "labels": [
+        "intervene"
+      ],
+      "to": "437e473a-bc17-46ce-8b36-a8b48cb2ef75"
+    },
+    {
+      "from": "474c2c12-4185-42a0-9e79-38af377bdcad",
+      "labels": [
+        "is_achieved"
+      ],
+      "to": "a51f3e82-ca74-4ef6-8d1e-2bb08f4df6cf"
+    },
+    {
+      "from": "38b5aafb-184d-4b1e-9e9e-5541afca2c96",
+      "labels": [
+        "request"
+      ],
+      "to": "474c2c12-4185-42a0-9e79-38af377bdcad"
+    },
+    {
+      "from": "aca33450-d1b4-4721-af00-7f1a73d5e34f",
+      "labels": [
+        "containedIn"
+      ],
+      "to": "91c383d9-bfdb-4d1e-bd9f-4164a30dc834"
+    },
+    {
+      "from": "928a3f45-7eec-474a-ab07-90736feb7ace",
+      "labels": [
+        "distribution"
+      ],
+      "to": "aca33450-d1b4-4721-af00-7f1a73d5e34f"
+    },
+    {
+      "from": "36f74548-0f4f-47c7-bfdf-6502e9fc0768",
+      "labels": [
+        "distribution"
+      ],
+      "to": "c5a06fbd-887f-4562-8121-55dfe5a658c7"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a51f3e82-ca74-4ef6-8d1e-2bb08f4df6cf",
+      "labels": [
+        "Analytical_Pattern"
+      ],
+      "properties": {
+        "Description": "Analytical Pattern to query a dataset",
+        "Name": "Query Dataset AP",
+        "Process": "query",
+        "PublishedDate": "2025-06-30",
+        "StartTime": "10:00:00"
+      }
+    },
+    {
+      "id": "437e473a-bc17-46ce-8b36-a8b48cb2ef75",
+      "labels": [
+        "Operator", "SQL_Operator"
+      ],
+      "properties": {
+        "Description": "Query executed via DuckDB on two datasets",
+        "Name": "DuckDB Query Operator",
+        "command": "query",
+        "queryType": "SELECT",
+        "PublishedDate": "2025-06-30",
+        "Query": "SELECT distinct t.name FROM assessment a JOIN platform__sna__questions q ON(a.question_id=q.id) JOIN platform__topic t ON(t.id=q.topic) WHERE id_lect=78 AND answer=-1 AND question_level=4",
+        "StartTime": "10:00:00",
+        "Step": 1,
+        "Type": "SQL Query"
+      }
+    },
+    {
+      "id": "928a3f45-7eec-474a-ab07-90736feb7ace",
+      "labels": [
+        "sc:Dataset"
+      ]
+    },
+    {
+      "id": "36f74548-0f4f-47c7-bfdf-6502e9fc0768",
+      "labels": [
+        "sc:Dataset"
+      ]
+    },
+    {
+      "id": "8756aa7a-2436-48c7-afb0-0f99401392ad",
+      "labels": [
+        "sc:Dataset"
+      ]
+    },
+    {
+      "id": "91c383d9-bfdb-4d1e-bd9f-4164a30dc834",
+      "labels": [
+        "dg:DatabaseConnection",
+        "RelationalDatabase"
+      ]
+    },
+    {
+      "id": "aca33450-d1b4-4721-af00-7f1a73d5e34f",
+      "labels": [
+        "cr:FileObject",
+        "RelationalDatabase"        
+      ]
+    },
+    {
+      "id": "c5a06fbd-887f-4562-8121-55dfe5a658c7",
+      "labels": [
+        "cr:FileObject",
+        "RelationalDatabase"
+      ]
+    },
+    {
+      "id": "38b5aafb-184d-4b1e-9e9e-5541afca2c96",
+      "labels": [
+        "User"
+      ]
+    },
+    {
+      "id": "474c2c12-4185-42a0-9e79-38af377bdcad",
+      "labels": [
+        "Task"
+      ],
+      "properties": {
+        "Description": "Task to query a dataset",
+        "Name": "Dataset Querying Task"
+      }
+    }
+  ]
+}
