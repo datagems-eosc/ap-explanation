@@ -1,6 +1,6 @@
 from logging import getLogger
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, status
 from psycopg import AsyncConnection
 from psycopg.errors import OperationalError
 
@@ -18,4 +18,6 @@ async def health_check(rq: Request, db: AsyncConnection = Depends(get_db_conn)):
     except OperationalError as e:
         logger.error("Database connection failed", exc_info=e)
         raise HTTPException(
-            status_code=503, detail="Database unavailable") from e
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable"
+        ) from e

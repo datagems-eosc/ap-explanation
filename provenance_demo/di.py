@@ -34,6 +34,7 @@ async def container_lifespan(_: FastAPI):
         min_size=1,
         max_size=5,
     )
+    await pool.open()
 
     yield
 

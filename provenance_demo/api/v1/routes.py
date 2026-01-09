@@ -8,5 +8,5 @@ router = APIRouter(
     tags=["v1"],
 )
 
-router.add_api_route("/explainAp", explain_ap, methods=["GET"])
+router.add_api_route("/explainAp", explain_ap, methods=["POST"])
 router.add_api_route("/health", health_check, methods=["GET"])
