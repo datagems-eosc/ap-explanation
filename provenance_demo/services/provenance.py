@@ -1,8 +1,9 @@
 from json import dumps, loads
+from logging import getLogger
 from typing import LiteralString, cast
 from uuid import UUID
 
-from psycopg import AsyncConnection
+from psycopg import AsyncConnection, errors
 from psycopg.rows import dict_row
 from psycopg.sql import SQL
 from sqlglot import exp, parse_one
@@ -16,6 +17,8 @@ from sqlglot.expressions import (
     Subquery,
 )
 
+logger = getLogger(__name__)
+
 
 class ProvenanceService:
 
@@ -23,6 +26,80 @@ class ProvenanceService:
 
     def __init__(self, conn: AsyncConnection):
         self._conn = conn
+
+    async def annotate_dataset(self, table_name: str, schema_name: str) -> bool:
+        """
+        Annotate a table with provenance information.
+        Args:
+            table_name (str): Name of the table to annotate.
+        Returns:
+            bool: True if the table was annotated, False if it was already annotated.
+        """
+
+        # First, try to add the provenance column
+        # If it already exists, it means the relation is already annotated
+        async with self._conn.transaction():
+            try:
+                # TODO: the search_path should not be hardcoded
+                await self._conn.execute("SET search_path TO mathe, public, provsql;")
+                await self._conn.execute("SELECT add_provenance(%s)", (table_name,))
+                await self._conn.execute(
+                    "SELECT create_provenance_mapping(%s, %s, %s)",
+                    (f"{table_name}_provwhy", table_name,
+                     f"'{table_name}_'||ctid")
+                )
+                created = await self._upsert_why_mapping(schema_name)
+                if not created:
+                    raise errors.Error(
+                        "No _provwhy tables found to create why_mapping")
+
+            except errors.DuplicateColumn:
+                logger.info(
+                    f"Provenance column for table '{table_name} already exists, ignoring")
+                return False
+            except errors.Error as e:
+                logger.error("Failed to annotate dataset", exc_info=e)
+                raise
+
+        return True
+
+    async def _upsert_why_mapping(self, schema_name: str) -> bool:
+        """
+        Create or recreate the why_mapping table by unioning all tables ending with _provwhy.
+        Returns:
+            bool: True if the table was created/recreated, False if no _provwhy tables were found.
+        """
+        # TODO: Remove hardcoded search_path
+        await self._conn.execute("SET search_path TO mathe, public, provsql;")
+
+        cursor = await self._conn.cursor(row_factory=dict_row).execute(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = %s AND tablename LIKE '%%_provwhy'",
+            (schema_name,)
+        )
+        provwhy_tables = await cursor.fetchall()
+
+        if not provwhy_tables:
+            logger.warning("No tables ending with _provwhy found")
+            return False
+
+        # Create the why_mapping table
+        await self._conn.execute("DROP TABLE IF EXISTS why_mapping CASCADE")
+        union_query = " UNION ".join([
+            f"SELECT * FROM {row['tablename']}" for row in provwhy_tables
+        ])
+        composed_rq = SQL("CREATE TABLE why_mapping AS {}").format(
+            SQL(cast(LiteralString, union_query))
+        )
+        await self._conn.execute(composed_rq)
+
+        # Adjust the value column to be an Array and add primary key
+        await self._conn.execute("ALTER TABLE why_mapping ALTER COLUMN value TYPE varchar")
+        await self._conn.execute("UPDATE why_mapping SET value = '{\"{' || value || '}\"}'")
+        await self._conn.execute("ALTER TABLE why_mapping ADD PRIMARY KEY (provenance)")
+
+        logger.info(
+            f"Created why_mapping table from {len(provwhy_tables)} _provwhy tables")
+        return True
 
     async def compute_provenance(self, sql_query: str) -> str | None:
         edited_query = self.rewrite_sql(sql_query)
@@ -52,7 +129,7 @@ class ProvenanceService:
         - Non-aggregate query: add whyPROV_now(provenance(), 'why_mapping')
         - Aggregate query: wrap the original query as a subquery, and add aggregation_formula(inner_aggregate_alias, 'formula_mapping') in outer SELECT
 
-        /!\ FOR THIS TO WORK, THE whyPROV_now function, why_mapping and formula_mapping MUST BE DEFINED IN THE DATABASE /!\
+        FOR THIS TO WORK, THE whyPROV_now function, why_mapping and formula_mapping MUST BE DEFINED IN THE DATABASE /!\
 
         Args:
             query (str): Original SQL query
