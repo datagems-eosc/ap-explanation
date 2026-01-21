@@ -1,0 +1,112 @@
+{
+  "edges": [
+    {
+      "from": "d2e917a5-563b-4a4c-a332-e4968ad6a20a",
+      "labels": [
+        "consist_of"
+      ],
+      "to": "d4eace36-65dc-48ec-8834-39f6375e2496"
+    },
+    {
+      "from": "d2e917a5-563b-4a4c-a332-e4968ad6a20a",
+      "labels": [
+        "consist_of"
+      ],
+      "to": "ce77ef2b-d668-4dca-9314-3f38cde9cee2"
+    },
+    {
+      "from": "ce77ef2b-d668-4dca-9314-3f38cde9cee2",
+      "labels": [
+        "follows"
+      ],
+      "to": "d4eace36-65dc-48ec-8834-39f6375e2496"
+    },
+    {
+      "from": "d4eace36-65dc-48ec-8834-39f6375e2496",
+      "labels": [
+        "input"
+      ],
+      "to": "1928a6b4-9e92-40f9-b8e3-d28553694d6d"
+    },
+    {
+      "from": "ce77ef2b-d668-4dca-9314-3f38cde9cee2",
+      "labels": [
+        "input"
+      ],
+      "to": "1928a6b4-9e92-40f9-b8e3-d28553694d6d"
+    },
+    {
+      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "labels": [
+        "contain"
+      ],
+      "to": "f6e06696-e2ec-40f8-ab76-c21c5c97d55c"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "d2e917a5-563b-4a4c-a332-e4968ad6a20a",
+      "labels": [
+        "Analytical_Pattern"
+      ],
+      "properties": {
+        "description": "Analytical Pattern to query a dataset using Provenance annotations",
+        "name": "Query Dataset AP",
+        "process": "query",
+        "publishedDate": "2025-06-30",
+        "startTime": "10:00:00"
+      }
+    },
+    {
+      "id": "d4eace36-65dc-48ec-8834-39f6375e2496",
+      "labels": [
+        "Operator",
+        "Provenance_Annotate_Dataset_Operator"
+      ],
+      "properties": {
+        "description": "Annotate a dataset for provenance informations",
+        "name": "Annotate Dataset Operator",
+        "dataset": ""
+      }
+    },
+    {
+      "id": "ce77ef2b-d668-4dca-9314-3f38cde9cee2",
+      "labels": [
+        "Operator",
+        "Provenance_SQL_Operator"
+      ],
+      "properties": {
+        "description": "Query the dataset with the provenance explanations",
+        "name": "Provenance Query Operator",
+        "command": "query",
+        "queryType": "SELECT",
+        "publishedDate": "2025-06-30",
+        "query": "SELECT distinct t.name FROM assessment a JOIN platform__sna__questions q ON(a.question_id=q.id) JOIN platform__topic t ON(t.id=q.topic) WHERE id_lect=78 AND answer=-1 AND question_level=4",
+        "startTime": "10:00:00",
+        "step": 1,
+        "type": "SQL Query"
+      }
+    },
+    {
+      "id": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "labels": [
+        "Relational_Database"
+      ],
+      "properties": {
+        "name": "mathe",
+        "description": "The mathe database",
+        "contentUrl": "postgresql://provdemo:provdemo@postgres-provsql:5432/mathe"
+      }
+    },
+    {
+      "id": "f6e06696-e2ec-40f8-ab76-c21c5c97d55c",
+      "labels": [
+        "Table"
+      ],
+      "properties": {
+        "name": "assessment",
+        "description": "Assessment table containing student answers"
+      }
+    }
+  ]
+}
