@@ -41,6 +41,20 @@
         "contain"
       ],
       "to": "f6e06696-e2ec-40f8-ab76-c21c5c97d55c"
+    },
+    {
+      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "labels": [
+        "contain"
+      ],
+      "to": "63dc1402-d353-41d2-9da0-5288cccd8e4e"
+    },
+    {
+      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "labels": [
+        "contain"
+      ],
+      "to": "5febe203-e776-448d-8343-57240873260c"
     }
   ],
   "nodes": [
@@ -106,6 +120,26 @@
       "properties": {
         "name": "assessment",
         "description": "Assessment table containing student answers"
+      }
+    },
+    {
+      "id": "63dc1402-d353-41d2-9da0-5288cccd8e4e",
+      "labels": [
+        "Table"
+      ],
+      "properties": {
+        "name": "platform__sna__questions",
+        "description": "Questions table containing question metadata"
+      }
+    },
+    {
+      "id": "5febe203-e776-448d-8343-57240873260c",
+      "labels": [
+        "Table"
+      ],
+      "properties": {
+        "name": "platform__topic",
+        "description": "Topic table containing topic metadata"
       }
     }
   ]
