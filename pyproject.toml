@@ -5,20 +5,19 @@ description = "Provenance Demo repository"
 authors = [{ name = "Lucas Peirone", email = "lucas.peirone@univ-grenoble-alpes.fr" }]
 readme = "README.md"
 keywords = ['python']
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.14,<4.0"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     "dotenv>=0.9.9",
     "fastapi[standard]>=0.128.0",
-    "psycopg[binary,pool]>=3.2.13",
+    "psycopg[binary,pool]>=3.3",
     "pydantic>=2.12.5",
-    "sqlglot>=28.5.0",
+    "sqlglot>=28.6.0",
 ]
 
 [dependency-groups]
