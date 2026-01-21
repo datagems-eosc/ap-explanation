@@ -1,11 +1,12 @@
 from json import dumps, loads
 from logging import getLogger
+from re import search
 from typing import LiteralString, cast
 from uuid import UUID
 
 from psycopg import AsyncConnection, errors
 from psycopg.rows import dict_row
-from psycopg.sql import SQL
+from psycopg.sql import SQL, Identifier
 from sqlglot import exp, parse_one
 from sqlglot.expressions import (
     AggFunc,
@@ -27,6 +28,37 @@ class ProvenanceService:
     def __init__(self, conn: AsyncConnection):
         self._conn = conn
 
+    @staticmethod
+    def decode_ctid(provenance_value: str) -> tuple[str, str]:
+        """
+        Decode a provenance value to extract table name and ctid.
+
+        Format: 'tablename@pPAGErROW'
+        Example: 'platform__sna__questions@p17r5' -> ('platform__sna__questions', '(17,5)')
+
+        Args:
+            provenance_value: The provenance string value
+
+        Returns:
+            Tuple of (table_name, ctid_string)
+
+        Raises:
+            ValueError: If the format is invalid
+        """
+        if '@' not in provenance_value:
+            raise ValueError(f"Invalid provenance format: {provenance_value}")
+
+        table_name, ctid_part = provenance_value.split('@', 1)
+        match = search(r'p(\d+)r(\d+)', ctid_part)
+
+        if not match:
+            raise ValueError(f"Invalid ctid format in: {provenance_value}")
+
+        page, row = match.groups()
+        ctid = f"({page},{row})"
+
+        return table_name, ctid
+
     async def annotate_dataset(self, table_name: str, schema_name: str) -> bool:
         """
         Annotate a table with provenance information.
@@ -42,11 +74,20 @@ class ProvenanceService:
             try:
                 # TODO: the search_path should not be hardcoded
                 await self._conn.execute("SET search_path TO mathe, public, provsql;")
+                # Drop old provwhy table if it exists (use SQL composition for identifiers)
+                drop_query = SQL("DROP TABLE IF EXISTS {} CASCADE").format(
+                    Identifier(f"{table_name}_provwhy")
+                )
+                await self._conn.execute(drop_query)
                 await self._conn.execute("SELECT add_provenance(%s)", (table_name,))
+                # Create provenance mapping using ctid in reversible format
+                # Convert (page,row) to 'tablename@pPAGErROW' format
+                # Example: ctid (248,11) -> 'platform__sna__questions@p248r11'
+                # Reversible: split on '@', extract numbers after 'p' and 'r'
                 await self._conn.execute(
                     "SELECT create_provenance_mapping(%s, %s, %s)",
                     (f"{table_name}_provwhy", table_name,
-                     f"'{table_name}_'||ctid")
+                     f"'{table_name}@p'||(ctid::text::point)[0]::int||'r'||(ctid::text::point)[1]::int")
                 )
                 created = await self._upsert_why_mapping(schema_name)
                 if not created:
