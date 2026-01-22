@@ -4,7 +4,8 @@ from typing import List, TypedDict
 import pytest
 from sqlglot import parse_one
 
-from provenance_demo.services.provenance import ProvenanceService
+from provenance_demo.internal.sql_rewriter import SqlRewriter
+from provenance_demo.types.semiring import DbSemiring
 
 
 class QueryProvCase(TypedDict):
@@ -52,11 +53,11 @@ test_cases: List[QueryProvCase] = _load_test_cases()
 
 
 @pytest.mark.parametrize("case", test_cases, ids=[case["reason"] for case in test_cases])
-def test_rewrite_sql(case: QueryProvCase, unit_prov_svc: ProvenanceService):
+def test_rewrite_sql(case: QueryProvCase, sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
     """
     Compares the rewritten SQL with the expected one by parsing both and comparing their ASTs.
     This avoids issues with formatting differences. This will however still fail if the column order is different.
     """
-    rewritten = unit_prov_svc.rewrite_sql(case["query"])
+    rewritten = sql_rewriter.rewrite(case["query"], why_semiring)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(case["expected"])
