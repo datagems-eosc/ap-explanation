@@ -1,62 +1,34 @@
-# provenance-demo
+# Provenance Demo
 
 [![Commit activity](https://img.shields.io/github/commit-activity/m/datagems-eosc/provenance-demo)](https://img.shields.io/github/commit-activity/m/datagems-eosc/provenance-demo)
 [![License](https://img.shields.io/github/license/datagems-eosc/provenance-demo)](https://img.shields.io/github/license/datagems-eosc/provenance-demo)
 
-Provenance Demo repository
+## Overview
 
+A FastAPI-based service for annotating and explaining data provenance using **semiring annotations**. This project integrates with PostgreSQL and the ProvSQL extension to track and analyze data lineage in SQL queries.
 
-## Getting started with your project
+Provenance annotations help understand how data was derived, enabling reproducibility, debugging, and compliance in data workflows.
 
-### 1. Create a New Repository
-
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
-
-```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:datagems-eosc/provenance-demo.git
-git push -u origin main
-```
-
-### 2. Set Up Your Development Environment
-
-If you do not have `uv` installed, you can install it with
+## Quick Start
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install dependencies (you can remove '--all-groups' for production)
+uv sync --all-groups
+
+# Start the service
+uv run provenance_demo/main.py
 ```
-After executing the command above, you will need to restart your shell.
 
-`uv` is a python package similar to `poetry`.
+## Testing
 
-Then, install the environment and the pre-commit hooks with
+Run tests with pytest:
 
 ```bash
-make install
+pytest tests/
 ```
 
-This will also generate your `uv.lock` file
+Tests use testcontainers to run a PostgreSQL instance with ProvSQL automatically.
 
-### 3. Run the pre-commit hooks
+## Documentation
 
-Initially, the CI/CD pipeline might be failing due to formatting issues. To resolve those run:
-
-```bash
-uv run pre-commit run -a
-```
-
-### 4. Commit the changes
-
-Lastly, commit the changes made by the two steps above to your repository.
-
-```bash
-git add .
-git commit -m 'Fix formatting issues'
-git push origin main
-```
-
----
-
-The uv-python cookiecutter was originally created in [https://github.com/fpgmaas/cookiecutter-uv](https://github.com/fpgmaas/cookiecutter-uv).
+Full documentation is available at: https://datagems-eosc.github.io/provenance-demo/
