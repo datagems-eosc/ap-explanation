@@ -1,5 +1,5 @@
 # Install uv
-FROM python:3.12-slim
+FROM python:3.14-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Change the working directory to the `app` directory
@@ -15,7 +15,16 @@ RUN uv sync --frozen --no-install-project
 # Copy the project into the image
 COPY . /app
 
-# Sync the project
+# Test stage, runs tests
+FROM builder AS test
+
+RUN uv sync --all-groups --frozen
+
+CMD [ "uv", "run", "pytest" ]
+
+# Actual production image
+FROM builder AS prod
+
 RUN uv sync --frozen
 
-CMD [ "python", "provenance_demo/foo.py" ]
+CMD [ "uv", "run", "python", "provenance_demo/main.py" ]
