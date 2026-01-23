@@ -1,13 +1,15 @@
-import asyncio
 from pathlib import Path
-from typing import List
+from typing import AsyncGenerator, List
+from urllib.parse import urlparse, urlunparse
 
-import psycopg
 import pytest
+import pytest_asyncio
+from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
+from testcontainers.core.image import DockerImage
 from testcontainers.postgres import PostgresContainer
 
 from provenance_demo.internal.sql_rewriter import SqlRewriter
-from provenance_demo.repository.mapping.ctid_mapping import CtidMapping
 from provenance_demo.repository.provenance import ProvenanceRepository
 from provenance_demo.semirings import semirings
 from provenance_demo.services.provenance import ProvenanceService
@@ -16,71 +18,62 @@ from provenance_demo.types.semiring import DbSemiring
 
 @pytest.fixture(scope="session")
 def postgres_container():
-    """
-    PostgreSQL testcontainer with ProvSQL extension.
-    Uses the custom postgres-provsql image from the dependencies folder.
-    """
-    # Build the custom Postgres image with ProvSQL
-    postgres = PostgresContainer(
-        image="postgres-provsql:latest",
-        username="provdemo",
-        password="provdemo",
-        dbname="provenance_test"
+    # Get the project root directory (parent of tests/)
+    project_root = Path(__file__).parent.parent
+    fixtures_path = project_root / "fixtures" / "postgres-seed"
+
+    if not fixtures_path.exists():
+        raise FileNotFoundError(
+            f"Fixtures path does not exist: {fixtures_path}")
+
+    with DockerImage(path="dependencies/postgres-provsql", tag="testdb:latest", clean_up=False) as image:
+        with PostgresContainer(
+            image=str(image),
+            username="provdemo",
+            password="provdemo",
+            dbname="mathe"
+        ).with_volume_mapping(
+            host=str(fixtures_path),
+            container="/docker-entrypoint-initdb.d",
+            mode="ro"
+        ) as postgres:
+            yield postgres
+
+
+@pytest_asyncio.fixture
+async def db_pool(postgres_container: PostgresContainer) -> AsyncGenerator[AsyncConnectionPool]:
+    """Provides a connection to the test database."""
+    qs = postgres_container.get_connection_url()
+    parsed = urlparse(qs)
+    scheme = parsed.scheme.split("+", 1)[0]  # remove +psycopg2
+    qs = urlunparse(parsed._replace(scheme=scheme))
+
+    pool = AsyncConnectionPool(
+        conninfo=qs,
+        min_size=1,
+        max_size=5,
     )
-    postgres.start()
-    yield postgres
-    postgres.stop()
+    await pool.open()
+    yield pool
+    await pool.close()
 
 
-# @pytest.fixture(scope="session")
-# def db_connection_string(postgres_container):
-#     """Get the database connection string from the test container."""
-#     return postgres_container.get_connection_url()
-
-
-# @pytest.fixture(scope="session")
-# async def db_connection(db_connection_string):
-#     """Create an async database connection for testing."""
-#     conn = await psycopg.AsyncConnection.connect(
-#         db_connection_string,
-#         autocommit=False
-#     )
-
-#     # Load initial schema and data
-#     fixtures_dir = Path(__file__).parent.parent / "fixtures"
-
-#     # Load the main schema
-#     schema_file = fixtures_dir / "postgres-seed" / "01_mathe_pgsql.sql"
-#     if schema_file.exists():
-#         with open(schema_file, 'r') as f:
-#             await conn.execute(f.read())
-
-#     # Load annotations setup
-#     annotations_file = fixtures_dir / "02_setup_mathe_annotations.sql"
-#     if annotations_file.exists():
-#         with open(annotations_file, 'r') as f:
-#             await conn.execute(f.read())
-
-#     # Load semiring setup
-#     semiring_file = fixtures_dir / "postgres-seed" / "03_setup_semiring_parallel.sql"
-#     if semiring_file.exists():
-#         with open(semiring_file, 'r') as f:
-#             await conn.execute(f.read())
-
-#     await conn.commit()
-
-#     yield conn
-
-#     await conn.close()
+@pytest_asyncio.fixture
+async def db_connection(db_pool: AsyncConnectionPool) -> AsyncGenerator[AsyncConnection]:
+    """
+    Returns a database connection from the pool.
+    """
+    async with db_pool.connection() as conn:
+        yield conn
 
 
 @pytest.fixture
-async def provenance_repository(db_connection, sql_rewriter: SqlRewriter):
+def provenance_repository(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
     return ProvenanceRepository(db_connection, sql_rewriter)
 
 
 @pytest.fixture
-async def provenance_service(provenance_repository: ProvenanceRepository):
+def provenance_service(provenance_repository: ProvenanceRepository):
     return ProvenanceService(provenance_repository)
 
 
