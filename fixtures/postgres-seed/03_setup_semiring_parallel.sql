@@ -6,17 +6,20 @@ CREATE EXTENSION IF NOT EXISTS provsql WITH SCHEMA public;
 
 -- implementation for Formula semiring
 
+DROP TYPE IF EXISTS public.formula_state CASCADE;
 CREATE TYPE public.formula_state AS (
 	formula text,
 	nbargs integer
 );
 
+DROP FUNCTION IF EXISTS public.formula_monus(text, text) CASCADE;
 CREATE FUNCTION public.formula_monus(formula1 text, formula2 text) RETURNS text
     LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
     AS $$
   SELECT concat('(',formula1,' ⊖ ',formula2,')')
 $$;
 
+DROP FUNCTION IF EXISTS public.formula_plus_state(public.formula_state, text) CASCADE;
 CREATE FUNCTION public.formula_plus_state(state public.formula_state, value text) RETURNS public.formula_state
     LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
      AS $$
@@ -29,6 +32,7 @@ BEGIN
 END
 $$;
 
+DROP FUNCTION IF EXISTS public.formula_state2formula(public.formula_state) CASCADE;
 CREATE FUNCTION public.formula_state2formula(state public.formula_state) RETURNS text
     LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
     AS $$
@@ -39,6 +43,7 @@ CREATE FUNCTION public.formula_state2formula(state public.formula_state) RETURNS
     END;
 $$;
 
+DROP FUNCTION IF EXISTS public.formula_times_state(public.formula_state, text) CASCADE;
 CREATE FUNCTION public.formula_times_state(state public.formula_state, value text) RETURNS public.formula_state
     LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
     AS $$
@@ -51,6 +56,7 @@ BEGIN
 END
 $$;
 
+DROP FUNCTION IF EXISTS public.formula_delta(text) CASCADE;
 CREATE FUNCTION public.formula_delta(formula text) RETURNS text
     LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
     AS $$
@@ -59,6 +65,7 @@ BEGIN
 END
 $$;
 
+DROP AGGREGATE IF EXISTS public.formula_plus(text) CASCADE;
 CREATE AGGREGATE public.formula_plus(text) (
     SFUNC = public.formula_plus_state,
     STYPE = public.formula_state,
@@ -66,6 +73,7 @@ CREATE AGGREGATE public.formula_plus(text) (
     FINALFUNC = public.formula_state2formula
 );
 
+DROP AGGREGATE IF EXISTS public.formula_times(text) CASCADE;
 CREATE AGGREGATE public.formula_times(text) (
     SFUNC = public.formula_times_state,
     STYPE = public.formula_state,
@@ -73,6 +81,7 @@ CREATE AGGREGATE public.formula_times(text) (
     FINALFUNC = public.formula_state2formula
 );
 
+DROP FUNCTION IF EXISTS public.formula(UUID, regclass) CASCADE;
 CREATE FUNCTION public.formula(token UUID, token2value regclass) RETURNS text
     LANGUAGE plpgsql PARALLEL SAFE
     AS $$
@@ -92,6 +101,7 @@ $$;
 
 -- implementation for Counting semiring
 
+DROP FUNCTION IF EXISTS public.counting(UUID, regclass) CASCADE;
 CREATE FUNCTION public.counting(token UUID, token2value regclass) RETURNS integer
     LANGUAGE plpgsql PARALLEL SAFE
     AS $$
@@ -107,36 +117,42 @@ BEGIN
 END
 $$;
 
+DROP FUNCTION IF EXISTS public.counting_monus(integer, integer) CASCADE;
 CREATE FUNCTION public.counting_monus(counting1 integer, counting2 integer) RETURNS integer
     LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
     AS $$
   SELECT CASE WHEN counting1 < counting2 THEN 0 ELSE counting1 - counting2 END
 $$;
 
+DROP FUNCTION IF EXISTS public.counting_plus_state(integer, integer) CASCADE;
 CREATE FUNCTION public.counting_plus_state(state integer, value integer) RETURNS integer
     LANGUAGE sql IMMUTABLE PARALLEL SAFE
     AS $$
   SELECT CASE WHEN state IS NULL THEN value ELSE state + value END
 $$;
 
+DROP FUNCTION IF EXISTS public.counting_times_state(integer, integer) CASCADE;
 CREATE FUNCTION public.counting_times_state(state integer, value integer) RETURNS integer
     LANGUAGE sql IMMUTABLE PARALLEL SAFE
     AS $$
 SELECT CASE WHEN state IS NULL THEN value ELSE state * value END
 $$;
 
+DROP AGGREGATE IF EXISTS public.counting_plus(integer) CASCADE;
 CREATE AGGREGATE public.counting_plus(integer) (
     SFUNC = public.counting_plus_state,
     STYPE = integer,
     INITCOND = '0'
 );
 
+DROP AGGREGATE IF EXISTS public.counting_times(integer) CASCADE;
 CREATE AGGREGATE public.counting_times(integer) (
     SFUNC = public.counting_times_state,
     STYPE = integer,
     INITCOND = '1'
 );
 
+DROP FUNCTION IF EXISTS public.counting_delta(integer) CASCADE;
 CREATE FUNCTION public.counting_delta(counting integer) RETURNS integer
     LANGUAGE sql IMMUTABLE STRICT
     AS $$
@@ -237,12 +253,14 @@ BEGIN
 END
 $$;
 
+DROP FUNCTION IF EXISTS formula_semimod(text, text) CASCADE;
 CREATE FUNCTION formula_semimod(formula1 text, formula2 text) RETURNS text
     LANGUAGE sql IMMUTABLE STRICT
     AS $$
   SELECT concat('(',formula1,' * ',formula2,')')
 $$;
 
+DROP FUNCTION IF EXISTS formula_agg_state(formula_state, text) CASCADE;
 CREATE FUNCTION formula_agg_state(state formula_state, value text) RETURNS formula_state
     LANGUAGE plpgsql IMMUTABLE
     AS $$
@@ -255,12 +273,14 @@ BEGIN
 END
 $$;
 
+DROP AGGREGATE IF EXISTS formula_agg(text) CASCADE;
 CREATE AGGREGATE formula_agg(text) (
     SFUNC = formula_agg_state,
     STYPE = formula_state,
     INITCOND = '(1,0)'
 );
 
+DROP FUNCTION IF EXISTS formula_agg_final(formula_state, varchar) CASCADE;
 CREATE FUNCTION formula_agg_final(state formula_state, fname varchar) RETURNS text
   LANGUAGE sql IMMUTABLE STRICT
   AS
@@ -268,6 +288,7 @@ CREATE FUNCTION formula_agg_final(state formula_state, fname varchar) RETURNS te
     SELECT concat(fname,'{ ',state.formula,' }');
   $$;
 
+DROP FUNCTION IF EXISTS aggregation_formula(anyelement, regclass) CASCADE;
 CREATE FUNCTION aggregation_formula(token anyelement, token2value regclass) RETURNS text
     LANGUAGE plpgsql
     AS $$
