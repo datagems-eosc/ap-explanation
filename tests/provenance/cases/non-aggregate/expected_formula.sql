@@ -1,4 +1,4 @@
-SELECT DISTINCT t.name, whyPROV_now(provenance(),'why_mapping') 
+SELECT DISTINCT t.name, formula(provenance(),'formula_mapping') 
 FROM assessment a 
 JOIN platform__sna__questions q ON(a.question_id=q.id) 
 JOIN platform__topic t ON(t.id=q.topic) 

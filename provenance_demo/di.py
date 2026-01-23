@@ -6,8 +6,8 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from provenance_demo.internal.sql_rewriter import SqlRewriter
-from provenance_demo.repository.mapping.ctid_mapping import CtidMapping
 from provenance_demo.repository.provenance import ProvenanceRepository
+from provenance_demo.semirings import semirings
 from provenance_demo.services.provenance import ProvenanceService
 from provenance_demo.types.semiring import DbSemiring
 
@@ -45,22 +45,7 @@ async def get_dynamic_db_conn(connection_string: str) -> AsyncGenerator[AsyncCon
 
 
 async def get_semirings() -> list[DbSemiring]:
-    return [
-        DbSemiring(
-            name="formula",
-            retrieval_function="formula",
-            aggregate_function="aggregation_formula",
-            mapping_table="formula_mapping",
-            mappingStrategy=CtidMapping(),
-        ),
-        DbSemiring(
-            name="why",
-            retrieval_function="whyprov_now",
-            aggregate_function="aggregation_formula",
-            mapping_table="why_mapping",
-            mappingStrategy=CtidMapping(),
-        ),
-    ]
+    return semirings
 
 
 def get_provenance_service_for_ap(connection_string: str) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
