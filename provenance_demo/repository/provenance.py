@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
 
+from provenance_demo.errors import ProvSqlMissingError
 from provenance_demo.internal.sql_rewriter import SqlRewriter
 from provenance_demo.types.semiring import DbSemiring
 
@@ -66,7 +67,14 @@ class ProvenanceRepository:
         # Add the provenance column to the base table (separate transaction)
         try:
             async with self._conn.transaction():
+                await self._conn.execute("CREATE EXTENSION IF NOT EXISTS provsql CASCADE")
                 await self._conn.execute("SELECT add_provenance(%s)", (table_name,))
+        except (errors.UndefinedFile, errors.FeatureNotSupported) as e:
+            logger.error(
+                f"ProvSQL extension is not installed on the postgres server: {e}")
+            raise ProvSqlMissingError(
+                f"ProvSQL extension is not installed or not available: {str(e)}"
+            ) from e
         except errors.DuplicateColumn:
             logger.info(
                 f"Provenance column for table '{table_name}' already exists, ignoring")
