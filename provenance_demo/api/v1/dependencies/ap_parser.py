@@ -9,6 +9,36 @@ from provenance_demo.types.pg_json import PgJson, PgJsonNode
 logger = getLogger(__name__)
 
 
+def extract_connection_string(ap: PgJson) -> str:
+    """
+    Extract and validate connection string from the Relational_Database node in the AP.
+
+    Args:
+        ap: The PgJson AP structure
+
+    Returns:
+        The database connection string from contentUrl property
+
+    Raises:
+        HTTPException: If the database node is missing or malformed
+    """
+    db_nodes = ap.get_nodes_by_label("Relational_Database")
+    if not db_nodes or len(db_nodes) == 0:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This AP has no Relational_Database node!"
+        )
+
+    db_node = db_nodes[0]
+    if not db_node.properties or "contentUrl" not in db_node.properties:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Relational_Database node is missing 'contentUrl' property!"
+        )
+
+    return db_node.properties["contentUrl"]
+
+
 def extract_schema_name(ap: PgJson) -> str:
     """
     Extract and validate schema name from the Relational_Database node in the AP.
@@ -112,6 +142,7 @@ def extract_table_names(ap: PgJson) -> List[str]:
 
 
 # Type aliases for cleaner function signatures
+ConnectionString = Annotated[str, Depends(extract_connection_string)]
 SchemaName = Annotated[str, Depends(extract_schema_name)]
 SqlOperator = Annotated[PgJsonNode, Depends(extract_sql_operator)]
 TableNames = Annotated[List[str], Depends(extract_table_names)]

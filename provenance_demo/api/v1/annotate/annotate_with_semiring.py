@@ -4,9 +4,12 @@ from typing import List, Literal
 from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
 
-from provenance_demo.api.v1.dependencies.ap_parser import SchemaName, TableNames
-from provenance_demo.di import get_provenance_service, get_semirings
-from provenance_demo.services.provenance import ProvenanceService
+from provenance_demo.api.v1.dependencies.ap_parser import (
+    ConnectionString,
+    SchemaName,
+    TableNames,
+)
+from provenance_demo.di import get_provenance_service_for_ap, get_semirings
 from provenance_demo.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -21,12 +24,12 @@ class AnnotationResult(BaseModel):
 
 async def annotate_ap_with_semiring(
     semiring_name: str,
+    connection_string: ConnectionString,
     tables_names: TableNames,
     schema_name: SchemaName,
-    prov_svc: ProvenanceService = Depends(get_provenance_service),
     all_semirings: List[DbSemiring] = Depends(get_semirings)
 ) -> List[AnnotationResult]:
-    """Annotate the AP with the chosen semiring."""
+    """Annotate the AP with the chosen semiring using dynamic database connection."""
     # Find the requested semiring
     semiring = next(
         (s for s in all_semirings if s.name == semiring_name), None
@@ -43,41 +46,47 @@ async def annotate_ap_with_semiring(
     )
     results: List[AnnotationResult] = []
 
-    for table_name in tables_names:
-        try:
-            was_annotated = await prov_svc.annotate_dataset(table_name, schema_name, [semiring])
-            if was_annotated:
+    # Create the service with the connection string from the AP
+    service_factory = get_provenance_service_for_ap(connection_string)
+
+    # Use the factory to get the service
+    async for prov_svc in service_factory():
+        for table_name in tables_names:
+            try:
+                was_annotated = await prov_svc.annotate_dataset(table_name, schema_name, [semiring])
+                if was_annotated:
+                    results.append(
+                        AnnotationResult(
+                            table_name=table_name,
+                            semiring=semiring.name,
+                            status="success",
+                            message=f"Table '{table_name}' was successfully annotated with semiring '{semiring.name}'"
+                        )
+                    )
+                else:
+                    results.append(
+                        AnnotationResult(
+                            table_name=table_name,
+                            semiring=semiring.name,
+                            status="already_annotated",
+                            message=f"Table '{table_name}' is already annotated with semiring '{semiring.name}'"
+                        )
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to annotate table '{table_name}' with semiring '{semiring_name}'", exc_info=True)
                 results.append(
                     AnnotationResult(
                         table_name=table_name,
                         semiring=semiring.name,
-                        status="success",
-                        message=f"Table '{table_name}' was successfully annotated with semiring '{semiring.name}'"
+                        status="error",
+                        message=f"Error annotating table '{table_name}' with semiring '{semiring.name}': {str(e)}"
                     )
                 )
-            else:
-                results.append(
-                    AnnotationResult(
-                        table_name=table_name,
-                        semiring=semiring.name,
-                        status="already_annotated",
-                        message=f"Table '{table_name}' is already annotated with semiring '{semiring.name}'"
-                    )
+                raise HTTPException(
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error annotating table '{table_name}' with semiring '{semiring_name}': {str(e)}"
                 )
-        except Exception as e:
-            logger.error(
-                f"Failed to annotate table '{table_name}' with semiring '{semiring_name}'", exc_info=True)
-            results.append(
-                AnnotationResult(
-                    table_name=table_name,
-                    semiring=semiring.name,
-                    status="error",
-                    message=f"Error annotating table '{table_name}' with semiring '{semiring.name}': {str(e)}"
-                )
-            )
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error annotating table '{table_name}' with semiring '{semiring_name}': {str(e)}"
-            )
+        break  # Only process with first connection from pool
 
     return results

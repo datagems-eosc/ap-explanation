@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
-from os import getenv
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator, Callable
 
 from fastapi import Depends, FastAPI
 from psycopg import AsyncConnection
@@ -12,73 +11,73 @@ from provenance_demo.repository.provenance import ProvenanceRepository
 from provenance_demo.services.provenance import ProvenanceService
 from provenance_demo.types.semiring import DbSemiring
 
-POSTGRES_HOST = getenv("POSTGRES_HOST")
-POSTGRES_DB = getenv("POSTGRES_DB")
-POSTGRES_USER = getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = getenv("POSTGRES_PASSWORD")
-
-
-pool: AsyncConnectionPool
-
 
 @asynccontextmanager
 async def container_lifespan(_: FastAPI):
     """
-    Lifespan context manager to setup and teardown the database connection pool.
-    This ties the pool's lifecycle to that of the FastAPI application and prevents connection leaks.
+    Lifespan context manager for the FastAPI application.
+    Connection pools are created and closed per-AP processing.
     """
-    global pool
+    yield
+
+
+@asynccontextmanager
+async def get_dynamic_db_conn(connection_string: str) -> AsyncGenerator[AsyncConnection, None]:
+    """
+    Creates a temporary database connection pool, yields a connection, then closes the pool.
+    This ensures the connection pool is cleaned up after AP processing completes.
+
+    Args:
+        connection_string: PostgreSQL connection string from AP
+    """
     pool = AsyncConnectionPool(
-        conninfo=(
-            f"host={POSTGRES_HOST} "
-            f"dbname={POSTGRES_DB} "
-            f"user={POSTGRES_USER} "
-            f"password={POSTGRES_PASSWORD}"
-        ),
+        conninfo=connection_string,
         min_size=1,
         max_size=5,
     )
     await pool.open()
 
-    yield
-
-    await pool.close()
-
-
-async def get_db_conn() -> AsyncGenerator[AsyncConnection, None]:
-    """
-    Returns a database connection from the pool.
-    """
-    async with pool.connection() as conn:
-        yield conn
+    try:
+        async with pool.connection() as conn:
+            yield conn
+    finally:
+        await pool.close()
 
 
-async def get_sql_rewriter() -> SqlRewriter:
-    return SqlRewriter()
-
-
-async def get_semirings() -> List[DbSemiring]:
+async def get_semirings() -> list[DbSemiring]:
     return [
         DbSemiring(
             name="formula",
             retrieval_function="formula",
             aggregate_function="aggregation_formula",
             mapping_table="formula_mapping",
-            mappingStrategy=CtidMapping()
+            mappingStrategy=CtidMapping(),
         ),
         DbSemiring(
             name="why",
             retrieval_function="whyprov_now",
             aggregate_function="aggregation_formula",
             mapping_table="why_mapping",
-            mappingStrategy=CtidMapping()
-        )
+            mappingStrategy=CtidMapping(),
+        ),
     ]
 
 
-def get_provenance_repo(conn: AsyncConnection = Depends(get_db_conn), sql_rewriter: SqlRewriter = Depends(get_sql_rewriter)) -> ProvenanceRepository:
-    return ProvenanceRepository(conn, sql_rewriter)
+def get_provenance_service_for_ap(connection_string: str) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
+    """
+    Factory function to create a provenance service dependency with dynamic database connection.
+    The connection pool is created when the AP is processed and closed when processing completes.
 
+    Args:
+        connection_string: Database connection string from AP
 
-def get_provenance_service(repo: ProvenanceRepository = Depends(get_provenance_repo)) -> ProvenanceService:
-    return ProvenanceService(repo)
+    Returns:
+        Dependency function for ProvenanceService that can be used in FastAPI routes
+    """
+
+    async def _provide_service() -> AsyncGenerator[ProvenanceService, None]:
+        async with get_dynamic_db_conn(connection_string) as conn:
+            repo = ProvenanceRepository(conn, SqlRewriter())
+            yield ProvenanceService(repo)
+
+    return _provide_service
