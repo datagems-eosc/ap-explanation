@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from .annotate import annotate
-from .explain_ap import explain_ap
+from .annotate import annotate_ap, annotate_ap_with_semiring
+from .explain import explain_ap, explain_ap_with_semiring
 from .health import health_check
 
 router = APIRouter(
@@ -9,6 +9,15 @@ router = APIRouter(
     tags=["v1"],
 )
 
-router.add_api_route("/explainAp", explain_ap, methods=["POST"])
-router.add_api_route("/annotate", annotate, methods=["POST"])
+# Annotate endpoints
+router.add_api_route("/ap/annotate", annotate_ap, methods=["POST"])
+router.add_api_route(
+    "/ap/annotate/{semiring_name}", annotate_ap_with_semiring, methods=["POST"])
+
+# Explain endpoints
+router.add_api_route("/ap/explain", explain_ap, methods=["POST"])
+router.add_api_route(
+    "/ap/explain/{semiring_name}", explain_ap_with_semiring, methods=["POST"])
+
+# Health check
 router.add_api_route("/health", health_check, methods=["GET"])

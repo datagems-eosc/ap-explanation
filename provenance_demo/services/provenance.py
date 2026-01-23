@@ -1,8 +1,11 @@
+from asyncio import gather
 from logging import getLogger
+from typing import List
 
 from orjson import dumps
 
 from provenance_demo.repository.provenance import ProvenanceRepository
+from provenance_demo.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
 
@@ -19,7 +22,7 @@ class ProvenanceService:
     def __init__(self, provenance_repo: ProvenanceRepository):
         self._provenance_repo = provenance_repo
 
-    async def annotate_dataset(self, table_name: str, schema_name: str) -> bool:
+    async def annotate_dataset(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
         """
         Annotate a table with provenance information.
 
@@ -30,10 +33,14 @@ class ProvenanceService:
         Returns:
             bool: True if the table was annotated
         """
-        await self._provenance_repo.enable_provenance_for(schema_name, table_name)
+        await self._provenance_repo.enable_provenance(schema_name, table_name)
+
+        for semiring in semirings:
+            await self._provenance_repo.add_semiring(schema_name, table_name, semiring)
+
         return True
 
-    async def compute_provenance(self, schema_name: str, sql_query: str) -> str | None:
+    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
         """
         Execute a SQL query with provenance tracking and return annotated results.
 
@@ -44,5 +51,9 @@ class ProvenanceService:
         Returns:
             JSON string of results with provenance annotations
         """
-        rows = await self._provenance_repo.query(schema_name, sql_query, self._provenance_repo._semiring)
-        return dumps(rows).decode('utf-8')
+        tasks = [
+            self._provenance_repo.query(schema_name, sql_query, semiring)
+            for semiring in semirings
+        ]
+        results = await gather(*tasks)
+        return dumps(results).decode('utf-8')

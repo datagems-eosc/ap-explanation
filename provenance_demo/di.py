@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from os import getenv
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List
 
 from fastapi import Depends, FastAPI
 from psycopg import AsyncConnection
@@ -53,39 +53,32 @@ async def get_db_conn() -> AsyncGenerator[AsyncConnection, None]:
         yield conn
 
 
-def get_provenance_service(conn: AsyncConnection = Depends(get_db_conn)) -> ProvenanceService:
-    """
-    Create and configure the ProvenanceService with all its dependencies.
+async def get_sql_rewriter() -> SqlRewriter:
+    return SqlRewriter()
 
-    This factory function:
-    1. Creates the "why" semiring configuration
-    2. Creates a SqlRewriter for query transformation
-    3. Creates a ProvenanceRepository with both semiring and SqlRewriter
-    4. Assembles the ProvenanceService
-    """
-    # Create the "why" semiring configuration
-    # why_semiring = DbSemiring(
-    #     name="why",
-    #     retrieval_function="whyprov_now",
-    #     aggregate_function="aggregation_formula",
-    #     mapping_table="why_mapping",
-    #     mappingStrategy=CtidMapping()
-    # )
 
-    formula_semiring = DbSemiring(
-        name="formula",
-        retrieval_function="formula",
-        aggregate_function="aggregation_formula",
-        mapping_table="formula_mapping",
-        mappingStrategy=CtidMapping()
-    )
+async def get_semirings() -> List[DbSemiring]:
+    return [
+        DbSemiring(
+            name="formula",
+            retrieval_function="formula",
+            aggregate_function="aggregation_formula",
+            mapping_table="formula_mapping",
+            mappingStrategy=CtidMapping()
+        ),
+        DbSemiring(
+            name="why",
+            retrieval_function="whyprov_now",
+            aggregate_function="aggregation_formula",
+            mapping_table="why_mapping",
+            mappingStrategy=CtidMapping()
+        )
+    ]
 
-    # Create the SQL rewriter
-    sql_rewriter = SqlRewriter()
 
-    # Create the unified provenance repository
-    provenance_repo = ProvenanceRepository(
-        conn, formula_semiring, sql_rewriter)
+def get_provenance_repo(conn: AsyncConnection = Depends(get_db_conn), sql_rewriter: SqlRewriter = Depends(get_sql_rewriter)) -> ProvenanceRepository:
+    return ProvenanceRepository(conn, sql_rewriter)
 
-    # Assemble and return the service
-    return ProvenanceService(provenance_repo)
+
+def get_provenance_service(repo: ProvenanceRepository = Depends(get_provenance_repo)) -> ProvenanceService:
+    return ProvenanceService(repo)
