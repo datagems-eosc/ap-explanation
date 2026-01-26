@@ -4,8 +4,8 @@ from typing import List, TypedDict
 import pytest
 from sqlglot import parse_one
 
-from provenance_demo.internal.sql_rewriter import SqlRewriter
-from provenance_demo.types.semiring import DbSemiring
+from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.types.semiring import DbSemiring
 
 
 class QueryProvCase(TypedDict):

@@ -1,0 +1,64 @@
+site_name: Analytical Pattern Docs
+
+site_url: https://datagems-eosc.github.io/ap-management/
+repo_url: https://github.com/datagems-eosc/ap-management/
+
+
+nav:
+  - Overview: index.md
+  - Architecture: architecture.md
+  - API: openapi.md
+  - Configuration: configuration.md
+  - Home: https://datagems-eosc.github.io/
+
+theme:
+  name: 'material'
+  favicon: images/favicon.jpg
+  logo: images/datagems-portal-icon.png
+  icon:
+    repo: fontawesome/brands/github
+  custom_dir: overrides
+  features:
+    - navigation.path
+    - navigation.top
+
+extra_css:
+  - stylesheets/custom-footer.css
+  - stylesheets/mkdocsoad.css
+
+plugins:
+  - search
+  - mike
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [
+            "ap_management"
+            ]
+  - neoteroi.mkdocsoad:
+      use_pymdownx: true
+
+markdown_extensions:
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+
+hooks:
+  - ../scripts/export_openapi.py
+
+extra:
+  version:
+    provider: mike
+    alias: true
+    default: latest
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/datagems-eosc/
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/eosc-datagems

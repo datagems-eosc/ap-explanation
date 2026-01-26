@@ -10,11 +10,11 @@ from psycopg_pool import AsyncConnectionPool
 from testcontainers.core.image import DockerImage
 from testcontainers.postgres import PostgresContainer
 
-from provenance_demo.internal.sql_rewriter import SqlRewriter
-from provenance_demo.repository.provenance import ProvenanceRepository
-from provenance_demo.semirings import semirings
-from provenance_demo.services.provenance import ProvenanceService
-from provenance_demo.types.semiring import DbSemiring
+from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.semirings import semirings
+from ap_explanation.services.provenance import ProvenanceService
+from ap_explanation.types.semiring import DbSemiring
 
 
 @dataclass

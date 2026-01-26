@@ -1,7 +1,7 @@
 [project]
-name = "provenance-demo"
+name = "ap-explanation"
 version = "0.0.1"
-description = "Provenance Demo repository"
+description = "AP Explanation repository"
 authors = [{ name = "Lucas Peirone", email = "lucas.peirone@univ-grenoble-alpes.fr" }]
 readme = "README.md"
 keywords = ['python']
@@ -37,7 +37,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.setuptools]
-py-modules = ["provenance_demo"]
+py-modules = ["ap_explanation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

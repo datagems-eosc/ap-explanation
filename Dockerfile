@@ -27,4 +27,4 @@ FROM builder AS prod
 
 RUN uv sync --frozen
 
-CMD [ "uv", "run", "python", "provenance_demo/main.py" ]
+CMD [ "uv", "run", "python", "ap_explanation/main.py" ]

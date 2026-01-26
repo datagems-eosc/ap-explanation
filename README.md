@@ -1,7 +1,7 @@
-# Provenance Demo
+# AP Explanation
 
-[![Commit activity](https://img.shields.io/github/commit-activity/m/datagems-eosc/provenance-demo)](https://img.shields.io/github/commit-activity/m/datagems-eosc/provenance-demo)
-[![License](https://img.shields.io/github/license/datagems-eosc/provenance-demo)](https://img.shields.io/github/license/datagems-eosc/provenance-demo)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/datagems-eosc/ap-explanation)](https://img.shields.io/github/commit-activity/m/datagems-eosc/ap-explanation)
+[![License](https://img.shields.io/github/license/datagems-eosc/ap-explanation)](https://img.shields.io/github/license/datagems-eosc/ap-explanation)
 
 ## Overview
 
@@ -16,7 +16,7 @@ Provenance annotations help understand how data was derived, enabling reproducib
 uv sync --all-groups
 
 # Start the service
-uv run provenance_demo/main.py
+uv run ap_explanation/main.py
 ```
 
 ## Testing
@@ -31,4 +31,4 @@ Tests use testcontainers to run a PostgreSQL instance with ProvSQL automatically
 
 ## Documentation
 
-Full documentation is available at: https://datagems-eosc.github.io/provenance-demo/
+Full documentation is available at: https://datagems-eosc.github.io/ap-explanation/

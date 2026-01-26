@@ -3,12 +3,12 @@ from typing import List
 import orjson
 import pytest
 
-from provenance_demo.errors import (
+from ap_explanation.errors import (
     SemiringOperationNotSupportedError,
     TableNotAnnotatedError,
 )
-from provenance_demo.services.provenance import ProvenanceService
-from provenance_demo.types.semiring import DbSemiring
+from ap_explanation.services.provenance import ProvenanceService
+from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema, formula_semiring
 
 

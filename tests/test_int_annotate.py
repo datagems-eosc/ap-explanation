@@ -3,9 +3,9 @@ from typing import List
 
 import pytest
 
-from provenance_demo.errors import TableOrSchemaNotFoundError
-from provenance_demo.services.provenance import ProvenanceService
-from provenance_demo.types.semiring import DbSemiring
+from ap_explanation.errors import TableOrSchemaNotFoundError
+from ap_explanation.services.provenance import ProvenanceService
+from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 

@@ -1,9 +1,9 @@
-site_name: provenance-demo
+site_name: ap-explanation
 
-site_description: Provenance Demo repository
+site_description: AP Explanation repository
 site_author: Lucas Peirone
 edit_uri: edit/main/docs/
-repo_name: datagems-eosc/provenance-demo
+repo_name: datagems-eosc/ap-explanation
 
 copyright: Maintained by <a href="https://datagems-eosc.com">datagems-eosc</a>.
 
@@ -16,7 +16,7 @@ plugins:
       handlers:
         python:
           paths: [
-            "provenance_demo"
+            "ap_explanation"
             ]
 theme:
   name: material
@@ -43,9 +43,9 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/datagems-eosc/provenance-demo
+      link: https://github.com/datagems-eosc/ap-explanation
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/provenance-demo
+      link: https://pypi.org/project/ap-explanation
 
 markdown_extensions:
   - toc:
