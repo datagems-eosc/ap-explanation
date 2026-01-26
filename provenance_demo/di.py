@@ -63,6 +63,10 @@ def get_provenance_service_for_ap(connection_string: str) -> Callable[[], AsyncG
     async def _provide_service() -> AsyncGenerator[ProvenanceService, None]:
         async with get_dynamic_db_conn(connection_string) as conn:
             repo = ProvenanceRepository(conn, SqlRewriter())
+
+            # Ensure semiring setup is executed before using the connection
+            await repo.ensure_semiring_setup()
+
             yield ProvenanceService(repo)
 
     return _provide_service

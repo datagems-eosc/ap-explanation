@@ -100,6 +100,80 @@ class ProvenanceRepository:
 
         return newly_annotated
 
+    async def ensure_semiring_setup(self, required_version: str = "1.0.0") -> None:
+        """
+        Check if the semiring setup script has been executed and run it if needed.
+        Uses a canary table to track execution status.
+
+        Args:
+            required_version: The version of the script that should be present.
+        """
+        script_name = "03_setup_semiring_parallel.sql"
+
+        # Check if canary table exists and has the correct version
+        needs_execution = False
+
+        try:
+            async with self._conn.transaction():
+                cursor = await self._conn.execute(
+                    """
+                    SELECT version FROM public.provsql_canary 
+                    WHERE script_name = %s
+                    """,
+                    (script_name,),
+                )
+                result = await cursor.fetchone()
+
+                if result is None:
+                    logger.info(
+                        f"Canary not found for {script_name}, will execute script"
+                    )
+                    needs_execution = True
+                elif result[0] != required_version:
+                    logger.info(
+                        f"Version mismatch for {script_name}: found {result[0]}, expected {required_version}, will re-execute"
+                    )
+                    needs_execution = True
+                else:
+                    logger.debug(
+                        f"Semiring setup already executed (version {result[0]})"
+                    )
+        except errors.UndefinedTable:
+            logger.info(
+                f"Canary table does not exist, will execute {script_name}")
+            needs_execution = True
+
+        if needs_execution:
+            await self._execute_semiring_setup_script()
+
+    async def _execute_semiring_setup_script(self) -> None:
+        """
+        Execute the semiring setup script from the repository resources directory.
+        """
+        from pathlib import Path
+
+        # Find the script file relative to this module
+        script_path = Path(__file__).parent / "resources" / \
+            "03_setup_semiring_parallel.sql"
+
+        if not script_path.exists():
+            logger.error(f"Semiring setup script not found at {script_path}")
+            raise FileNotFoundError(
+                f"Required script not found: {script_path}")
+
+        logger.info(f"Executing semiring setup script: {script_path}")
+
+        # Read and execute the script
+        script_content = script_path.read_text(encoding='utf-8')
+
+        try:
+            async with self._conn.transaction():
+                await self._conn.execute(SQL(cast(LiteralString, script_content)))
+            logger.info("Semiring setup script executed successfully")
+        except Exception as e:
+            logger.error(f"Failed to execute semiring setup script: {e}")
+            raise
+
     async def add_semiring(self, schema_name: str, table_name: str, semiring: DbSemiring) -> bool:
         """
         Add a semiring's provenance annotations to an existing table that have provenance enabled.

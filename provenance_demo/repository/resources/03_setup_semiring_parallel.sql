@@ -286,3 +286,19 @@ BEGIN
 END
 $$;
 
+-- Canary table to track script execution
+-- This table is used to verify that the semiring setup has been executed
+CREATE TABLE IF NOT EXISTS public.provsql_canary (
+    script_name VARCHAR(255) PRIMARY KEY,
+    version VARCHAR(50) NOT NULL,
+    executed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Insert or update the canary record for this script
+INSERT INTO public.provsql_canary (script_name, version, executed_at)
+VALUES ('03_setup_semiring_parallel.sql', '1.0.0', NOW())
+ON CONFLICT (script_name) 
+DO UPDATE SET 
+    version = EXCLUDED.version,
+    executed_at = EXCLUDED.executed_at;
+

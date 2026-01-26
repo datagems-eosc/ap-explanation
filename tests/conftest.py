@@ -79,9 +79,14 @@ async def db_connection(db_pool: AsyncConnectionPool) -> AsyncGenerator[AsyncCon
         yield conn
 
 
-@pytest.fixture
-def provenance_repository(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
-    return ProvenanceRepository(db_connection, sql_rewriter)
+@pytest_asyncio.fixture
+async def provenance_repository(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
+    """
+    Returns a ProvenanceRepository with semiring setup ensured.
+    """
+    repo = ProvenanceRepository(db_connection, sql_rewriter)
+    await repo.ensure_semiring_setup()
+    return repo
 
 
 @pytest.fixture
