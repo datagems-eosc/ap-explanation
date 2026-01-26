@@ -32,22 +32,18 @@ def test_schema() -> TestSchema:
 def postgres_container():
     # Get the project root directory (parent of tests/)
     project_root = Path(__file__).parent.parent
-    fixtures_path = project_root / "fixtures" / "postgres-seed"
 
-    if not fixtures_path.exists():
-        raise FileNotFoundError(
-            f"Fixtures path does not exist: {fixtures_path}")
-
-    with DockerImage(path="dependencies/postgres-provsql", tag="testdb:latest", clean_up=False) as image:
+    with DockerImage(
+        path=str(project_root),
+        dockerfile_path="dependencies/postgres-provsql/Dockerfile",
+        tag="testdb:latest",
+        clean_up=False
+    ) as image:
         with PostgresContainer(
             image=str(image),
             username="provdemo",
             password="provdemo",
             dbname="mathe"
-        ).with_volume_mapping(
-            host=str(fixtures_path),
-            container="/docker-entrypoint-initdb.d",
-            mode="ro"
         ) as postgres:
             yield postgres
 
