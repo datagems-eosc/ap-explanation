@@ -9,6 +9,9 @@ from provenance_demo.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 
+############################
+# CREATE ANNOTATION TESTS #
+############################
 @pytest.mark.asyncio
 async def test_ok_single_semiring(provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema):
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
@@ -41,15 +44,6 @@ async def test_ok_idempotency(provenance_service: ProvenanceService, why_semirin
 
 
 @pytest.mark.asyncio
-async def test_ok_reversibility(provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema):
-    """
-    Annotation should be reversible: annotating and then removing the annotation should leave the dataset unchanged.
-    """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
-    await provenance_service.remove_annotation(test_schema.table, test_schema.schema, [why_semiring])
-
-
-@pytest.mark.asyncio
 async def test_ko_table_does_not_exists(provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema):
     with pytest.raises(TableOrSchemaNotFoundError) as exc_info:
         await provenance_service.annotate_dataset("i_dont_exists", test_schema.schema, [why_semiring])
@@ -62,3 +56,22 @@ async def test_ko_schema_does_not_exists(provenance_service: ProvenanceService, 
     with pytest.raises(TableOrSchemaNotFoundError) as exc_info:
         await provenance_service.annotate_dataset(test_schema.table, "i_dont_exists", [why_semiring])
     assert test_schema.table in str(exc_info.value)
+
+######################
+# REMOVE ANNOTATION TESTS #
+######################
+
+
+@pytest.mark.asyncio
+async def test_ok_remove_annotation_from_non_annotated_table(provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema):
+    was_removed = await provenance_service.remove_annotation(test_schema.table, test_schema.schema, [why_semiring])
+    assert was_removed is False
+
+
+@pytest.mark.asyncio
+async def test_ok_reversibility(provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema):
+    """
+    Annotation should be reversible: annotating and then removing the annotation should leave the dataset unchanged.
+    """
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.remove_annotation(test_schema.table, test_schema.schema, [why_semiring])

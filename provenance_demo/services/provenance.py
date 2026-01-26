@@ -42,6 +42,25 @@ class ProvenanceService:
 
         return newly_annotated or semiring_newly_enabled
 
+    async def remove_annotation(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
+        """
+        Remove provenance annotations from a table.
+
+        Args:
+            table_name: Name of the table to remove annotations from
+            schema_name: Schema where the table is located
+            semirings: List of semirings to remove from the table
+
+        Returns:
+            bool: True if any semiring was removed, False if none were found
+        """
+        any_removed = False
+        for semiring in semirings:
+            was_removed = await self._provenance_repo.remove_semiring(schema_name, table_name, semiring)
+            any_removed |= was_removed
+
+        return any_removed
+
     async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
         """
         Execute a SQL query with provenance tracking and return annotated results.

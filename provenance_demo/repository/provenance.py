@@ -148,23 +148,29 @@ class ProvenanceRepository:
 
         """
         prov_table = semiring.get_provenance_table_name_for(table_name)
-        table_existed = True
 
         await self._set_search_path(schema_name)
 
-        # Remove the semiring's provenance mapping table (separate transaction)
-        try:
+        # Check if the provenance table exists before attempting to drop it
+        async with self._conn.transaction():
+            cursor = await self._conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s)",
+                (schema_name, prov_table)
+            )
+            result = await cursor.fetchone()
+            table_existed = result[0] if result else False
+
+        # Remove the semiring's provenance mapping table if it exists
+        if table_existed:
             async with self._conn.transaction():
                 drop_query = (
-                    SQL("DROP TABLE IF EXISTS {} CASCADE")
+                    SQL("DROP TABLE {} CASCADE")
                     .format(Identifier(prov_table))
                 )
                 await self._conn.execute(drop_query)
-        except errors.UndefinedTable:
-            table_existed = False
 
-        async with self._conn.transaction():
-            await self._rebuild_union_mapping(schema_name, semiring)
+            async with self._conn.transaction():
+                await self._rebuild_union_mapping(schema_name, semiring)
 
         return table_existed
 
