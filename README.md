@@ -5,9 +5,25 @@
 
 ## Overview
 
-A FastAPI-based service for annotating and explaining data provenance using **semiring annotations**. This project integrates with PostgreSQL and the ProvSQL extension to track and analyze data lineage in SQL queries.
+A FastAPI service that explains **where your SQL query results come from**. Given a query like `SELECT name FROM students WHERE grade > 80`, this service shows which source rows contributed to each result and how they were combined.
 
-Provenance annotations help understand how data was derived, enabling reproducibility, debugging, and compliance in data workflows.
+Uses PostgreSQL with ProvSQL extension to track data lineage through joins, aggregations, and transformations.
+
+### Example
+
+```bash
+# 1. Annotate tables (one-time setup)
+curl -X POST http://localhost:5000/api/v1/ap/annotate -d @analytical_pattern.json
+
+# 2. Get provenance explanation
+curl -X POST http://localhost:5000/api/v1/ap/explain -d @analytical_pattern.json
+```
+
+**Response shows:**
+- **Formula semiring**: How results were computed: `(students₁ ⊗ grades₂) ⊕ students₃`
+- **Why semiring**: Which rows contributed: `["students(1)", "grades(2)", "students(3)"]`
+
+Perfect for debugging queries, compliance tracking, and understanding data transformations.
 
 ## Quick Start
 

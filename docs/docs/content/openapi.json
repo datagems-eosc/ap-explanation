@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Analytical Pattern Management API",
-    "description": "API to manage AP",
-    "version": "1.0.0"
+    "title": "AP Explanation API",
+    "description": "API for explaining Analytical Patterns with provenance tracking using ProvSQL",
+    "version": "0.0.1"
   },
   "paths": {
     "/": {
@@ -22,155 +22,14 @@
         }
       }
     },
-    "/api/v1/aps/": {
+    "/api/v1/ap/annotate": {
       "post": {
         "tags": [
-          "v1",
-          "aps"
+          "v1"
         ],
-        "summary": "Create Ap",
-        "description": "Registers a new Analytical Pattern",
-        "operationId": "create_ap_api_v1_aps__post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AnalyticalPattern"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreatePayload"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Database error or unexpected server error"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/aps/{id}": {
-      "get": {
-        "tags": [
-          "v1",
-          "aps"
-        ],
-        "summary": "Retrieve Ap",
-        "description": "Retrieves an Analytical Pattern whole graph by the UUID of the Analytical Pattern Node.",
-        "operationId": "retrieve_ap_api_v1_aps__id__get",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "The Analytical Pattern Node UUID to look for",
-              "title": "Id"
-            },
-            "description": "The Analytical Pattern Node UUID to look for"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnalyticalPattern"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Analytical Pattern not found"
-          },
-          "500": {
-            "description": "Database error or unexpected server error"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/aps/display": {
-      "post": {
-        "tags": [
-          "v1",
-          "aps"
-        ],
-        "summary": "Display Ap",
-        "description": "Returns an SVG representation of the Analytical Pattern.",
-        "operationId": "display_ap_api_v1_aps_display_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AnalyticalPattern"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "SVG representation of the Analytical Pattern",
-            "content": {
-              "application/json": {
-                "schema": {}
-              },
-              "image/svg+xml": {}
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/aps/validate": {
-      "post": {
-        "tags": [
-          "v1",
-          "aps"
-        ],
-        "summary": "Validate Ap",
-        "description": "Ensure the provided PG-JSON is a valid Analytical Pattern. Return the list of errors if validation fails.\nThe input must first be a valid PG-JSON.\nIf the payload is not a valid PG-JSON, a 422 error will be returned, and no Analytical Pattern validation will be performed.",
-        "operationId": "validate_ap_api_v1_aps_validate_post",
+        "summary": "Annotate Ap",
+        "description": "Annotate the AP with all available semirings using dynamic database connection.",
+        "operationId": "annotate_ap_api_v1_ap_annotate_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -187,7 +46,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationPayload"
+                  "items": {
+                    "$ref": "#/components/schemas/AnnotationResult"
+                  },
+                  "type": "array",
+                  "title": "Response Annotate Ap Api V1 Ap Annotate Post"
                 }
               }
             }
@@ -203,40 +66,38 @@
             }
           }
         }
-      }
-    },
-    "/api/v1/tasks/": {
-      "post": {
+      },
+      "delete": {
         "tags": [
-          "v1",
-          "tasks"
+          "v1"
         ],
-        "summary": "Create Task",
-        "description": "Registers a new Task",
-        "operationId": "create_task_api_v1_tasks__post",
+        "summary": "Remove Annotation Ap",
+        "description": "Remove annotations from AP tables for all available semirings using dynamic database connection.",
+        "operationId": "remove_annotation_ap_api_v1_ap_annotate_delete",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTaskInput"
+                "$ref": "#/components/schemas/PgJson"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatePayload"
+                  "items": {
+                    "$ref": "#/components/schemas/RemovalResult"
+                  },
+                  "type": "array",
+                  "title": "Response Remove Annotation Ap Api V1 Ap Annotate Delete"
                 }
               }
             }
-          },
-          "500": {
-            "description": "Database error or unexpected server error"
           },
           "422": {
             "description": "Validation Error",
@@ -251,28 +112,35 @@
         }
       }
     },
-    "/api/v1/tasks/{id}/aps": {
-      "get": {
+    "/api/v1/ap/annotate/{semiring_name}": {
+      "post": {
         "tags": [
-          "v1",
-          "tasks"
+          "v1"
         ],
-        "summary": "Retrieve Aps",
-        "description": "Returns all Analytical Pattern associated to the given Task ID.",
-        "operationId": "retrieve_aps_api_v1_tasks__id__aps_get",
+        "summary": "Annotate Ap With Semiring",
+        "description": "Annotate the AP with the chosen semiring using dynamic database connection.",
+        "operationId": "annotate_ap_with_semiring_api_v1_ap_annotate__semiring_name__post",
         "parameters": [
           {
-            "name": "id",
+            "name": "semiring_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "The Task UUID to look for",
-              "title": "Id"
-            },
-            "description": "The Task UUID to look for"
+              "title": "Semiring Name"
+            }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PgJson"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -281,18 +149,158 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/AnnotationResult"
                   },
-                  "title": "Response Retrieve Aps Api V1 Tasks  Id  Aps Get"
+                  "title": "Response Annotate Ap With Semiring Api V1 Ap Annotate  Semiring Name  Post"
                 }
               }
             }
           },
-          "404": {
-            "description": "Task not found"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Remove Annotation Ap With Semiring",
+        "description": "Remove annotations from AP tables for the chosen semiring using dynamic database connection.",
+        "operationId": "remove_annotation_ap_with_semiring_api_v1_ap_annotate__semiring_name__delete",
+        "parameters": [
+          {
+            "name": "semiring_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Semiring Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PgJson"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RemovalResult"
+                  },
+                  "title": "Response Remove Annotation Ap With Semiring Api V1 Ap Annotate  Semiring Name  Delete"
+                }
+              }
+            }
           },
-          "500": {
-            "description": "Database error or unexpected server error"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ap/explain": {
+      "post": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Explain Ap",
+        "description": "Explain the AP with all available semirings using dynamic database connection.",
+        "operationId": "explain_ap_api_v1_ap_explain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PgJson"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ap/explain/{semiring_name}": {
+      "post": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Explain Ap With Semiring",
+        "description": "Explain the AP with only the chosen semiring using dynamic database connection.",
+        "operationId": "explain_ap_with_semiring_api_v1_ap_explain__semiring_name__post",
+        "parameters": [
+          {
+            "name": "semiring_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Semiring Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PgJson"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -329,60 +337,38 @@
   },
   "components": {
     "schemas": {
-      "AnalyticalPattern": {
+      "AnnotationResult": {
         "properties": {
-          "nodes": {
-            "items": {
-              "$ref": "#/components/schemas/PgJsonNode"
-            },
-            "type": "array",
-            "title": "Nodes"
+          "table_name": {
+            "type": "string",
+            "title": "Table Name"
           },
-          "edges": {
-            "items": {
-              "$ref": "#/components/schemas/PgJsonEdge"
-            },
-            "type": "array",
-            "title": "Edges"
-          }
-        },
-        "type": "object",
-        "required": [
-          "nodes",
-          "edges"
-        ],
-        "title": "AnalyticalPattern"
-      },
-      "CreatePayload": {
-        "properties": {
-          "id": {
+          "semiring": {
             "type": "string",
-            "title": "Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "title": "CreatePayload"
-      },
-      "CreateTaskInput": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
+            "title": "Semiring"
           },
-          "request": {
+          "status": {
             "type": "string",
-            "title": "Request"
+            "enum": [
+              "success",
+              "already_annotated",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
           }
         },
         "type": "object",
         "required": [
-          "name",
-          "request"
+          "table_name",
+          "semiring",
+          "status",
+          "message"
         ],
-        "title": "CreateTaskInput"
+        "title": "AnnotationResult"
       },
       "HTTPValidationError": {
         "properties": {
@@ -448,8 +434,7 @@
                 "type": "null"
               }
             ],
-            "title": "Properties",
-            "default": {}
+            "title": "Properties"
           }
         },
         "type": "object",
@@ -483,8 +468,7 @@
                 "type": "null"
               }
             ],
-            "title": "Properties",
-            "default": {}
+            "title": "Properties"
           }
         },
         "type": "object",
@@ -493,6 +477,39 @@
           "labels"
         ],
         "title": "PgJsonNode"
+      },
+      "RemovalResult": {
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "title": "Table Name"
+          },
+          "semiring": {
+            "type": "string",
+            "title": "Semiring"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "not_found",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table_name",
+          "semiring",
+          "status",
+          "message"
+        ],
+        "title": "RemovalResult"
       },
       "ValidationError": {
         "properties": {
@@ -526,27 +543,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "ValidationPayload": {
-        "properties": {
-          "valid": {
-            "type": "boolean",
-            "title": "Valid"
-          },
-          "errors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Errors"
-          }
-        },
-        "type": "object",
-        "required": [
-          "valid",
-          "errors"
-        ],
-        "title": "ValidationPayload"
       }
     }
   }

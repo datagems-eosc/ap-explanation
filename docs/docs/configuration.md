@@ -2,49 +2,33 @@
 
 This document describes how to configure the AP Explanation service for different environments.
 
-## Environment Variables
-
-The AP Explanation service uses environment variables for configuration. A `.env` file can be used to define these variables:
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `POSTGRES_HOST` | PostgreSQL database host | `localhost` | Yes |
-| `POSTGRES_PORT` | PostgreSQL database port | `5432` | Yes |
-| `POSTGRES_DB` | PostgreSQL database name | `mathe` | Yes |
-| `POSTGRES_USER` | PostgreSQL username | `provdemo` | Yes |
-| `POSTGRES_PASSWORD` | PostgreSQL password | - | Yes |
-| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | `INFO` | No |
-
-### Example `.env` File
-
-```bash
-# PostgreSQL Configuration
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=mathe
-POSTGRES_USER=provdemo
-POSTGRES_PASSWORD=provdemo
-
-# Logging
-LOG_LEVEL=INFO
-```
-
 ## PostgreSQL with ProvSQL
 
-The service requires PostgreSQL with the ProvSQL extension. A pre-configured Docker image is available:
+### Database Requirements
+
+The service **requires** a PostgreSQL database with the following:
+
+1. **ProvSQL Extension**: The database must have the [ProvSQL extension](https://github.com/PierreSenellart/provsql) installed and enabled. ProvSQL provides provenance tracking capabilities for SQL queries.
+
+2. **Semiring Definitions**: The service automatically initializes semiring type definitions and aggregate functions when connecting to the database. This includes:
+   - Custom composite types (`formula_state`, `whyprov_state`, etc.)
+   - Semiring operation functions (plus, times, monus)
+   - Aggregate functions for provenance tracking
+
+   These definitions are automatically created from the SQL script at `ap_explanation/repository/resources/03_setup_semiring_parallel.sql` during the first connection.
+
+### Using the Pre-configured Docker Image
+
+A pre-configured Docker image with PostgreSQL and ProvSQL is available:
 
 ```bash
 cd dependencies/postgres-provsql
 docker build -t postgres-provsql .
 ```
 
-## API Documentation
-
-Once configured and running, access the interactive API documentation:
-
-- **Swagger UI**: http://localhost:5000/docs
-- **ReDoc**: http://localhost:5000/redoc
-- **OpenAPI JSON**: http://localhost:5000/openapi.json
+This image includes:
+- PostgreSQL with the ProvSQL extension pre-installed
+- All necessary dependencies and configurations
 
 ## Testing Configuration
 

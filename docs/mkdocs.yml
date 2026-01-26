@@ -1,14 +1,17 @@
 site_name: Analytical Pattern Docs
 
-site_url: https://datagems-eosc.github.io/ap-management/
-repo_url: https://github.com/datagems-eosc/ap-management/
+site_url: https://datagems-eosc.github.io/ap-explanation/
+repo_url: https://github.com/datagems-eosc/ap-explanation/
 
 
 nav:
   - Overview: index.md
+  - Usage: usage.md
   - Architecture: architecture.md
-  - API: openapi.md
   - Configuration: configuration.md
+  - Development: development.md
+  - Troubleshooting: troubleshooting.md
+  - API: openapi.md
   - Home: https://datagems-eosc.github.io/
 
 theme:
