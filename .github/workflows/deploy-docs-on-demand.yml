@@ -9,7 +9,7 @@ on:
 
 jobs:
   deploy:
-  
+
     runs-on: ubuntu-latest
 
     permissions:
@@ -37,7 +37,7 @@ jobs:
           git config user.email "datagems-ci[bot]@datagems.eu"
 
       - name: Fetch existing gh-pages branch
-        run: git fetch origin gh-pages:gh-pages
+        run: git fetch origin gh-pages:gh-pages || echo "No gh-pages branch yet, will be created"
 
       - name: Publish docs
         run: |
