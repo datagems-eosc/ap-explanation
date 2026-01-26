@@ -65,8 +65,10 @@ class SqlRewriter:
             return self._rewrite_non_aggregate(query, semiring)
 
         if semiring.aggregate_function is None:
-            raise NotImplementedError(
-                f"The semiring {semiring.name} does not support aggregate queries."
+            from provenance_demo.errors import SemiringOperationNotSupportedError
+            raise SemiringOperationNotSupportedError(
+                semiring_name=semiring.name,
+                operation="aggregate queries"
             )
 
         return self._rewrite_aggregate(query, semiring)

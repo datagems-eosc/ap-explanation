@@ -9,7 +9,11 @@ from provenance_demo.api.v1.dependencies.ap_parser import (
     SqlOperator,
 )
 from provenance_demo.di import get_provenance_service_for_ap, get_semirings
-from provenance_demo.errors import ProvSqlMissingError
+from provenance_demo.errors import (
+    ProvSqlMissingError,
+    SemiringOperationNotSupportedError,
+    TableNotAnnotatedError,
+)
 from provenance_demo.types.semiring import DbSemiring
 
 
@@ -30,6 +34,16 @@ async def explain_ap(
             query = sql_node.properties["query"] if sql_node.properties else ""
             prov = await service.compute_provenance(schema_name, query, semirings)
             result = loads(prov or "[]")
+        except TableNotAnnotatedError as e:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except SemiringOperationNotSupportedError as e:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
         except ProvSqlMissingError as e:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -1,4 +1,3 @@
-from asyncio import gather
 from logging import getLogger
 from typing import List
 
@@ -72,9 +71,10 @@ class ProvenanceService:
         Returns:
             JSON string of results with provenance annotations
         """
-        tasks = [
-            self._provenance_repo.query(schema_name, sql_query, semiring)
-            for semiring in semirings
-        ]
-        results = await gather(*tasks)
+        # Execute queries sequentially since they share the same connection
+        # and can't run concurrent transactions
+        results = []
+        for semiring in semirings:
+            result = await self._provenance_repo.query(schema_name, sql_query, semiring)
+            results.append(result)
         return dumps(results).decode('utf-8')

@@ -41,18 +41,29 @@ class ProvenanceRepository:
         """
         edited_query = self._sql_rewriter.rewrite(query, semiring)
 
-        async with self._conn.transaction():
-            await self._set_search_path(schema_name)
+        try:
+            async with self._conn.transaction():
+                await self._set_search_path(schema_name)
 
-            # Fetch the provenance-annotated results
-            cursor = await self._conn.cursor(row_factory=dict_row).execute(SQL(cast(LiteralString, edited_query)))
-            rows = await cursor.fetchall()
+                # Fetch the provenance-annotated results
+                cursor = await self._conn.cursor(row_factory=dict_row).execute(SQL(cast(LiteralString, edited_query)))
+                rows = await cursor.fetchall()
 
-            # From each row, retrieve the provenance data
-            for row in rows:
-                row[semiring.name] = await self._fetch_related_data(row[semiring.retrieval_function], semiring)
+                # From each row, retrieve the provenance data
+                for row in rows:
+                    retrieval_name = semiring.retrieval_function
+                    if semiring.aggregate_function is not None and semiring.aggregate_function in row:
+                        retrieval_name = semiring.aggregate_function
+                    row[semiring.name] = await self._fetch_related_data(row[retrieval_name], semiring)
 
-        return rows
+            return rows
+        except errors.UndefinedTable as e:
+            # The mapping table doesn't exist, meaning the table hasn't been annotated
+            from provenance_demo.errors import TableNotAnnotatedError
+            logger.warning(
+                f"Table not annotated with semiring '{semiring.name}': {e}")
+            raise TableNotAnnotatedError(
+                schema_name=schema_name, semiring_name=semiring.name) from e
 
     async def enable_provenance(self, schema_name: str, table_name: str) -> bool:
         """

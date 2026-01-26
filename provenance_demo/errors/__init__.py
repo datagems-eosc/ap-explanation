@@ -2,7 +2,14 @@
 
 from provenance_demo.errors.exceptions import (
     ProvSqlMissingError,
+    SemiringOperationNotSupportedError,
+    TableNotAnnotatedError,
     TableOrSchemaNotFoundError,
 )
 
-__all__ = ["ProvSqlMissingError", "TableOrSchemaNotFoundError"]
+__all__ = [
+    "ProvSqlMissingError",
+    "TableOrSchemaNotFoundError",
+    "TableNotAnnotatedError",
+    "SemiringOperationNotSupportedError",
+]
