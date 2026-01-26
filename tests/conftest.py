@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncGenerator, List
 from urllib.parse import urlparse, urlunparse
@@ -16,7 +17,18 @@ from provenance_demo.services.provenance import ProvenanceService
 from provenance_demo.types.semiring import DbSemiring
 
 
+@dataclass
+class TestSchema:
+    table: str = "assessment"
+    schema: str = "mathe"
+
+
 @pytest.fixture(scope="session")
+def test_schema() -> TestSchema:
+    return TestSchema()
+
+
+@pytest.fixture(scope="function")
 def postgres_container():
     # Get the project root directory (parent of tests/)
     project_root = Path(__file__).parent.parent

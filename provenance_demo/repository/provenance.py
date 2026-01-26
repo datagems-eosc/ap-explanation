@@ -54,17 +54,18 @@ class ProvenanceRepository:
 
         return rows
 
-    async def enable_provenance(self, schema_name: str, table_name: str) -> None:
+    async def enable_provenance(self, schema_name: str, table_name: str) -> bool:
         """
         Create the provenance annotations for a given base table in the specified schema.
 
         Args:
             schema_name: The schema where the base table is located.
             table_name: The name of the base table.
+        Returns:
+            True if the table was newly annotated, False if it was already annotated.
         """
         await self._set_search_path(schema_name)
-
-        # Add the provenance column to the base table (separate transaction)
+        newly_annotated = True
         try:
             async with self._conn.transaction():
                 await self._conn.execute("CREATE EXTENSION IF NOT EXISTS provsql CASCADE")
@@ -75,36 +76,65 @@ class ProvenanceRepository:
             raise ProvSqlMissingError(
                 f"ProvSQL extension is not installed or not available: {str(e)}"
             ) from e
+        except errors.UndefinedTable as e:
+            logger.warning(
+                f"Table '{table_name}' does not exist in schema '{schema_name}': {e}")
+            from provenance_demo.errors import TableOrSchemaNotFoundError
+            raise TableOrSchemaNotFoundError(
+                table_name=table_name, schema_name=schema_name) from e
         except errors.DuplicateColumn:
             logger.info(
                 f"Provenance column for table '{table_name}' already exists, ignoring")
+            newly_annotated = False
 
-    async def add_semiring(self, schema_name: str, table_name: str, semiring: DbSemiring) -> None:
+        return newly_annotated
+
+    async def add_semiring(self, schema_name: str, table_name: str, semiring: DbSemiring) -> bool:
         """
         Add a semiring's provenance annotations to an existing table that have provenance enabled.
 
         Args:
             schema_name: The schema where the base table is located.
             table_name: The name of the base table.
+        Returns:
+            True if the semiring's was already active for the table, False if it was newly created.
         """
         prov_table = semiring.get_provenance_table_name_for(table_name)
 
         await self._set_search_path(schema_name)
 
-        # Create the provenance mapping table and rebuild union (in a new transaction)
+        # Drop any existing temp table from previous operations
+        # ProvSQl can leave temp tables behind if an error occurs
         async with self._conn.transaction():
-            # Drop any existing temp table from previous operations in this session
             try:
                 await self._conn.execute("DROP TABLE IF EXISTS tmp_provsql")
             except Exception:
                 pass
 
-            await self._conn.execute(
-                "SELECT create_provenance_mapping(%s, %s, %s)",
-                (prov_table, table_name,
-                 semiring.mappingStrategy.encode(table_name))
-            )
+        # Attempt to create the semiring's provenance mapping table.
+        # If it already exists, the semiring is already active.
+        # We need to handle DuplicateTable carefully because it leaves the transaction in a failed state.
+        semiring_created = True
+        try:
+            async with self._conn.transaction():
+                await self._conn.execute(
+                    "SELECT create_provenance_mapping(%s, %s, %s)",
+                    (prov_table, table_name,
+                     semiring.mappingStrategy.encode(table_name))
+                )
+        except errors.DuplicateTable:
+            logger.info(
+                f"Provenance table '{prov_table}' already exists, ignoring")
+            semiring_created = False
+        except Exception as e:
+            logger.error(f"Unexpected error in create_provenance_mapping: {e}")
+            raise
+
+        # Rebuild the union mapping table for this semiring
+        async with self._conn.transaction():
             await self._rebuild_union_mapping(schema_name, semiring)
+
+        return semiring_created
 
     async def remove_semiring(self, schema_name: str, table_name: str, semiring: DbSemiring) -> bool:
         """
@@ -187,7 +217,7 @@ class ProvenanceRepository:
         await self._conn.execute(composed_rq)
 
         # Adjust the value column to be an Array and add primary key
-        # TODO : This is semiring specific, should be abstracted
+        # NOTE : This may be semiring specific, should be abstracted
         await self._conn.execute(SQL("ALTER TABLE {} ALTER COLUMN value TYPE varchar").format(Identifier(name)))
         await self._conn.execute(SQL("UPDATE {} SET value = '{{\"{{' || value || '}}\"}}'").format(Identifier(name)))
         await self._conn.execute(SQL("ALTER TABLE {} ADD PRIMARY KEY (provenance)").format(Identifier(name)))

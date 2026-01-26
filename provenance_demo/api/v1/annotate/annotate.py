@@ -10,6 +10,7 @@ from provenance_demo.api.v1.dependencies.ap_parser import (
     TableNames,
 )
 from provenance_demo.di import get_provenance_service_for_ap, get_semirings
+from provenance_demo.errors import TableOrSchemaNotFoundError
 from provenance_demo.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -59,6 +60,12 @@ async def annotate_ap(
                                 message=f"Table '{table_name}' is already annotated with semiring '{semiring.name}'"
                             )
                         )
+            except TableOrSchemaNotFoundError as e:
+                logger.warning(f"Table or schema not found: {e}")
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail=str(e)
+                )
             except Exception as e:
                 logger.error(
                     f"Failed to annotate table '{table_name}'", exc_info=True)

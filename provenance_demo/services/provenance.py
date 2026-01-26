@@ -29,16 +29,18 @@ class ProvenanceService:
         Args:
             table_name: Name of the table to annotate
             schema_name: Schema where the table is located
+            semirings: List of semirings to enable for the table
 
         Returns:
-            bool: True if the table was annotated
+            bool: True if the table was annotated or semirings were newly enabled, False otherwise
         """
-        await self._provenance_repo.enable_provenance(schema_name, table_name)
+        newly_annotated = await self._provenance_repo.enable_provenance(schema_name, table_name)
 
+        semiring_newly_enabled = False
         for semiring in semirings:
-            await self._provenance_repo.add_semiring(schema_name, table_name, semiring)
+            semiring_newly_enabled |= await self._provenance_repo.add_semiring(schema_name, table_name, semiring)
 
-        return True
+        return newly_annotated or semiring_newly_enabled
 
     async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
         """
