@@ -12,8 +12,9 @@ from ap_explanation.di import container_lifespan
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Retrieve current project version from toml
-pyproject = loads_toml(Path("pyproject.toml").read_text())
+# Retrieve current project version from toml (relative to this file)
+pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+pyproject = loads_toml(pyproject_path.read_text())
 project_version = pyproject["project"]["version"]
 
 ROOT_PATH = getenv("ROOT_PATH", "")
