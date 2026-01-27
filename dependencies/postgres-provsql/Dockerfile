@@ -24,9 +24,6 @@ WORKDIR /provsql
 
 RUN make && make install
 
-# Copy SQL seed files into the image
-COPY fixtures/postgres-seed/* /docker-entrypoint-initdb.d/
-
 # Add custom configuration
 RUN mkdir -p /etc/postgresql && \
     echo "shared_preload_libraries = 'provsql'" >> /etc/postgresql/postgresql.conf && \
