@@ -37,7 +37,8 @@ def postgres_container():
         path=str(project_root),
         dockerfile_path="dependencies/postgres-provsql/Dockerfile",
         tag="testdb:latest",
-        clean_up=False
+        clean_up=False,
+        buildargs={"FIXTURES_PATH": "fixtures/postgres-seed"}
     ) as image:
         with PostgresContainer(
             image=str(image),

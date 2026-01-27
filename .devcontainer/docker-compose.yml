@@ -18,8 +18,10 @@ services:
   # --- PostgreSQL Service with ProvSQL compiled from source ---
   postgres-provsql:
     build:
-      context: ../dependencies/postgres-provsql
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: dependencies/postgres-provsql/Dockerfile
+      args:
+        FIXTURES_PATH: fixtures/postgres-seed
     container_name: postgres-provsql
     ports:
       - "5432:5432"
