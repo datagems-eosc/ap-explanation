@@ -15,19 +15,19 @@ router = APIRouter(
 )
 
 # Annotate endpoints
-router.add_api_route("/ap/annotate", annotate_ap, methods=["POST"])
+router.add_api_route("/aps/annotate", annotate_ap, methods=["POST"])
 router.add_api_route(
-    "/ap/annotate/{semiring_name}", annotate_ap_with_semiring, methods=["POST"])
+    "/aps/annotate/{semiring_name}", annotate_ap_with_semiring, methods=["POST"])
 
 # Remove annotation endpoints
-router.add_api_route("/ap/annotate", remove_annotation_ap, methods=["DELETE"])
+router.add_api_route("/aps/annotate", remove_annotation_ap, methods=["DELETE"])
 router.add_api_route(
-    "/ap/annotate/{semiring_name}", remove_annotation_ap_with_semiring, methods=["DELETE"])
+    "/aps/annotate/{semiring_name}", remove_annotation_ap_with_semiring, methods=["DELETE"])
 
 # Explain endpoints
-router.add_api_route("/ap/explain", explain_ap, methods=["POST"])
+router.add_api_route("/aps/explain", explain_ap, methods=["POST"])
 router.add_api_route(
-    "/ap/explain/{semiring_name}", explain_ap_with_semiring, methods=["POST"])
+    "/aps/explain/{semiring_name}", explain_ap_with_semiring, methods=["POST"])
 
 # Health check
 router.add_api_route("/health", health_check, methods=["GET"])

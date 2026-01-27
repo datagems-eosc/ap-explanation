@@ -22,14 +22,14 @@
         }
       }
     },
-    "/api/v1/ap/annotate": {
+    "/api/v1/aps/annotate": {
       "post": {
         "tags": [
           "v1"
         ],
         "summary": "Annotate Ap",
         "description": "Annotate the AP with all available semirings using dynamic database connection.",
-        "operationId": "annotate_ap_api_v1_ap_annotate_post",
+        "operationId": "annotate_ap_api_v1_aps_annotate_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -50,7 +50,7 @@
                     "$ref": "#/components/schemas/AnnotationResult"
                   },
                   "type": "array",
-                  "title": "Response Annotate Ap Api V1 Ap Annotate Post"
+                  "title": "Response Annotate Ap Api V1 Aps Annotate Post"
                 }
               }
             }
@@ -73,7 +73,7 @@
         ],
         "summary": "Remove Annotation Ap",
         "description": "Remove annotations from AP tables for all available semirings using dynamic database connection.",
-        "operationId": "remove_annotation_ap_api_v1_ap_annotate_delete",
+        "operationId": "remove_annotation_ap_api_v1_aps_annotate_delete",
         "requestBody": {
           "content": {
             "application/json": {
@@ -94,7 +94,7 @@
                     "$ref": "#/components/schemas/RemovalResult"
                   },
                   "type": "array",
-                  "title": "Response Remove Annotation Ap Api V1 Ap Annotate Delete"
+                  "title": "Response Remove Annotation Ap Api V1 Aps Annotate Delete"
                 }
               }
             }
@@ -112,14 +112,14 @@
         }
       }
     },
-    "/api/v1/ap/annotate/{semiring_name}": {
+    "/api/v1/aps/annotate/{semiring_name}": {
       "post": {
         "tags": [
           "v1"
         ],
         "summary": "Annotate Ap With Semiring",
         "description": "Annotate the AP with the chosen semiring using dynamic database connection.",
-        "operationId": "annotate_ap_with_semiring_api_v1_ap_annotate__semiring_name__post",
+        "operationId": "annotate_ap_with_semiring_api_v1_aps_annotate__semiring_name__post",
         "parameters": [
           {
             "name": "semiring_name",
@@ -151,7 +151,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AnnotationResult"
                   },
-                  "title": "Response Annotate Ap With Semiring Api V1 Ap Annotate  Semiring Name  Post"
+                  "title": "Response Annotate Ap With Semiring Api V1 Aps Annotate  Semiring Name  Post"
                 }
               }
             }
@@ -174,7 +174,7 @@
         ],
         "summary": "Remove Annotation Ap With Semiring",
         "description": "Remove annotations from AP tables for the chosen semiring using dynamic database connection.",
-        "operationId": "remove_annotation_ap_with_semiring_api_v1_ap_annotate__semiring_name__delete",
+        "operationId": "remove_annotation_ap_with_semiring_api_v1_aps_annotate__semiring_name__delete",
         "parameters": [
           {
             "name": "semiring_name",
@@ -206,7 +206,7 @@
                   "items": {
                     "$ref": "#/components/schemas/RemovalResult"
                   },
-                  "title": "Response Remove Annotation Ap With Semiring Api V1 Ap Annotate  Semiring Name  Delete"
+                  "title": "Response Remove Annotation Ap With Semiring Api V1 Aps Annotate  Semiring Name  Delete"
                 }
               }
             }
@@ -224,14 +224,14 @@
         }
       }
     },
-    "/api/v1/ap/explain": {
+    "/api/v1/aps/explain": {
       "post": {
         "tags": [
           "v1"
         ],
         "summary": "Explain Ap",
         "description": "Explain the AP with all available semirings using dynamic database connection.",
-        "operationId": "explain_ap_api_v1_ap_explain_post",
+        "operationId": "explain_ap_api_v1_aps_explain_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -264,14 +264,14 @@
         }
       }
     },
-    "/api/v1/ap/explain/{semiring_name}": {
+    "/api/v1/aps/explain/{semiring_name}": {
       "post": {
         "tags": [
           "v1"
         ],
         "summary": "Explain Ap With Semiring",
         "description": "Explain the AP with only the chosen semiring using dynamic database connection.",
-        "operationId": "explain_ap_with_semiring_api_v1_ap_explain__semiring_name__post",
+        "operationId": "explain_ap_with_semiring_api_v1_aps_explain__semiring_name__post",
         "parameters": [
           {
             "name": "semiring_name",
