@@ -65,8 +65,8 @@ class SqlRewriter:
                 "HAVING queries are not supported yet, rewrite your SQL with nested SELECTs."
             )
 
-        # Detect if the outer select contains aggregates
-        if not any(outer_select.find_all(AggFunc)):
+        # Detect if the outer select contains top-level aggregates (not in subqueries)
+        if not self._has_top_level_aggregates(outer_select):
             return self._rewrite_non_aggregate(query, semiring)
 
         if semiring.aggregate_function is None:
@@ -77,6 +77,47 @@ class SqlRewriter:
             )
 
         return self._rewrite_aggregate(query, semiring)
+
+    def _has_top_level_aggregates(self, select: Select) -> bool:
+        """
+        Check if a SELECT statement contains aggregate functions at the top level,
+        excluding aggregates that are inside subqueries.
+
+        Args:
+            select (Select): The SELECT statement to check
+
+        Returns:
+            bool: True if top-level aggregates are found, False otherwise
+        """
+        for expr in select.expressions:
+            if self._contains_aggregate_not_in_subquery(expr):
+                return True
+        return False
+
+    def _contains_aggregate_not_in_subquery(self, node) -> bool:
+        """
+        Recursively check if a node contains an aggregate function,
+        but stop traversing when encountering a subquery.
+
+        Args:
+            node: The expression node to check
+
+        Returns:
+            bool: True if aggregate is found (not in a subquery), False otherwise
+        """
+        if isinstance(node, AggFunc):
+            return True
+
+        # Don't traverse into subqueries or nested SELECT statements
+        if isinstance(node, (Subquery, Select)):
+            return False
+
+        # Recursively check children
+        for child in node.iter_expressions():
+            if self._contains_aggregate_not_in_subquery(child):
+                return True
+
+        return False
 
     def _rewrite_non_aggregate(self, query: str, semiring: DbSemiring) -> str:
         """
