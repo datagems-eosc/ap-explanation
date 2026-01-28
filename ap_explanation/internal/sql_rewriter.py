@@ -1,3 +1,5 @@
+import random
+
 from sqlglot import parse_one
 from sqlglot.expressions import (
     AggFunc,
@@ -158,6 +160,9 @@ class SqlRewriter:
         proj_non_agg = []
         for e in initial_select.expressions:
             if e.find(AggFunc):
+                # Ensure aggregate expressions have an alias
+                if not e.alias:
+                    e.set("alias", f"agg_result_{random.randint(1000, 9999)}")
                 proj_agg.append(e)
             else:
                 proj_non_agg.append(e)
@@ -183,7 +188,7 @@ class SqlRewriter:
             Anonymous(
                 this=semiring.aggregate_function,
                 expressions=[
-                    Column(this=agg.alias_or_name),
+                    Column(this=agg.alias_or_name, table=subquery_alias),
                     Literal.string(semiring.mapping_table)
                 ]
             )
