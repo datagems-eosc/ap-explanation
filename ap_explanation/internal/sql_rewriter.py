@@ -13,6 +13,9 @@ from ap_explanation.types.semiring import DbSemiring
 
 
 class SqlRewriter:
+
+    # SQL flavor to use for parsing and generating SQL queries
+    db_dialect = "postgres"
     """
     Rewrites SQL queries to include provenance tracking functions.
 
@@ -46,7 +49,7 @@ class SqlRewriter:
             NotImplementedError: If the query uses HAVING or the semiring doesn't 
                                 support aggregate queries
         """
-        ast = parse_one(query)
+        ast = parse_one(query, dialect=self.db_dialect)
 
         outer_select = ast.find(Select)
         if outer_select is None:
@@ -98,7 +101,7 @@ class SqlRewriter:
         Raises:
             ValueError: If the query is not a SELECT query
         """
-        ast = parse_one(query)
+        ast = parse_one(query, dialect=self.db_dialect)
 
         if not isinstance(ast, Select):
             raise ValueError("Expected SELECT query")
@@ -113,7 +116,7 @@ class SqlRewriter:
             )
         )
 
-        return ast.sql()
+        return ast.sql(dialect=self.db_dialect)
 
     def _rewrite_aggregate(self, query: str, semiring: DbSemiring) -> str:
         """
@@ -144,7 +147,7 @@ class SqlRewriter:
         Raises:
             ValueError: If the query is not a SELECT query or has no aggregates
         """
-        ast = parse_one(query)
+        ast = parse_one(query, dialect=self.db_dialect)
 
         initial_select = ast.find(Select)
         if initial_select is None:
@@ -188,4 +191,4 @@ class SqlRewriter:
 
         wrapper = Select(expressions=outer_columns).from_(subquery)
 
-        return wrapper.sql()
+        return wrapper.sql(dialect=self.db_dialect)
