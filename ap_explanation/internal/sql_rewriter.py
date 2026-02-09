@@ -3,12 +3,14 @@ import random
 from sqlglot import parse_one
 from sqlglot.expressions import (
     AggFunc,
+    Alias,
     Anonymous,
     Column,
     Having,
     Literal,
     Select,
     Subquery,
+    alias_,
 )
 
 from ap_explanation.types.semiring import DbSemiring
@@ -66,7 +68,8 @@ class SqlRewriter:
             )
 
         # Detect if the outer select contains top-level aggregates (not in subqueries)
-        if not self._has_top_level_aggregates(outer_select):
+        # AND has a GROUP BY clause (required for provsql aggregate provenance tracking)
+        if not self._has_top_level_aggregates(outer_select) or not outer_select.args.get('group'):
             return self._rewrite_non_aggregate(query, semiring)
 
         if semiring.aggregate_function is None:
@@ -199,24 +202,31 @@ class SqlRewriter:
         # Process projections to separate aggregate and non-aggregate projections
         proj_agg = []
         proj_non_agg = []
-        for e in initial_select.expressions:
-            if e.find(AggFunc):
+        alias_counter = random.randint(1000, 9999)
+
+        for i, e in enumerate(initial_select.expressions):
+            if self._contains_aggregate_not_in_subquery(e):
                 # Ensure aggregate expressions have an alias
-                if not e.alias:
-                    e.set("alias", f"agg_result_{random.randint(1000, 9999)}")
-                proj_agg.append(e)
+                if not isinstance(e, Alias):
+                    alias_name = f"agg_result_{alias_counter}"
+                    alias_counter += 1
+                    # Replace the expression with an aliased version
+                    aliased_expr = alias_(e, alias_name)
+                    initial_select.expressions[i] = aliased_expr
+                    proj_agg.append(aliased_expr)
+                else:
+                    proj_agg.append(e)
             else:
                 proj_non_agg.append(e)
 
         # Find the first aggregate projection, this is the one that will be used in aggregation_formula
-        # TODO : what if there are multiple aggregates or nested aggregates ?
         if len(proj_agg) == 0:
             raise ValueError("No aggregate found in query")
         agg = proj_agg[0]
 
-        # Wrap the original query in a subquery
+        # Wrap the original query in a subquery (the modifications to expressions should be included)
         subquery_alias = "x"
-        subquery = Subquery(this=initial_select.copy(), alias=subquery_alias)
+        subquery = Subquery(this=initial_select, alias=subquery_alias)
 
         # Copy all non-aggregate projections attributes from the initial select to the wrapper select
         outer_columns = []
