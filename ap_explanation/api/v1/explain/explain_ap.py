@@ -11,6 +11,7 @@ from ap_explanation.api.v1.dependencies.ap_parser import (
 )
 from ap_explanation.di import get_provenance_service_for_ap, get_semirings
 from ap_explanation.errors import (
+    ProvSqlInternalError,
     ProvSqlMissingError,
     SemiringOperationNotSupportedError,
     TableNotAnnotatedError,
@@ -52,6 +53,11 @@ async def explain_ap(
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
+            )
+        except ProvSqlInternalError as e:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"Provenance computation failed: {str(e)}"
             )
         except ProvSqlMissingError as e:
             raise HTTPException(

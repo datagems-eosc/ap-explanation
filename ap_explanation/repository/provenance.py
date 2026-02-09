@@ -8,7 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
 
-from ap_explanation.errors import ProvSqlMissingError
+from ap_explanation.errors import ProvSqlInternalError, ProvSqlMissingError
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.types.semiring import DbSemiring
 
@@ -64,6 +64,14 @@ class ProvenanceRepository:
                 f"Table not annotated with semiring '{semiring.name}': {e}")
             raise TableNotAnnotatedError(
                 schema_name=schema_name, semiring_name=semiring.name) from e
+        except errors.InternalError_ as e:
+            # ProvSQL internal error, typically when provenance functions are called on non-annotated data
+            logger.error(
+                f"ProvSQL internal error while querying with semiring '{semiring.name}': {e}")
+            raise ProvSqlInternalError(
+                f"ProvSQL internal error occurred. The table may have lost its provenance annotations. "
+                f"Please re-annotate the table with the '{semiring.name}' semiring and try again. "
+                f"Error details: {str(e)}") from e
 
     async def enable_provenance(self, schema_name: str, table_name: str) -> bool:
         """

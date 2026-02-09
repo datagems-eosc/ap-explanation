@@ -71,3 +71,17 @@ class SemiringOperationNotSupportedError(Exception):
         else:
             self.message = "This operation is not supported by the selected semiring."
         super().__init__(self.message)
+
+
+class ProvSqlInternalError(Exception):
+    """
+    Exception raised when ProvSQL encounters an internal error during query execution.
+
+    This error typically occurs when provenance functions are called on tables that
+    no longer have provenance annotations, or when there's a conflict between
+    concurrent operations on provenance-annotated tables.
+    """
+
+    def __init__(self, message: str = "ProvSQL internal error occurred. The table may have lost its provenance annotations or there may be a conflict with concurrent operations."):
+        self.message = message
+        super().__init__(self.message)

@@ -1,6 +1,7 @@
 """Custom exceptions for the provenance demo application."""
 
 from ap_explanation.errors.exceptions import (
+    ProvSqlInternalError,
     ProvSqlMissingError,
     SemiringOperationNotSupportedError,
     TableNotAnnotatedError,
@@ -8,6 +9,7 @@ from ap_explanation.errors.exceptions import (
 )
 
 __all__ = [
+    "ProvSqlInternalError",
     "ProvSqlMissingError",
     "TableOrSchemaNotFoundError",
     "TableNotAnnotatedError",
