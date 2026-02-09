@@ -9,11 +9,11 @@ from ap_explanation.errors import (
 )
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
-from tests.conftest import TestSchema, formula_semiring
+from tests.conftest import TestSchema
 
 
 @pytest.mark.asyncio
-async def test_ok_compute_provenance_with_single_semiring(
+async def test_ok_compute_provenance_why_semiring(
     provenance_service: ProvenanceService,
     why_semiring: DbSemiring,
     test_schema: TestSchema
@@ -25,6 +25,27 @@ async def test_ok_compute_provenance_with_single_semiring(
     # Query with provenance
     query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
     result_json = await provenance_service.compute_provenance(test_schema.schema, query, [why_semiring])
+
+    # Verify we got valid JSON with results
+    assert result_json is not None
+    results = orjson.loads(result_json)
+    assert len(results) == 1  # One result per semiring
+    assert len(results[0]) > 0  # Has rows
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_formula_semiring(
+    provenance_service: ProvenanceService,
+    formula_semiring: DbSemiring,
+    test_schema: TestSchema
+):
+    """Test computing provenance with a single semiring."""
+    # First annotate the table
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    # Query with provenance
+    query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
+    result_json = await provenance_service.compute_provenance(test_schema.schema, query, [formula_semiring])
 
     # Verify we got valid JSON with results
     assert result_json is not None

@@ -112,4 +112,4 @@ def why_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
 @pytest.fixture(scope="session")
 def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
     """How provenance semiring configuration for testing."""
-    return next(s for s in semirings if s.name == "formula")
+    return next(s for s in all_semirings if s.name == "formula")
