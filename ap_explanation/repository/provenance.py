@@ -290,31 +290,33 @@ class ProvenanceRepository:
 
         if not provwhy_tables:
             logger.warning(
-                f"No tables ending with {semiring.table_suffix} found")
+                f"No tables ending with {semiring.table_suffix} found in schema {schema_name}")
             return False
 
-        # Create the union mapping table
+        # Create the union mapping table with schema-qualified name
         name = semiring.union_table_name
+        qualified_name = SQL("{}.{}").format(Identifier(schema_name), Identifier(name))
 
-        await self._conn.execute(SQL("DROP TABLE IF EXISTS {} CASCADE").format(Identifier(name)))
+        await self._conn.execute(SQL("DROP TABLE IF EXISTS {} CASCADE").format(qualified_name))
 
+        # Build union query with schema-qualified table names
         union_query = " UNION ".join([
-            f"SELECT * FROM {row['tablename']}" for row in provwhy_tables
+            f"SELECT * FROM {schema_name}.{row['tablename']}" for row in provwhy_tables
         ])
         composed_rq = SQL("CREATE TABLE {} AS {}").format(
-            Identifier(name),
+            qualified_name,
             SQL(cast(LiteralString, union_query))
         )
         await self._conn.execute(composed_rq)
 
         # Adjust the value column to be an Array and add primary key
         # NOTE : This may be semiring specific, should be abstracted
-        await self._conn.execute(SQL("ALTER TABLE {} ALTER COLUMN value TYPE varchar").format(Identifier(name)))
-        await self._conn.execute(SQL("UPDATE {} SET value = '{{\"{{' || value || '}}\"}}'").format(Identifier(name)))
-        await self._conn.execute(SQL("ALTER TABLE {} ADD PRIMARY KEY (provenance)").format(Identifier(name)))
+        await self._conn.execute(SQL("ALTER TABLE {} ALTER COLUMN value TYPE varchar").format(qualified_name))
+        await self._conn.execute(SQL("UPDATE {} SET value = '{{\"{{' || value || '}}\"}}'").format(qualified_name))
+        await self._conn.execute(SQL("ALTER TABLE {} ADD PRIMARY KEY (provenance)").format(qualified_name))
 
         logger.info(
-            f"Created {name} table from {len(provwhy_tables)} {semiring.table_suffix} tables")
+            f"Created {schema_name}.{name} table from {len(provwhy_tables)} {semiring.table_suffix} tables")
         return True
 
     async def _set_search_path(self, schema_name: str) -> None:
