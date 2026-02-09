@@ -4,6 +4,7 @@ from typing import List
 from orjson import dumps
 
 from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -41,24 +42,27 @@ class ProvenanceService:
 
         return newly_annotated or semiring_newly_enabled
 
-    async def remove_annotation(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
+    async def remove_annotation(self, table_name: str, schema_name: str) -> bool:
         """
-        Remove provenance annotations from a table.
+        Remove provenance annotations from a table. This removes ALL provenance information for the table, including all semirings.
 
         Args:
             table_name: Name of the table to remove annotations from
             schema_name: Schema where the table is located
-            semirings: List of semirings to remove from the table
 
         Returns:
             bool: True if any semiring was removed, False if none were found
         """
+        # Note : This will be unused for the time being,
+        # we don't support removing a single semiring, but we want to keep the option open to do so in the future, and it makes the implementation simpler for now to just remove all semirings when removing annotation
         any_removed = False
-        for semiring in semirings:
+        for semiring in all_semirings:
             was_removed = await self._provenance_repo.remove_semiring(schema_name, table_name, semiring)
             any_removed |= was_removed
 
-        return any_removed
+        await self._provenance_repo.remove_provenance(schema_name, table_name)
+
+        return True
 
     async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
         """

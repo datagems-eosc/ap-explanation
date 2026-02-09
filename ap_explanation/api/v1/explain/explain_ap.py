@@ -7,6 +7,7 @@ from ap_explanation.api.v1.dependencies.ap_parser import (
     ConnectionString,
     SchemaName,
     SqlOperator,
+    TableNames,
 )
 from ap_explanation.di import get_provenance_service_for_ap, get_semirings
 from ap_explanation.errors import (
@@ -21,6 +22,7 @@ async def explain_ap(
     connection_string: ConnectionString,
     sql_node: SqlOperator,
     schema_name: SchemaName,
+    tables_names: TableNames,
     semirings: List[DbSemiring] = Depends(get_semirings)
 ):
     """Explain the AP with all available semirings using dynamic database connection."""
@@ -33,6 +35,13 @@ async def explain_ap(
         try:
             query = sql_node.properties["query"] if sql_node.properties else ""
             prov = await service.compute_provenance(schema_name, query, semirings)
+            # NOTE : This is to mitigate https://github.com/PierreSenellart/provsql/issues/67
+            # Leaving provenance enabled will prevent user from running some queries on the database,
+            # so we need to remove the annotation after computing the provenance
+            # This is a workaround and should be removed when possible, as it makes computing provenance
+            # very expensive, but it is necessary to avoid blocking the database for other users
+            for table_name in tables_names:
+                await service.remove_annotation(table_name, schema_name)
             result = loads(prov or "[]")
         except TableNotAnnotatedError as e:
             raise HTTPException(

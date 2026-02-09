@@ -34,11 +34,13 @@ async def get_dynamic_db_conn(connection_string: str) -> AsyncGenerator[AsyncCon
         conninfo=connection_string,
         min_size=1,
         max_size=5,
+        open=False
     )
-    await pool.open()
 
     try:
+        await pool.open()
         async with pool.connection() as conn:
+            await conn.set_autocommit(True)
             yield conn
     finally:
         await pool.close()
