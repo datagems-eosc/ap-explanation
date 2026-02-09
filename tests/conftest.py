@@ -63,7 +63,7 @@ async def db_pool(postgres_container: PostgresContainer) -> AsyncGenerator[Async
         max_size=5,
     )
     await pool.open()
-    yield pool
+    yield pool  # type: ignore
     await pool.close()
 
 

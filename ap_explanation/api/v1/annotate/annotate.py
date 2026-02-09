@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ap_explanation.api.v1.dependencies.ap_parser import (
-    ConnectionString,
+    DatabaseName,
     SchemaName,
     TableNames,
 )
@@ -24,7 +24,7 @@ class AnnotationResult(BaseModel):
 
 
 async def annotate_ap(
-    connection_string: ConnectionString,
+    db_name: DatabaseName,
     tables_names: TableNames,
     schema_name: SchemaName,
     semirings: List[DbSemiring] = Depends(get_semirings)
@@ -33,8 +33,8 @@ async def annotate_ap(
     logger.info(f"Annotating tables: {tables_names} with all semirings")
     results: List[AnnotationResult] = []
 
-    # Create the service with the connection string from the AP
-    service_factory = get_provenance_service_for_ap(connection_string)
+    # Create the service with the database name from the AP
+    service_factory = get_provenance_service_for_ap(db_name)
 
     # Use the factory to get the service
     async for prov_svc in service_factory():

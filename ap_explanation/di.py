@@ -1,10 +1,12 @@
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Callable
 
-from fastapi import Depends, FastAPI
-from psycopg import AsyncConnection
+from fastapi import FastAPI
+from psycopg import AsyncConnection, OperationalError
 from psycopg_pool import AsyncConnectionPool
 
+from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
@@ -50,25 +52,61 @@ async def get_semirings() -> list[DbSemiring]:
     return semirings
 
 
-def get_provenance_service_for_ap(connection_string: str) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
+def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
     """
     Factory function to create a provenance service dependency with dynamic database connection.
     The connection pool is created when the AP is processed and closed when processing completes.
+    Tries to connect to the Postgres instance first, then falls back to Timescale if the database
+    doesn't exist on Postgres.
 
     Args:
-        connection_string: Database connection string from AP
+        db_name: Database name to connect to
 
     Returns:
         Dependency function for ProvenanceService that can be used in FastAPI routes
+
+    Raises:
+        DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
 
     async def _provide_service() -> AsyncGenerator[ProvenanceService, None]:
-        async with get_dynamic_db_conn(connection_string) as conn:
-            repo = ProvenanceRepository(conn, SqlRewriter())
+        # Get connection parameters from environment variables
+        user = os.getenv("POSTGRES_USER")
+        password = os.getenv("POSTGRES_PASSWORD")
+        postgres_host = os.getenv("POSTGRES_HOST")
+        postgres_port = os.getenv("POSTGRES_PORT", "5432")
+        timescale_host = os.getenv("POSTGRES_TIMESCALE_HOST")
+        timescale_port = os.getenv("POSTGRES_TIMESCALE_PORT", "5433")
 
-            # Ensure semiring setup is executed before using the connection
-            await repo.ensure_semiring_setup()
+        if not all([user, password, postgres_host]):
+            raise ValueError(
+                "Missing required environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST"
+            )
 
-            yield ProvenanceService(repo)
+        # Try Postgres instance first
+        postgres_connection_string = f"postgresql://{user}:{password}@{postgres_host}:{postgres_port}/{db_name}"
+
+        try:
+            async with get_dynamic_db_conn(postgres_connection_string) as conn:
+                repo = ProvenanceRepository(conn, SqlRewriter())
+                await repo.ensure_semiring_setup()
+                yield ProvenanceService(repo)
+                return
+        except OperationalError:
+            # Database doesn't exist on Postgres, try Timescale
+            pass
+
+        # Try Timescale instance
+        timescale_connection_string = f"postgresql://{user}:{password}@{timescale_host}:{timescale_port}/{db_name}"
+
+        try:
+            async with get_dynamic_db_conn(timescale_connection_string) as conn:
+                repo = ProvenanceRepository(conn, SqlRewriter())
+                await repo.ensure_semiring_setup()
+                yield ProvenanceService(repo)
+                return
+        except OperationalError:
+            # Database doesn't exist on either instance
+            raise DatabaseNotFoundError(db_name)
 
     return _provide_service

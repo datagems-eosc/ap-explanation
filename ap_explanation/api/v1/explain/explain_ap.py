@@ -4,7 +4,7 @@ from typing import List
 from fastapi import Depends, HTTPException, status
 
 from ap_explanation.api.v1.dependencies.ap_parser import (
-    ConnectionString,
+    DatabaseName,
     SchemaName,
     SqlOperator,
     TableNames,
@@ -20,15 +20,15 @@ from ap_explanation.types.semiring import DbSemiring
 
 
 async def explain_ap(
-    connection_string: ConnectionString,
+    db_name: DatabaseName,
     sql_node: SqlOperator,
     schema_name: SchemaName,
     tables_names: TableNames,
     semirings: List[DbSemiring] = Depends(get_semirings)
 ):
     """Explain the AP with all available semirings using dynamic database connection."""
-    # Create the service with the connection string from the AP
-    service_factory = get_provenance_service_for_ap(connection_string)
+    # Create the service with the database name from the AP
+    service_factory = get_provenance_service_for_ap(db_name)
 
     result = []
     # Use the factory to get the service

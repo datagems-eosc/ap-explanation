@@ -9,15 +9,15 @@ from ap_explanation.types.pg_json import PgJson, PgJsonNode
 logger = getLogger(__name__)
 
 
-def extract_connection_string(ap: PgJson) -> str:
+def extract_database_name(ap: PgJson) -> str:
     """
-    Extract and validate connection string from the Relational_Database node in the AP.
+    Extract and validate database name from the Relational_Database node in the AP.
 
     Args:
         ap: The PgJson AP structure
 
     Returns:
-        The database connection string from contentUrl property
+        The database name from name property
 
     Raises:
         HTTPException: If the database node is missing or malformed
@@ -30,13 +30,13 @@ def extract_connection_string(ap: PgJson) -> str:
         )
 
     db_node = db_nodes[0]
-    if not db_node.properties or "contentUrl" not in db_node.properties:
+    if not db_node.properties or "name" not in db_node.properties:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Relational_Database node is missing 'contentUrl' property!"
+            detail="Relational_Database node is missing 'name' property!"
         )
 
-    return db_node.properties["contentUrl"]
+    return db_node.properties["name"]
 
 
 def extract_schema_name(ap: PgJson) -> str:
@@ -142,7 +142,7 @@ def extract_table_names(ap: PgJson) -> List[str]:
 
 
 # Type aliases for cleaner function signatures
-ConnectionString = Annotated[str, Depends(extract_connection_string)]
+DatabaseName = Annotated[str, Depends(extract_database_name)]
 SchemaName = Annotated[str, Depends(extract_schema_name)]
 SqlOperator = Annotated[PgJsonNode, Depends(extract_sql_operator)]
 TableNames = Annotated[List[str], Depends(extract_table_names)]

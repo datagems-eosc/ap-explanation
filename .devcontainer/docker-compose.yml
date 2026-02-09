@@ -7,9 +7,12 @@ services:
     command: sleep infinity
     environment:
       - POSTGRES_HOST=postgres-provsql
+      - POSTGRES_PORT=5432
       - POSTGRES_DB=mathe
       - POSTGRES_USER=provdemo
       - POSTGRES_PASSWORD=provdemo
+      - POSTGRES_TIMESCALE_HOST=postgres-provsql
+      - POSTGRES_TIMESCALE_PORT=5432
     depends_on:
       # Ensures that the databases are started before the API
       postgres-provsql:

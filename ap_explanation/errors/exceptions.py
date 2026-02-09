@@ -85,3 +85,16 @@ class ProvSqlInternalError(Exception):
     def __init__(self, message: str = "ProvSQL internal error occurred. The table may have lost its provenance annotations or there may be a conflict with concurrent operations."):
         self.message = message
         super().__init__(self.message)
+
+
+class DatabaseNotFoundError(Exception):
+    """
+    Exception raised when a database cannot be found on either the Postgres or Timescale instance.
+
+    This error indicates that the specified database does not exist on any of the
+    configured database servers.
+    """
+
+    def __init__(self, db_name: str):
+        self.message = f"Database '{db_name}' not found on either Postgres or Timescale instance"
+        super().__init__(self.message)
