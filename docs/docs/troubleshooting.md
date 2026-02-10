@@ -28,7 +28,7 @@ Or install ProvSQL manually on your PostgreSQL instance.
 
 **Solution:** Annotate the table first:
 ```bash
-POST /api/v1/ap/annotate
+POST /api/v1/aps/annotate
 ```
 
 ---
@@ -73,5 +73,42 @@ Check connection string format in AP:
 Verify:
 - Host and port are correct
 - Credentials are valid
-- Database exists
+- Database exists on either the primary PostgreSQL or Timescale server
 - Network allows connection
+
+### Database Not Found
+
+**Error:** `Database 'dbname' not found on either PostgreSQL or Timescale instances`
+
+**Cause:** The database doesn't exist on either the primary PostgreSQL server or the Timescale fallback server
+
+**Solution:** 
+1. Verify the database name in the AP's `contentUrl` is correct
+2. Check if the database exists on the primary PostgreSQL server:
+   ```bash
+   psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -l
+   ```
+3. Check if the database exists on the Timescale server (if configured):
+   ```bash
+   psql -h $POSTGRES_TIMESCALE_HOST -p $POSTGRES_TIMESCALE_PORT -U $POSTGRES_USER -l
+   ```
+4. Create the database if it doesn't exist:
+   ```sql
+   CREATE DATABASE dbname;
+   ```
+
+### Missing Environment Variables
+
+**Error:** `Missing required environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST`
+
+**Cause:** Required environment variables are not set
+
+**Solution:** Set the required environment variables:
+```bash
+export POSTGRES_USER=your_user
+export POSTGRES_PASSWORD=your_password
+export POSTGRES_HOST=your_host
+export POSTGRES_PORT=5432  # optional, defaults to 5432
+```
+
+Or create a `.env` file with these variables if the service loads them automatically.

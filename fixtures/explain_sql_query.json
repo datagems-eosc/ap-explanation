@@ -1,4 +1,5 @@
 {
+  "$schema": "https://datagems-dev.scayle.es/moma2/v1/schemas/ap/ap-common.schema.json",
   "edges": [
     {
       "from": "d2e917a5-563b-4a4c-a332-e4968ad6a20a",

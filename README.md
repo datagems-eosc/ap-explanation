@@ -13,10 +13,10 @@ Uses PostgreSQL with ProvSQL extension to track data lineage through joins, aggr
 
 ```bash
 # 1. Annotate tables (one-time setup)
-curl -X POST http://localhost:5000/api/v1/ap/annotate -d @analytical_pattern.json
+curl -X POST http://localhost:5000/api/v1/aps/annotate -d @analytical_pattern.json
 
 # 2. Get provenance explanation
-curl -X POST http://localhost:5000/api/v1/ap/explain -d @analytical_pattern.json
+curl -X POST http://localhost:5000/api/v1/aps/explain -d @analytical_pattern.json
 ```
 
 **Response shows:**

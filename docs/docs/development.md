@@ -8,7 +8,7 @@ Open in VS Code with the Dev Containers extension. PostgreSQL with ProvSQL is pr
 
 ### Local Setup
 
-Requirements: Python ≥3.14, PostgreSQL with ProvSQL
+Requirements: Python 3.14, `uv` package manager, PostgreSQL with ProvSQL
 
 ```bash
 # Install dependencies
@@ -16,7 +16,14 @@ uv sync --all-groups
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your database connection
+# Edit .env with your database connection details:
+#   - POSTGRES_USER
+#   - POSTGRES_PASSWORD
+#   - POSTGRES_HOST
+#   - POSTGRES_PORT (optional, defaults to 5432)
+#   - POSTGRES_TIMESCALE_HOST (optional, for fallback database)
+#   - POSTGRES_TIMESCALE_PORT (optional, defaults to 5433)
+#   - ROOT_PATH (optional, for reverse proxy setups)
 
 # Run service
 uv run ap_explanation/main.py
@@ -48,14 +55,18 @@ ap_explanation/
 ├── api/v1/              # API endpoints
 │   ├── annotate/        # Annotation endpoints
 │   ├── explain/         # Explanation endpoints
-│   └── dependencies/    # FastAPI dependencies
+│   ├── dependencies/    # FastAPI dependencies (AP parser)
+│   └── health.py        # Health check endpoint
 ├── services/            # Business logic
 ├── repository/          # Data access layer
+│   ├── mapping/         # Mapping strategies (ctid, etc.)
+│   └── resources/       # SQL scripts for semiring setup
 ├── internal/            # SQL rewriting
-├── types/               # Type definitions
+├── types/               # Type definitions (PG-JSON, semiring)
 ├── errors/              # Custom exceptions
 ├── semirings.py         # Semiring configurations
-└── di.py               # Dependency injection
+├── di.py                # Dependency injection
+└── main.py              # FastAPI application entry point
 ```
 
 ---

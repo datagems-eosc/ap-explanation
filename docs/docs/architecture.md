@@ -33,6 +33,13 @@ The service has specific database prerequisites:
 
 - **PostgreSQL with ProvSQL Extension**: The underlying database must have the [ProvSQL extension](https://github.com/PierreSenellart/provsql) installed. ProvSQL adds provenance tracking capabilities to PostgreSQL, enabling the tracking of data lineage through SQL queries.
 
+- **Dual Database Architecture**: The service supports connecting to databases across two PostgreSQL instances:
+  - **Primary PostgreSQL**: The service first attempts to connect to the database on the primary PostgreSQL server (configured via `POSTGRES_HOST` and `POSTGRES_PORT`)
+  - **Timescale Fallback**: If the database doesn't exist on the primary server, it automatically falls back to a Timescale/secondary PostgreSQL server (configured via `POSTGRES_TIMESCALE_HOST` and `POSTGRES_TIMESCALE_PORT`)
+  - This architecture enables flexible deployment with databases distributed across multiple instances
+
+- **Dynamic Connection Management**: Connection pools are created per-AP (Analytical Pattern) processing and cleaned up after completion, ensuring efficient resource utilization
+
 - **Automatic Initialization**: When the service connects to the database, it automatically pushes semiring type definitions and related functions. This includes:
   - Custom PostgreSQL types for semiring state management
   - Semiring operation functions (addition, multiplication, monus)
@@ -98,6 +105,8 @@ FROM (SELECT department, COUNT(*) as cnt,
 ### Dependency Injection
 
 The service uses a DI container (defined in `di.py`) to manage dependencies:
-- Service instances are created with their repositories
-- Repositories are created with database connections
+- **Dynamic Service Creation**: Service instances are created per-AP processing request using a factory function (`get_provenance_service_for_ap`)
+- **Connection Pool Management**: Connection pools are created when an AP is processed and cleaned up after completion
+- **Database Routing**: The DI system handles automatic routing between primary PostgreSQL and Timescale instances
+- **Repository Layer**: Repositories are created with database connections from the appropriate pool
 - Enables easier testing and component isolation

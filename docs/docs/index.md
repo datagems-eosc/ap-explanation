@@ -60,22 +60,25 @@ The service processes **Analytical Patterns (AP)** in PG-JSON format—a graph s
 
 ### Workflow
 
-1. **Annotate tables (one-time)**: `POST /api/v1/ap/annotate` — Prepares tables for provenance tracking
-2. **Explain queries**: `POST /api/v1/ap/explain` — Returns provenance information showing how results derive from source data
+1. **Annotate tables (one-time)**: `POST /api/v1/aps/annotate` — Prepares tables for provenance tracking
+2. **Explain queries**: `POST /api/v1/aps/explain` — Returns provenance information showing how results derive from source data
+   - **Note**: This endpoint automatically removes annotations after computation to prevent database blocking issues
 
 The AP graph defines the database connection, tables, and query. The service extracts these components and applies provenance tracking.
 
 ## Getting Started
 
-The best solution is to use the provided .devcontainer file. The PostgreSQL database with ProvSQL will already be configured.
+The best solution is to use the provided `.devcontainer` configuration. The PostgreSQL database with ProvSQL will already be configured.
 
 To run it locally without the devcontainer:
 
 ```bash
-# Requirements: python >=3.14, uv, PostgreSQL with ProvSQL extension
+# Requirements: Python 3.14, uv, PostgreSQL with ProvSQL extension
 uv sync --all-groups
 cp .env.example .env
-# (Fill all the required variables in .env)
+# Fill in the required variables in .env:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST
+#   Optional: POSTGRES_PORT, POSTGRES_TIMESCALE_HOST, POSTGRES_TIMESCALE_PORT
 uv run ap_explanation/main.py
 ```
 

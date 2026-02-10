@@ -36,7 +36,7 @@ plugins:
       handlers:
         python:
           paths: [
-            "ap_management"
+            "ap_explanation"
             ]
   - neoteroi.mkdocsoad:
       use_pymdownx: true
