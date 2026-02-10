@@ -25,7 +25,8 @@
                 "charliermarsh.ruff",
                 "ms-python.bandit",
                 "ms-python.debugpy",
-                "yzhang.markdown-all-in-one"
+                "yzhang.markdown-all-in-one",
+                "mechatroner.rainbow-csv"
             ],
             "settings": {
                 "editor.defaultFormatter": "charliermarsh.ruff",
