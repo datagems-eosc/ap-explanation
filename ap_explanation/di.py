@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Callable
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from psycopg import AsyncConnection, OperationalError
 from psycopg_pool import AsyncConnectionPool
@@ -12,6 +13,8 @@ from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
+
+load_dotenv()
 
 
 @asynccontextmanager

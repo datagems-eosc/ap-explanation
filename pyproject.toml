@@ -18,6 +18,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "sqlglot>=28.6.0",
     "orjson>=3.10.0",
+    "dotenv>=0.9.9",
 ]
 
 [dependency-groups]
