@@ -119,7 +119,7 @@
         "Table"
       ],
       "properties": {
-        "name": "assessment",
+        "name": "mathe.assessment",
         "description": "Assessment table containing student answers"
       }
     },
@@ -129,7 +129,7 @@
         "Table"
       ],
       "properties": {
-        "name": "platform__sna__questions",
+        "name": "mathe.platform__sna__questions",
         "description": "Questions table containing question metadata"
       }
     },
@@ -139,7 +139,7 @@
         "Table"
       ],
       "properties": {
-        "name": "platform__topic",
+        "name": "mathe.platform__topic",
         "description": "Topic table containing topic metadata"
       }
     }

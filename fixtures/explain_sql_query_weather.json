@@ -1,0 +1,95 @@
+{
+  "$schema": "https://datagems-dev.scayle.es/moma2/v1/schemas/ap/ap-common.schema.json",
+  "edges": [
+    {
+      "from": "a1b2c3d4-0001-4a4c-a332-e4968ad6a20a",
+      "labels": ["consist_of"],
+      "to": "a1b2c3d4-0002-48ec-8834-39f6375e2496"
+    },
+    {
+      "from": "a1b2c3d4-0001-4a4c-a332-e4968ad6a20a",
+      "labels": ["consist_of"],
+      "to": "a1b2c3d4-0003-4dca-9314-3f38cde9cee2"
+    },
+    {
+      "from": "a1b2c3d4-0003-4dca-9314-3f38cde9cee2",
+      "labels": ["follows"],
+      "to": "a1b2c3d4-0002-48ec-8834-39f6375e2496"
+    },
+    {
+      "from": "a1b2c3d4-0002-48ec-8834-39f6375e2496",
+      "labels": ["input"],
+      "to": "a1b2c3d4-0004-40f9-b8e3-d28553694d6d"
+    },
+    {
+      "from": "a1b2c3d4-0003-4dca-9314-3f38cde9cee2",
+      "labels": ["input"],
+      "to": "a1b2c3d4-0004-40f9-b8e3-d28553694d6d"
+    },
+    {
+      "from": "a1b2c3d4-0004-40f9-b8e3-d28553694d6d",
+      "labels": ["contain"],
+      "to": "a1b2c3d4-0005-e2ec-40f8-ab76-c21c5c97d55c"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-4a4c-a332-e4968ad6a20a",
+      "labels": ["Analytical_Pattern"],
+      "properties": {
+        "name": "High Elevation Meteo Query AP",
+        "description": "Analytical Pattern to query high-elevation meteorological points",
+        "process": "query",
+        "publishedDate": "2025-06-30",
+        "startTime": "10:00:00"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0002-48ec-8834-39f6375e2496",
+      "labels": [
+        "Operator",
+        "Provenance_Annotate_Dataset_Operator"
+      ],
+      "properties": {
+        "name": "Annotate Meteo Dataset Operator",
+        "description": "Annotate meteorological elevation dataset with provenance information",
+        "dataset": "ds_era5_land"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0003-4dca-9314-3f38cde9cee2",
+      "labels": [
+        "Operator",
+        "Provenance_SQL_Operator"
+      ],
+      "properties": {
+        "name": "High Elevation SQL Query Operator",
+        "description": "Query meteorological elevation data above a threshold",
+        "command": "query",
+        "queryType": "SELECT",
+        "type": "SQL Query",
+        "step": 1,
+        "publishedDate": "2025-06-30",
+        "startTime": "10:00:00",
+        "query": "SELECT latitude, longitude, elevation FROM public.meteo_elevation_chunk LIMIT 10;"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0004-40f9-b8e3-d28553694d6d",
+      "labels": ["Relational_Database"],
+      "properties": {
+        "name": "ds_era5_land",
+        "description": "Meteorological database",
+        "contentUrl": "postgresql://user:password@postgres:5432/ds_era5_land"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0005-e2ec-40f8-ab76-c21c5c97d55c",
+      "labels": ["Table"],
+      "properties": {
+        "name": "public.meteo_elevation_chunk",
+        "description": "Table containing latitude, longitude, and elevation data"
+      }
+    }
+  ]
+}
