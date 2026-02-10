@@ -277,6 +277,21 @@ class ProvenanceRepository:
         """
 
         await self._set_search_path(schema_name)
+
+        # Workaround for https://github.com/PierreSenellart/provsql/issues/68
+        async with self._conn.transaction():
+            drop_insert_trigger = SQL("DROP TRIGGER IF EXISTS insert_statement ON {} CASCADE").format(
+                Identifier(table_name))
+            drop_delete_trigger = SQL("DROP TRIGGER IF EXISTS delete_statement ON {} CASCADE").format(
+                Identifier(table_name))
+            drop_update_trigger = SQL("DROP TRIGGER IF EXISTS update_statement ON {} CASCADE").format(
+                Identifier(table_name))
+
+            await self._conn.execute(drop_insert_trigger)
+            await self._conn.execute(drop_delete_trigger)
+            await self._conn.execute(drop_update_trigger)
+
+        # Then try to remove the provenance column
         try:
             async with self._conn.transaction():
                 await self._conn.execute("SELECT remove_provenance(%s)", (table_name,))
@@ -303,7 +318,8 @@ class ProvenanceRepository:
 
         # Create the union mapping table with schema-qualified name
         name = semiring.union_table_name
-        qualified_name = SQL("{}.{}").format(Identifier(schema_name), Identifier(name))
+        qualified_name = SQL("{}.{}").format(
+            Identifier(schema_name), Identifier(name))
 
         await self._conn.execute(SQL("DROP TABLE IF EXISTS {} CASCADE").format(qualified_name))
 

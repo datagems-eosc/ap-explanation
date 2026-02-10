@@ -53,14 +53,15 @@ class ProvenanceService:
         Returns:
             bool: True if any semiring was removed, False if none were found
         """
+
+        await self._provenance_repo.remove_provenance(schema_name, table_name)
+
         # Note : This will be unused for the time being,
         # we don't support removing a single semiring, but we want to keep the option open to do so in the future, and it makes the implementation simpler for now to just remove all semirings when removing annotation
         any_removed = False
         for semiring in all_semirings:
             was_removed = await self._provenance_repo.remove_semiring(schema_name, table_name, semiring)
             any_removed |= was_removed
-
-        await self._provenance_repo.remove_provenance(schema_name, table_name)
 
         return True
 
