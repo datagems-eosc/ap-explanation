@@ -41,32 +41,55 @@ def extract_database_name(ap: PgJson) -> str:
 
 def extract_schema_name(ap: PgJson) -> str:
     """
-    Extract and validate schema name from the Relational_Database node in the AP.
+    Extract and validate schema name from fully qualified table names in the AP.
+    All tables must belong to the same schema.
 
     Args:
         ap: The PgJson AP structure
 
     Returns:
-        The schema name from the database node
+        The schema name extracted from table names
 
     Raises:
-        HTTPException: If the database node is missing or malformed
+        HTTPException: If tables are missing, not fully qualified, or belong to different schemas
     """
-    db_nodes = ap.get_nodes_by_label("Relational_Database")
-    if not db_nodes or len(db_nodes) == 0:
+    tables_nodes = ap.get_nodes_by_label("Table")
+    if not tables_nodes or len(tables_nodes) == 0:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="This AP has no Relational_Database node!"
+            detail="This AP has no Table nodes!"
         )
 
-    db_node = db_nodes[0]
-    if not db_node.properties or "name" not in db_node.properties:
+    schemas = set()
+
+    for node in tables_nodes:
+        if not node.properties or "name" not in node.properties:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Some Table nodes are missing the 'name' property!"
+            )
+
+        table_name = node.properties["name"]
+
+        # Parse fully qualified table name (schema.table)
+        parts = table_name.split(".", 1)
+        if len(parts) != 2:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Table name '{table_name}' is not fully qualified. Expected format: 'schema.table'"
+            )
+
+        schema_name, _ = parts
+        schemas.add(schema_name)
+
+    # Validate all tables belong to the same schema
+    if len(schemas) > 1:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Relational_Database node is missing 'name' property!"
+            detail=f"All tables must belong to the same schema. Found schemas: {', '.join(sorted(schemas))}"
         )
 
-    return db_node.properties["name"]
+    return schemas.pop()
 
 
 def extract_sql_operator(ap: PgJson) -> PgJsonNode:
@@ -109,12 +132,13 @@ def extract_sql_operator(ap: PgJson) -> PgJsonNode:
 def extract_table_names(ap: PgJson) -> List[str]:
     """
     Extract and validate table names from Table nodes in the AP.
+    Returns only the table name part (without schema prefix).
 
     Args:
         ap: The PgJson AP structure
 
     Returns:
-        List of table names
+        List of table names (without schema prefix)
 
     Raises:
         HTTPException: If no tables are found or they're missing name properties
@@ -126,17 +150,28 @@ def extract_table_names(ap: PgJson) -> List[str]:
             detail="This AP has no Table nodes!"
         )
 
-    tables_names = [
-        node.properties["name"]
-        for node in tables_nodes
-        if node.properties and "name" in node.properties
-    ]
+    tables_names = []
 
-    if len(tables_names) != len(tables_nodes):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Some Table nodes are missing the 'name' property!"
-        )
+    for node in tables_nodes:
+        if not node.properties or "name" not in node.properties:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Some Table nodes are missing the 'name' property!"
+            )
+
+        table_name = node.properties["name"]
+
+        # Parse fully qualified table name (schema.table)
+        parts = table_name.split(".", 1)
+        if len(parts) != 2:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Table name '{table_name}' is not fully qualified. Expected format: 'schema.table'"
+            )
+
+        # Extract only the table name (without schema)
+        _, table_only = parts
+        tables_names.append(table_only)
 
     return tables_names
 
