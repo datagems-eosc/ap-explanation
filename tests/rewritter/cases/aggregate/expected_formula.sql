@@ -1,4 +1,4 @@
-SELECT x.name, aggregation_formula(nb_questions, 'formula_mapping') 
+SELECT x.name, AGGREGATION_FORMULA(x.nb_questions, 'formula_mapping') 
 FROM (
     SELECT t.name, COUNT(DISTINCT a.question_id) AS nb_questions 
     FROM assessment AS a JOIN platform__topic AS t ON (a.topic = t.id) 

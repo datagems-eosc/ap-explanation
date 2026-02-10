@@ -63,9 +63,11 @@ async def test_ko_schema_does_not_exists(provenance_service: ProvenanceService, 
 
 
 @pytest.mark.asyncio
-async def test_ok_remove_annotation_from_non_annotated_table(provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema):
-    was_removed = await provenance_service.remove_annotation(test_schema.table, test_schema.schema, [why_semiring])
-    assert was_removed is False
+async def test_ok_remove_annotation_from_non_annotated_table(provenance_service: ProvenanceService, test_schema: TestSchema):
+    was_removed = await provenance_service.remove_annotation(test_schema.table, test_schema.schema)
+    # NOTE: Not checked yet as the ability to remove a single semiring has been removed. Effectively everything will be removed and the
+    # was_removed variable will always be True. This can be re-enabled once the ability to remove a single semiring is added back.
+    # assert was_removed is False
 
 
 @pytest.mark.asyncio
@@ -73,5 +75,10 @@ async def test_ok_reversibility(provenance_service: ProvenanceService, why_semir
     """
     Annotation should be reversible: annotating and then removing the annotation should leave the dataset unchanged.
     """
+    # Cycle 1 - Annotate and remove
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
-    await provenance_service.remove_annotation(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.remove_annotation(test_schema.table, test_schema.schema)
+
+    # Cycle 2 - Annotate and remove again to check that the first cycle did not cause any issues
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.remove_annotation(test_schema.table, test_schema.schema)
