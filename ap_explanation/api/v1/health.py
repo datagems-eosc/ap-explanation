@@ -40,7 +40,8 @@ async def health_check():
         s["status"] in ("reachable", "unconfigured")
         for s in (postgres_status, timescale_status)
     )
-    overall: Literal["healthy", "degraded"] = "healthy" if all_reachable else "degraded"
+    overall: Literal["healthy",
+                     "degraded"] = "healthy" if all_reachable else "degraded"
 
     return {
         "status": overall,
