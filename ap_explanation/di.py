@@ -29,12 +29,20 @@ async def container_lifespan(_: FastAPI):
 @asynccontextmanager
 async def get_dynamic_db_conn(connection_string: str) -> AsyncGenerator[AsyncConnection, None]:
     """
-    Creates a temporary database connection pool, yields a connection, then closes the pool.
+    Validates the connection string by opening a direct connection first, then creates a
+    temporary database connection pool, yields a connection, and closes the pool afterwards.
     This ensures the connection pool is cleaned up after AP processing completes.
+
+    Raises OperationalError immediately if the database does not exist, rather than
+    letting the pool silently retry in the background.
 
     Args:
         connection_string: PostgreSQL connection string from AP
     """
+    # Validate eagerly: raises OperationalError immediately if the DB doesn't exist
+    check_conn = await AsyncConnection.connect(connection_string)
+    await check_conn.close()
+
     pool = AsyncConnectionPool(
         conninfo=connection_string,
         min_size=1,

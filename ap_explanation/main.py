@@ -3,11 +3,13 @@ from os import getenv
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from tomllib import loads as loads_toml
 
 from ap_explanation.api.v1.routes import router
 from ap_explanation.di import container_lifespan
+from ap_explanation.errors.exceptions import DatabaseNotFoundError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +29,14 @@ app = FastAPI(
     root_path=ROOT_PATH,
 
 )
+
+
+@app.exception_handler(DatabaseNotFoundError)
+async def database_not_found_handler(request: Request, exc: DatabaseNotFoundError):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": exc.message},
+    )
 
 
 @app.get("/")
