@@ -113,3 +113,27 @@ def why_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
 def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
     """How provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "formula")
+
+
+@pytest.fixture(autouse=True, scope="session")
+def configure_celery_for_tests():
+    """Override Celery to run tasks synchronously in-process using an in-memory backend.
+
+    This avoids requiring a running Redis or worker process during tests.
+    `task_always_eager=True` executes tasks inline; `task_eager_propagates=True`
+    ensures exceptions raised inside tasks are re-raised to the caller.
+    """
+    from ap_explanation.celery_app import celery_app
+
+    celery_app.conf.update(
+        task_always_eager=True,
+        task_eager_propagates=True,
+        broker_url="memory://",
+        result_backend="cache+memory://",
+    )
+    yield
+    # Restore defaults so other session fixtures are not affected
+    celery_app.conf.update(
+        task_always_eager=False,
+        task_eager_propagates=False,
+    )

@@ -1,7 +1,10 @@
+import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Callable
 
+from celery import current_app as celery_current_app
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from psycopg import AsyncConnection, OperationalError
@@ -16,14 +19,36 @@ from ap_explanation.types.semiring import DbSemiring
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+
+def _start_celery_worker() -> threading.Thread:
+    """Start an embedded Celery worker in a daemon thread."""
+    from ap_explanation.celery_app import celery_app  # noqa: ensure tasks registered
+
+    worker = celery_app.Worker(
+        loglevel="INFO",
+        concurrency=2,
+        pool="threads",
+    )
+    thread = threading.Thread(
+        target=worker.start, daemon=True, name="celery-worker")
+    thread.start()
+    logger.info("Embedded Celery worker started")
+    return thread
+
 
 @asynccontextmanager
 async def container_lifespan(_: FastAPI):
     """
     Lifespan context manager for the FastAPI application.
-    Connection pools are created and closed per-AP processing.
+    Starts an embedded Celery worker and tears it down on shutdown.
     """
+    worker_thread = _start_celery_worker()
     yield
+    # Celery worker runs in a daemon thread – it will be terminated when the
+    # process exits. Explicit stop is not needed but we log for visibility.
+    logger.info("Shutting down embedded Celery worker")
 
 
 @asynccontextmanager
