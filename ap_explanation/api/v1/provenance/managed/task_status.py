@@ -1,7 +1,3 @@
-"""Task status polling for managed explanation tasks.
-
-GET /aps/explanation/{task_id}
-"""
 from typing import Any, Literal, Optional
 
 from celery.result import AsyncResult

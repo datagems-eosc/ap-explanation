@@ -1,14 +1,24 @@
-from os import getenv
-
+"""
+This is the entrypoint for a new worker process that runs AP explanation tasks. 
+"""
 from celery import Celery
 from dotenv import load_dotenv
 
+from ap_explanation.di import REDIS_BROKER_URI
+
 load_dotenv()
+
+# A standlaone celery worker can be run with :
+# docker run --rm \
+#   --env-file .env \
+#   ap-explanation:prod \
+#   uv run celery -A ap_explanation.celery_app:celery_app worker --loglevel=info
+
 
 celery_app = Celery(
     "ap_explanation",
-    broker=getenv("CELERY_BROKER_URL", "redis://redis:6379/0"),
-    backend=getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0"),
+    broker=REDIS_BROKER_URI,
+    backend=REDIS_BROKER_URI,
     include=["ap_explanation.tasks.explain"],
 )
 

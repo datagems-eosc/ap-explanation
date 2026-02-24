@@ -4,13 +4,13 @@ import threading
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Callable
 
-from celery import current_app as celery_current_app
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from psycopg import AsyncConnection, OperationalError
 from psycopg_pool import AsyncConnectionPool
 
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
+from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
@@ -18,8 +18,19 @@ from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
 
 load_dotenv()
-
 logger = logging.getLogger(__name__)
+REDIS_BROKER_URI = os.getenv("REDIS_BROKER_URI", "redis://redis:6379/0")
+# When True (default), the FastAPI process spawns a Celery worker in a daemon
+# thread so no separate worker process is needed. Set to 'false' when running
+# dedicated standalone workers (e.g. via Docker) to avoid double-processing.
+USE_EMBEDDED_CELERY_WORKER = os.getenv(
+    "USE_EMBEDDED_CELERY_WORKER", "true").lower() == "true"
+# Poor man singleton
+lock_provider = RedisLockProvider(redis_url=REDIS_BROKER_URI)
+
+
+def get_lock_provider() -> LockProvider:
+    return lock_provider
 
 
 def _start_celery_worker() -> threading.Thread:
@@ -27,12 +38,17 @@ def _start_celery_worker() -> threading.Thread:
     from ap_explanation.celery_app import celery_app  # noqa: ensure tasks registered
 
     worker = celery_app.Worker(
-        loglevel="INFO",
+        loglevel="DEBUG",
         concurrency=2,
         pool="threads",
     )
+
     thread = threading.Thread(
-        target=worker.start, daemon=True, name="celery-worker")
+        target=worker.start,
+        daemon=True,
+        name="celery-worker"
+    )
+
     thread.start()
     logger.info("Embedded Celery worker started")
     return thread
@@ -42,13 +58,22 @@ def _start_celery_worker() -> threading.Thread:
 async def container_lifespan(_: FastAPI):
     """
     Lifespan context manager for the FastAPI application.
-    Starts an embedded Celery worker and tears it down on shutdown.
+
+    Conditionally starts an embedded Celery worker in a daemon thread based on
+    the ``USE_EMBEDDED_CELERY_WORKER`` environment variable (default: ``true``).
+    Set it to ``false`` when running dedicated standalone workers so the API
+    process does not also consume tasks.
     """
-    worker_thread = _start_celery_worker()
+    if USE_EMBEDDED_CELERY_WORKER:
+        _start_celery_worker()
+    else:
+        logger.info(
+            "Embedded Celery worker disabled (USE_EMBEDDED_CELERY_WORKER=false)")
     yield
     # Celery worker runs in a daemon thread – it will be terminated when the
     # process exits. Explicit stop is not needed but we log for visibility.
-    logger.info("Shutting down embedded Celery worker")
+    if USE_EMBEDDED_CELERY_WORKER:
+        logger.info("Shutting down embedded Celery worker")
 
 
 @asynccontextmanager

@@ -55,6 +55,7 @@ dependencies = [
     { name = "orjson" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
+    { name = "redis" },
     { name = "sqlglot" },
 ]
 
@@ -80,6 +81,7 @@ requires-dist = [
     { name = "orjson", specifier = ">=3.10.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3" },
     { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "redis", specifier = ">=6.4.0" },
     { name = "sqlglot", specifier = ">=28.6.0" },
 ]
 

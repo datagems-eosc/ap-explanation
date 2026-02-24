@@ -12,6 +12,8 @@ from json import loads
 from typing import List, Optional
 
 from ap_explanation.celery_app import celery_app
+from ap_explanation.di import get_lock_provider, get_provenance_service_for_ap
+from ap_explanation.semirings import semirings as all_semirings
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +42,6 @@ async def _do_explain(
     If *semiring_name* is ``None`` all configured semirings are used; otherwise
     only the requested one.
     """
-    from ap_explanation.di import get_provenance_service_for_ap
-    from ap_explanation.semirings import semirings as all_semirings
 
     # Resolve semirings to use
     if semiring_name is not None:
@@ -84,11 +84,28 @@ def explain_task(
     query: str,
     semiring_name: Optional[str] = None,
 ) -> list:
-    """Celery task: annotate + compute provenance + remove annotation."""
+    """Celery task: annotate + compute provenance + remove annotation.
+
+    Acquires a per-database Redis lock (key ``explain_lock:{db_name}``) so that
+    only one task runs at a time against a given *db_name*. Raises
+    ``RuntimeError`` if the lock cannot be acquired within the blocking timeout.
+    """
     logger.info(
         f"[task:{self.request.id}] Explaining tables {tables_names} in db '{db_name}'"
         + (f" with semiring '{semiring_name}'" if semiring_name else " with all semirings")
     )
-    return _run_in_thread(
-        _do_explain(db_name, tables_names, schema_name, query, semiring_name)
-    )
+
+    # Acquire lock to ensure exclusive access to the database during the explain operation
+    # TODO: We could consider finer-grained locks in the future, e.g. per-table instead of per-db, to allow more concurrency
+    lock_provider = get_lock_provider()
+    lock_key = f"explain_lock:{db_name}"
+
+    logger.debug(f"[task:{self.request.id}] Acquiring lock '{lock_key}'")
+    with lock_provider.acquire(lock_key):
+        logger.debug(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
+        res = _run_in_thread(
+            _do_explain(db_name, tables_names,
+                        schema_name, query, semiring_name)
+        )
+        logger.debug(f"[task:{self.request.id}] Released lock '{lock_key}'")
+        return res

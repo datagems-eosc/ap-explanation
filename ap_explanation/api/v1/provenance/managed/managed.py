@@ -1,9 +1,3 @@
-"""Managed explanation lifecycle – full annotate → compute → cleanup, asynchronously.
-
-POST /aps/explanation                   dispatch task with all semirings
-POST /aps/explanation/{semiring}        dispatch task with one semiring
-GET  /aps/explanation/{task_id}         poll task status / retrieve result
-"""
 from logging import getLogger
 
 from fastapi import Response, status

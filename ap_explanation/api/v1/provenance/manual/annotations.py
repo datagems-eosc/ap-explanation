@@ -1,9 +1,3 @@
-"""Manual explanation lifecycle – annotation management.
-
-POST   /aps/explanation/manual/annotations               annotate with all semirings
-POST   /aps/explanation/manual/annotations/{semiring}    annotate with one semiring
-DELETE /aps/explanation/manual/annotations               remove all annotations
-"""
 from logging import getLogger
 from typing import List, Literal
 

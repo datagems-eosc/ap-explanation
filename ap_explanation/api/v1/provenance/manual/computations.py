@@ -1,10 +1,3 @@
-"""Manual explanation lifecycle – provenance computation.
-
-POST /aps/explanation/manual/computations                compute with all semirings
-POST /aps/explanation/manual/computations/{semiring}     compute with one semiring
-
-Tables must already be annotated via POST /aps/explanation/manual/annotations.
-"""
 from json import loads
 from typing import List
 
