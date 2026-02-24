@@ -24,11 +24,15 @@ Or install ProvSQL manually on your PostgreSQL instance.
 
 **Error:** `Table 'students' in schema 'public' is not annotated with semiring 'formula'`
 
-**Cause:** Attempting to explain before annotating tables
+**Cause:** Attempting to compute provenance before annotating tables
 
-**Solution:** Annotate the table first:
+**Solution:** Use the managed lifecycle (handles annotation automatically):
 ```bash
-POST /api/v1/aps/annotate
+POST /api/v1/aps/explanation
+```
+Or annotate manually first:
+```bash
+POST /api/v1/aps/explanation/manual/annotations
 ```
 
 ---

@@ -60,9 +60,18 @@ The service processes **Analytical Patterns (AP)** in PG-JSON format—a graph s
 
 ### Workflow
 
-1. **Annotate tables (one-time)**: `POST /api/v1/aps/annotate` — Prepares tables for provenance tracking
-2. **Explain queries**: `POST /api/v1/aps/explain` — Returns provenance information showing how results derive from source data
-   - **Note**: This endpoint automatically removes annotations after computation to prevent database blocking issues
+**Managed (recommended)** — the API handles everything asynchronously:
+
+1. **Dispatch**: `POST /api/v1/aps/explanation` — returns a `task_id` immediately (HTTP 202)
+2. **Poll**: `GET /api/v1/aps/explanation/{task_id}` — returns status and result when done
+
+To target a single semiring: `POST /api/v1/aps/explanation/{semiring_name}`
+
+**Manual** — full control over each step:
+
+1. **Annotate**: `POST /api/v1/aps/explanation/manual/annotations`
+2. **Compute**: `POST /api/v1/aps/explanation/manual/computations` (removes annotations automatically)
+3. **Clean up**: `DELETE /api/v1/aps/explanation/manual/annotations` (if needed separately)
 
 The AP graph defines the database connection, tables, and query. The service extracts these components and applies provenance tracking.
 

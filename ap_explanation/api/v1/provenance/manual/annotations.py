@@ -1,8 +1,8 @@
-"""Manual provenance lifecycle – annotation management.
+"""Manual explanation lifecycle – annotation management.
 
-POST   /aps/provenance/manual/annotations               annotate with all semirings
-POST   /aps/provenance/manual/annotations/{semiring}    annotate with one semiring
-DELETE /aps/provenance/manual/annotations               remove all annotations
+POST   /aps/explanation/manual/annotations               annotate with all semirings
+POST   /aps/explanation/manual/annotations/{semiring}    annotate with one semiring
+DELETE /aps/explanation/manual/annotations               remove all annotations
 """
 from logging import getLogger
 from typing import List, Literal
@@ -48,9 +48,9 @@ async def annotate_ap(
 ) -> List[AnnotationResult]:
     """Annotate AP tables with all available semirings.
 
-    Part of the manual provenance lifecycle. After annotating, compute provenance
-    via POST /aps/provenance/manual/computations, then clean up via
-    DELETE /aps/provenance/manual/annotations.
+    Part of the manual explanation lifecycle. After annotating, compute via
+    POST /aps/explanation/manual/computations, then clean up via
+    DELETE /aps/explanation/manual/annotations.
     """
     logger.info(f"Annotating tables: {tables_names} with all semirings")
     results: List[AnnotationResult] = []
@@ -111,9 +111,9 @@ async def annotate_ap_with_semiring(
 ) -> List[AnnotationResult]:
     """Annotate AP tables with a specific semiring.
 
-    Part of the manual provenance lifecycle. After annotating, compute provenance
-    via POST /aps/provenance/manual/computations/{semiring_name}, then clean up via
-    DELETE /aps/provenance/manual/annotations.
+    Part of the manual explanation lifecycle. After annotating, compute via
+    POST /aps/explanation/manual/computations/{semiring_name}, then clean up via
+    DELETE /aps/explanation/manual/annotations.
     """
     semiring = next(
         (s for s in all_semirings if s.name == semiring_name), None)
@@ -183,8 +183,8 @@ async def remove_annotation_ap(
 ) -> List[RemovalResult]:
     """Remove provenance annotations from AP tables.
 
-    Part of the manual provenance lifecycle. Call this after
-    POST /aps/provenance/manual/computations to clean up annotations.
+    Part of the manual explanation lifecycle. Call this after
+    POST /aps/explanation/manual/computations to clean up annotations.
     """
     logger.info(
         f"Removing annotations from tables: {tables_names} for all semirings")

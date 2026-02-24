@@ -53,10 +53,12 @@ Tests use testcontainers to spin up PostgreSQL with ProvSQL automatically.
 ```
 ap_explanation/
 ├── api/v1/              # API endpoints
-│   ├── annotate/        # Annotation endpoints
-│   ├── explain/         # Explanation endpoints
+│   ├── provenance/
+│   │   ├── managed/     # Async lifecycle (dispatch + poll)
+│   │   └── manual/      # Sync lifecycle (annotate / compute / remove)
 │   ├── dependencies/    # FastAPI dependencies (AP parser)
 │   └── health.py        # Health check endpoint
+├── tasks/               # Celery tasks
 ├── services/            # Business logic
 ├── repository/          # Data access layer
 │   ├── mapping/         # Mapping strategies (ctid, etc.)
@@ -66,6 +68,7 @@ ap_explanation/
 ├── errors/              # Custom exceptions
 ├── semirings.py         # Semiring configurations
 ├── di.py                # Dependency injection
+├── celery_app.py        # Celery application
 └── main.py              # FastAPI application entry point
 ```
 

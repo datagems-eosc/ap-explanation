@@ -1,6 +1,6 @@
-"""Task status polling for managed provenance tasks.
+"""Task status polling for managed explanation tasks.
 
-GET /aps/provenance/managed/tasks/{task_id}
+GET /aps/explanation/{task_id}
 """
 from typing import Any, Literal, Optional
 
@@ -21,10 +21,9 @@ class TaskStatusResponse(BaseModel):
 
 
 def get_managed_task_status(task_id: str) -> TaskStatusResponse:
-    """Return the current status and (if completed) the result of a managed provenance task.
+    """Return the current status and (if completed) the result of a managed explanation task.
 
-    Poll this endpoint after POST /aps/provenance/managed or
-    POST /aps/provenance/managed/{semiring_name}.
+    Poll this endpoint after POST /aps/explanation or POST /aps/explanation/{semiring_name}.
     """
     async_result: AsyncResult = celery_app.AsyncResult(task_id)
     celery_status = (async_result.status or "pending").lower()

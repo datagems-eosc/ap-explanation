@@ -1,9 +1,9 @@
-"""Manual provenance lifecycle – provenance computation.
+"""Manual explanation lifecycle – provenance computation.
 
-POST /aps/provenance/manual/computations                compute with all semirings
-POST /aps/provenance/manual/computations/{semiring}     compute with one semiring
+POST /aps/explanation/manual/computations                compute with all semirings
+POST /aps/explanation/manual/computations/{semiring}     compute with one semiring
 
-Tables must already be annotated via POST /aps/provenance/manual/annotations.
+Tables must already be annotated via POST /aps/explanation/manual/annotations.
 """
 from json import loads
 from typing import List
@@ -58,8 +58,8 @@ async def compute_provenance_ap(
 ):
     """Compute provenance for the AP with all available semirings.
 
-    The tables must already be annotated via POST /aps/provenance/manual/annotations.
-    Returns the provenance result synchronously and removes the annotation afterwards.
+    Tables must already be annotated via POST /aps/explanation/manual/annotations.
+    Returns the result synchronously and removes the annotation afterwards.
     """
     service_factory = get_provenance_service_for_ap(db_name)
 
@@ -93,8 +93,8 @@ async def compute_provenance_ap_with_semiring(
 ):
     """Compute provenance for the AP with a specific semiring.
 
-    The tables must already be annotated via POST /aps/provenance/manual/annotations/{semiring_name}.
-    Returns the provenance result synchronously.
+    Tables must already be annotated via POST /aps/explanation/manual/annotations/{semiring_name}.
+    Returns the result synchronously.
     """
     semiring = next(
         (s for s in all_semirings if s.name == semiring_name), None)

@@ -1,8 +1,8 @@
-"""Managed provenance lifecycle – full annotate → compute → cleanup, asynchronously.
+"""Managed explanation lifecycle – full annotate → compute → cleanup, asynchronously.
 
-POST /aps/provenance/managed                dispatch task with all semirings
-POST /aps/provenance/managed/{semiring}     dispatch task with one semiring
-GET  /aps/provenance/managed/tasks/{id}     poll task status / retrieve result
+POST /aps/explanation                   dispatch task with all semirings
+POST /aps/explanation/{semiring}        dispatch task with one semiring
+GET  /aps/explanation/{task_id}         poll task status / retrieve result
 """
 from logging import getLogger
 
@@ -32,11 +32,9 @@ def managed_provenance_ap(
     tables_names: TableNames,
     response: Response,
 ) -> ManagedProvenanceTaskResponse:
-    """Dispatch an async task that handles the full provenance lifecycle with all semirings:
-    annotate → compute provenance → remove annotation.
+    """Dispatch an async task for the full explanation lifecycle with all semirings.
 
-    Returns HTTP 202 Accepted. Poll the result at
-    GET /api/v1/aps/provenance/managed/tasks/{task_id}.
+    Returns HTTP 202 Accepted. Poll the result at GET /api/v1/aps/explanation/{task_id}.
     """
     query = sql_node.properties["query"] if sql_node.properties else ""
     logger.info(
@@ -55,11 +53,9 @@ def managed_provenance_ap_with_semiring(
     tables_names: TableNames,
     response: Response,
 ) -> ManagedProvenanceTaskResponse:
-    """Dispatch an async task that handles the full provenance lifecycle for a specific semiring:
-    annotate → compute provenance → remove annotation.
+    """Dispatch an async task for the full explanation lifecycle with a specific semiring.
 
-    Returns HTTP 202 Accepted. Poll the result at
-    GET /api/v1/aps/provenance/managed/tasks/{task_id}.
+    Returns HTTP 202 Accepted. Poll the result at GET /api/v1/aps/explanation/{task_id}.
     """
     query = sql_node.properties["query"] if sql_node.properties else ""
     logger.info(
