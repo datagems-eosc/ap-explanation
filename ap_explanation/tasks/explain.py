@@ -12,7 +12,12 @@ from json import loads
 from typing import List, Optional
 
 from ap_explanation.celery_app import celery_app
-from ap_explanation.di import get_lock_provider, get_provenance_service_for_ap
+from ap_explanation.di import (
+    get_cache_provider,
+    get_lock_provider,
+    get_provenance_service_for_ap,
+)
+from ap_explanation.internal.cache import RedisCacheProvider
 from ap_explanation.semirings import semirings as all_semirings
 
 logger = logging.getLogger(__name__)
@@ -87,9 +92,24 @@ def explain_task(
     """Celery task: annotate + compute provenance + remove annotation.
 
     Acquires a per-database Redis lock (key ``explain_lock:{db_name}``) so that
-    only one task runs at a time against a given *db_name*. Raises
-    ``RuntimeError`` if the lock cannot be acquired within the blocking timeout.
+    only one task runs at a time against a given *db_name*.
+
+    Results are cached in Redis under a SHA-256 key derived from all input
+    parameters.  A cache hit returns immediately without touching the database.
+    The TTL is controlled by ``RedisCacheProvider.DEFAULT_TTL`` (default 1 h).
     """
+    cache = get_cache_provider()
+    cache_key = RedisCacheProvider.make_key(
+        db_name, tables_names, schema_name, query, semiring_name
+    )
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        logger.info(
+            f"[task:{self.request.id}] Cache hit for key '{cache_key}' — skipping DB work"
+        )
+        return cached
+
     logger.info(
         f"[task:{self.request.id}] Explaining tables {tables_names} in db '{db_name}'"
         + (f" with semiring '{semiring_name}'" if semiring_name else " with all semirings")
@@ -108,4 +128,8 @@ def explain_task(
                         schema_name, query, semiring_name)
         )
         logger.debug(f"[task:{self.request.id}] Released lock '{lock_key}'")
-        return res
+
+    cache.set(cache_key, res)
+    logger.debug(
+        f"[task:{self.request.id}] Result cached under key '{cache_key}'")
+    return res

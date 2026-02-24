@@ -10,6 +10,7 @@ from psycopg import AsyncConnection, OperationalError
 from psycopg_pool import AsyncConnectionPool
 
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
+from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
@@ -27,10 +28,15 @@ USE_EMBEDDED_CELERY_WORKER = os.getenv(
     "USE_EMBEDDED_CELERY_WORKER", "true").lower() == "true"
 # Poor man singleton
 lock_provider = RedisLockProvider(redis_url=REDIS_BROKER_URI)
+cache_provider = RedisCacheProvider(redis_url=REDIS_BROKER_URI)
 
 
 def get_lock_provider() -> LockProvider:
     return lock_provider
+
+
+def get_cache_provider() -> CacheProvider:
+    return cache_provider
 
 
 def _start_celery_worker() -> threading.Thread:

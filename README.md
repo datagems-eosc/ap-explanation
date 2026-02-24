@@ -35,6 +35,37 @@ graph TD
 
 By default, the FastAPI process starts an **embedded Celery worker** in a daemon thread — no separate process required. For production scale-out, additional standalone workers can be launched independently (see below).
 
+### Explain request flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant Redis
+    participant Worker as Celery Worker
+    participant PG as PostgreSQL + ProvSQL
+
+    Client->>API: POST /explain
+    API->>Redis: dispatch explain_task
+    Redis->>Worker: consume task
+
+    Worker->>Redis: get(cache_key)
+    alt cache hit
+        Redis-->>Worker: cached result
+        Worker-->>Client: result (no DB work)
+    else cache miss
+        Worker->>Redis: acquire explain_lock:{db}
+        Worker->>PG: annotate tables
+        Worker->>PG: compute provenance
+        Worker->>PG: remove annotation
+        Worker->>Redis: release lock
+        Worker->>Redis: set(cache_key, result, ttl=1h)
+        Worker-->>Client: result
+    end
+```
+
+> See the [architecture docs](https://datagems-eosc.github.io/ap-explanation/architecture/) for a detailed breakdown.
+
 ---
 
 ## Environment Variables

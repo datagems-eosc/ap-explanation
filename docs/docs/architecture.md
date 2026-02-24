@@ -102,6 +102,42 @@ FROM (SELECT department, COUNT(*) as cnt,
 
 ## Key Design Patterns
 
+### Explain Request Flow
+
+The following sequence diagram shows what happens end-to-end when a client requests a provenance explanation.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant Redis
+    participant Worker as Celery Worker
+    participant PG as PostgreSQL + ProvSQL
+
+    Client->>API: POST /explain
+    API->>Redis: dispatch explain_task
+    Redis->>Worker: consume task
+
+    Worker->>Redis: get(cache_key)
+    alt cache hit
+        Redis-->>Worker: cached result
+        Worker-->>Client: result (no DB work)
+    else cache miss
+        Worker->>Redis: acquire explain_lock:{db}
+        Worker->>PG: annotate tables (add provenance tokens)
+        Worker->>PG: compute provenance (rewritten query)
+        Worker->>PG: remove annotation
+        Worker->>Redis: release lock
+        Worker->>Redis: set(cache_key, result, ttl=1h)
+        Worker-->>Client: result
+    end
+```
+
+Key points:
+- The **cache** (Redis) is checked first — identical requests are served without touching the database.
+- The **distributed lock** ensures only one task runs against a given database at a time, preventing annotation conflicts.
+- **Annotation** adds ProvSQL provenance tokens to the target tables, **computation** runs the rewritten query, and **removal** cleans up the tokens afterwards.
+
 ### Dependency Injection
 
 The service uses a DI container (defined in `di.py`) to manage dependencies:
