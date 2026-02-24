@@ -39,6 +39,12 @@ curl http://localhost:5000/api/v1/aps/explanation/abc123
 
 ## Manual lifecycle
 
+> **Advanced usage — not recommended for most cases.**
+>
+> While tables are annotated, ProvSQL intercepts and rewrites **every** query that touches them — not just provenance queries. In particular, **nested queries with aggregations on both the inner and outer level are unsupported by ProvSQL and will fail** even when provenance is not involved. This means annotating a table in a shared or busy database can cause unrelated queries to break.
+>
+> The managed lifecycle (`POST /explain`) avoids this risk by keeping the annotated window as short as possible and serialising access with a distributed lock. Only use the manual endpoints when you need fine-grained control and can guarantee exclusive access to the database during the annotated window.
+
 Full control over each step: annotate → compute → remove annotation.
 
 ### 1. Annotate tables

@@ -18,24 +18,31 @@ Given a query, the service returns:
 ```mermaid
 graph TD
     Client["Client (HTTP)"]
-    API["FastAPI\n:5000"]
-    Worker["Celery Worker\n(embedded thread)"]
-    StandaloneWorker["Celery Worker\n(standalone Docker)"]
-    Redis["Redis\nbroker + backend"]
-    PG1["PostgreSQL + ProvSQL"]
+    API["API"]
+
+    Redis["**Redis**<br/>Message Broker<br/>Cache<br/>Lock Manager"]
+
+    PG1["PostgreSQL"]
 
     Client -->|REST| API
     API -->|dispatch task| Redis
-    Redis -->|consume task| Worker
-    Redis -->|consume task| StandaloneWorker
-    Worker -->|provenance queries| PG1
-    StandaloneWorker -->|provenance queries| PG1
-    API -->|distributed lock| Redis
+
+    subgraph Workers["Celery Workers (N)"]
+        Worker1["Celery Worker 1"]
+        Dots["..."]
+        WorkerN["Celery Worker N"]
+    end
+
+    Redis -->|consume task| Worker1
+    Redis -->|consume task| WorkerN
+
+    Worker1 -->|provenance queries| PG1
+    WorkerN -->|provenance queries| PG1
 ```
 
 By default, the FastAPI process starts an **embedded Celery worker** in a daemon thread — no separate process required. For production scale-out, additional standalone workers can be launched independently (see below).
 
-### Explain request flow
+### Async request flow
 
 ```mermaid
 sequenceDiagram
@@ -123,6 +130,19 @@ pytest tests/
 
 Tests use `testcontainers` to spin up a PostgreSQL + ProvSQL instance automatically — no manual setup needed.
 
+## "Manual" endpoints
+
+> **Advanced usage — not recommended for most cases.** See the warning below.
+
+The `/manual` endpoints expose the individual steps that the managed `POST /explain` task executes atomically:
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/v1/aps/provenance/manual/annotations` | Annotate the AP tables with ProvSQL provenance tokens |
+| `POST /api/v1/aps/provenance/manual/computations` | Run the query and retrieve provenance results, then remove annotations |
+| `DELETE /api/v1/aps/provenance/manual/annotations` | Remove annotations manually if the computation step was skipped or failed |
+
+**Why this is advanced:** while tables are annotated, ProvSQL rewrites every query touching them (including when NOT querying provenance). In particular, nested queries with aggregations on both the inner and outer level are not supported by ProvSQL and will fail even if they don't involve provenance at all. The managed endpoint avoids this window by keeping the annotated state as short as possible and locking the database. Using the manual endpoints means you own that responsibility.
 ---
 
 ## Documentation
