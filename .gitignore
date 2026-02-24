@@ -141,3 +141,4 @@ cython_debug/
 
 bug_reproduction/
 fixtures/*.csv
+tests/test_val_*
