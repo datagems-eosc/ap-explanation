@@ -1,5 +1,5 @@
 from re import compile, search
-from typing import List, Tuple, TypedDict
+from typing import List, TypedDict
 
 from .mapping import ProvenanceMapping
 
@@ -43,12 +43,15 @@ class CtidMapping(ProvenanceMapping[RowCtid]):
         """
         Decode a provenance equation string into a list of RowCtid dictionaries.
         Args:
-            values: A string containing multiple provenance entries in the format
-                    '{table_name@p<page>r<row>}'.
+            values: A string containing multiple provenance entries.
+                    Supports both brace-wrapped format (formula semiring):
+                      {{table@p<page>r<row>}⊗{table@p<page>r<row>}}
+                    and comma-separated format (why-provenance semiring):
+                      {"{table@pNrN,table@pNrN,...}"}
         Returns:
             A list of RowCtid dictionaries.
         """
-        reg = compile(r'\{([^{}@]+)@p(\d+)r(\d+)\}')
+        reg = compile(r'([a-zA-Z_][a-zA-Z0-9_]*)@p(\d+)r(\d+)')
         return [
             {
                 "table": table,

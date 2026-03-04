@@ -67,19 +67,49 @@ class ProvenanceService:
 
     async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
         """
-        Execute a SQL query with provenance tracking and return annotated results.
+        Execute a SQL query with provenance tracking for each semiring, merge the
+        results by ``provsql`` UUID, and return a JSON string.
+
+        The output is a JSON array of objects, each shaped::
+
+            {
+                "answer": { <original query columns> },
+                "provenance": {
+                    "<semiring_name>": {
+                        "expression": "<raw semiring expression>",
+                        "data": [ <resolved provenance references> ]
+                    },
+                    ...
+                }
+            }
 
         Args:
-            sql_query: The SQL query to execute with provenance
             schema_name: Schema where the query should be executed
+            sql_query: The SQL query to execute with provenance
+            semirings: List of semiring configurations to compute
 
         Returns:
-            JSON string of results with provenance annotations
+            JSON string of merged results with provenance annotations
         """
-        # Execute queries sequentially since they share the same connection
-        # and can't run concurrent transactions
-        results = []
+        # Merge rows across semirings by their provsql UUID.
+        merged: dict[str, dict] = {}
+        row_order: list[str] = []  # preserve original insertion order
+
         for semiring in semirings:
-            result = await self._provenance_repo.query(schema_name, sql_query, semiring)
-            results.append(result)
+            rows = await self._provenance_repo.query(schema_name, sql_query, semiring)
+            for row in rows:
+                provsql = row["provsql"]
+                if provsql not in merged:
+                    merged[provsql] = {
+                        "answer": row["answer"],
+                        "provenance": {},
+                    }
+                    row_order.append(provsql)
+
+                merged[provsql]["provenance"][semiring.name] = {
+                    "expression": row["expression"],
+                    "data": row["data"],
+                }
+
+        results = [merged[key] for key in row_order]
         return dumps(results).decode('utf-8')

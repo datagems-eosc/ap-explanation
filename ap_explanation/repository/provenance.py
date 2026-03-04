@@ -35,9 +35,18 @@ class ProvenanceRepository:
 
     async def query(self, schema_name: str, query: str, semiring: DbSemiring) -> list[dict[str, Any]]:
         """
-        Execute a SQL query and return the results as a list of dictionaries.
-        :param query: The SQL query to execute.
-        :return: List of result rows as dictionaries.
+        Execute a SQL query with provenance tracking and return structured results.
+
+        Each returned row separates the original query output (``answer``) from
+        provenance metadata so that results from different semirings can be
+        merged cleanly by the service layer.
+
+        Returns:
+            A list of dicts, each with keys:
+            - ``answer``     – dict of the original query columns
+            - ``provsql``    – the provenance UUID for this row
+            - ``expression`` – the raw semiring expression string
+            - ``data``       – resolved provenance references (list of dicts)
         """
         edited_query = self._sql_rewriter.rewrite(query, semiring)
 
@@ -49,14 +58,37 @@ class ProvenanceRepository:
                 cursor = await self._conn.cursor(row_factory=dict_row).execute(SQL(cast(LiteralString, edited_query)))
                 rows = await cursor.fetchall()
 
-                # From each row, retrieve the provenance data
+                results: list[dict[str, Any]] = []
                 for row in rows:
                     retrieval_name = semiring.retrieval_function
                     if semiring.aggregate_function is not None and semiring.aggregate_function in row:
                         retrieval_name = semiring.aggregate_function
-                    row[semiring.name] = await self._fetch_related_data(row[retrieval_name], semiring)
 
-            return rows
+                    expression = row.get(retrieval_name, "")
+                    data = await self._fetch_related_data(expression, semiring)
+
+                    # Build the answer dict: everything except provenance-internal columns
+                    provenance_keys = {
+                        "provsql",
+                        retrieval_name,
+                        semiring.name,
+                    }
+                    if semiring.aggregate_function:
+                        provenance_keys.add(semiring.aggregate_function)
+                    if semiring.retrieval_function != retrieval_name:
+                        provenance_keys.add(semiring.retrieval_function)
+
+                    answer = {k: v for k, v in row.items(
+                    ) if k not in provenance_keys}
+
+                    results.append({
+                        "answer": answer,
+                        "provsql": str(row.get("provsql", "")),
+                        "expression": expression,
+                        "data": data,
+                    })
+
+            return results
         except errors.UndefinedTable as e:
             # The mapping table doesn't exist, meaning the table hasn't been annotated
             from ap_explanation.errors import TableNotAnnotatedError

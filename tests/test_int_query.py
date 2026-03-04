@@ -29,8 +29,16 @@ async def test_ok_compute_provenance_why_semiring(
     # Verify we got valid JSON with results
     assert result_json is not None
     results = orjson.loads(result_json)
-    assert len(results) == 1  # One result per semiring
-    assert len(results[0]) > 0  # Has rows
+    assert len(results) > 0  # Has rows
+
+    # Verify each result has the new structure
+    for row in results:
+        assert "answer" in row
+        assert "provenance" in row
+        assert "why" in row["provenance"]
+        assert "expression" in row["provenance"]["why"]
+        assert "data" in row["provenance"]["why"]
+        assert isinstance(row["provenance"]["why"]["data"], list)
 
 
 @pytest.mark.asyncio
@@ -50,8 +58,16 @@ async def test_ok_compute_provenance_formula_semiring(
     # Verify we got valid JSON with results
     assert result_json is not None
     results = orjson.loads(result_json)
-    assert len(results) == 1  # One result per semiring
-    assert len(results[0]) > 0  # Has rows
+    assert len(results) > 0  # Has rows
+
+    # Verify each result has the new structure
+    for row in results:
+        assert "answer" in row
+        assert "provenance" in row
+        assert "formula" in row["provenance"]
+        assert "expression" in row["provenance"]["formula"]
+        assert "data" in row["provenance"]["formula"]
+        assert isinstance(row["provenance"]["formula"]["data"], list)
 
 
 @pytest.mark.asyncio
@@ -68,10 +84,17 @@ async def test_ok_compute_provenance_with_all_semirings(
     query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 3"
     result_json = await provenance_service.compute_provenance(test_schema.schema, query, all_semirings)
 
-    # Verify we got results for all semirings
+    # Verify we got results with all semirings merged
     assert result_json is not None
     results = orjson.loads(result_json)
-    assert len(results) == len(all_semirings)
+    assert len(results) > 0
+
+    # Each row should have provenance data for every semiring
+    semiring_names = {s.name for s in all_semirings}
+    for row in results:
+        assert "answer" in row
+        assert "provenance" in row
+        assert set(row["provenance"].keys()) == semiring_names
 
 
 @pytest.mark.asyncio
@@ -107,8 +130,12 @@ async def test_ok_compute_provenance_with_aggregation(
     # Verify we got valid results
     assert result_json is not None
     results = orjson.loads(result_json)
-    assert len(results) == 1
-    assert len(results[0]) > 0
+    assert len(results) > 0
+
+    for row in results:
+        assert "answer" in row
+        assert "provenance" in row
+        assert "formula" in row["provenance"]
 
 
 @pytest.mark.asyncio
