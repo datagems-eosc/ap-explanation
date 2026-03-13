@@ -6,3 +6,5 @@ set -ex
 if ! docker info > /dev/null 2>&1; then
     sudo update-alternatives --set iptables /usr/sbin/iptables-nft
 fi
+
+uv sync --all-groups
