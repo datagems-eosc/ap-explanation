@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from .annotations import annotate_ap, annotate_ap_with_semiring, remove_annotation_ap
 from .computations import compute_provenance_ap, compute_provenance_ap_with_semiring
 
-router = APIRouter(prefix="/aps/explanation/manual", tags=["manual"])
+router = APIRouter(prefix="/aps/explanation/manual")
 
 router.add_api_route("/annotations", annotate_ap, methods=["POST"])
 router.add_api_route(
