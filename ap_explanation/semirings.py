@@ -5,8 +5,8 @@ from ap_explanation.types.semiring import DbSemiring
 semirings = [
     DbSemiring(
         name="formula",
-        retrieval_function="sr_formula",
-        # aggregate_function="aggregation_formula",
+        retrieval_function="formula",
+        aggregate_function="aggregation_formula",
         mapping_table="formula_mapping",
         mappingStrategy=CtidMapping(),
     ),
