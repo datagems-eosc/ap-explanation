@@ -115,6 +115,12 @@ def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
     return next(s for s in all_semirings if s.name == "formula")
 
 
+@pytest.fixture(scope="session")
+def boolean_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+    """Boolean provenance semiring configuration for testing."""
+    return next(s for s in all_semirings if s.name == "boolean")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def configure_celery_for_tests():
     """Override Celery to run tasks synchronously in-process using an in-memory backend.

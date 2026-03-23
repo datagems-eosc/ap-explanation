@@ -21,7 +21,7 @@ semirings = [
         name="boolean",
         retrieval_function="bool_formula",
         # aggregate_function="aggregation_formula",
-        mapping_table="bool_mapping",
+        mapping_table="boolean_mapping",
         mappingStrategy=CtidMapping(),
     ),
 ]
