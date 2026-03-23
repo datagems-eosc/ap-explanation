@@ -3,7 +3,6 @@ SET client_encoding = 'UTF8';
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS provsql WITH SCHEMA public;
 
-
 -- implementation for Formula semiring
 DROP TYPE IF EXISTS public.formula_state;
 CREATE TYPE public.formula_state AS (
@@ -88,64 +87,91 @@ BEGIN
 END
 $$;
 
+-- implementation for Boolean formula semiring
+DROP TYPE IF EXISTS public.bool_formula_state;
+CREATE TYPE public.bool_formula_state AS (
+	formula text,
+	nbargs integer
+);
 
+CREATE OR REPLACE FUNCTION public.bool_formula_monus(formula1 text, formula2 text) RETURNS text
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  SELECT concat('(',formula1,' ∧ ¬',formula2,')');
+$$;
 
--- implementation for Counting semiring
+CREATE OR REPLACE FUNCTION public.bool_formula_plus_state(state public.bool_formula_state, value text) RETURNS public.bool_formula_state
+    LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+     AS $$
+BEGIN
+  IF state IS NULL OR state.nbargs=0 THEN
+    RETURN (value,1);
+  ELSE
+    RETURN (concat(state.formula,' ∨ ',value),state.nbargs+1);
+  END IF;
+END
+$$;
 
-CREATE OR REPLACE FUNCTION public.counting(token UUID, token2value regclass) RETURNS integer
+CREATE OR REPLACE FUNCTION public.bool_formula_state2formula(state public.bool_formula_state) RETURNS text
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  SELECT
+    CASE
+      WHEN state.nbargs<2 THEN state.formula
+      ELSE concat('(',state.formula,')')
+    END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.bool_formula_times_state(state public.bool_formula_state, value text) RETURNS public.bool_formula_state
+    LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+    AS $$
+BEGIN    
+  IF state IS NULL OR state.nbargs=0 THEN
+    RETURN (value,1);
+  ELSE
+    RETURN (concat(state.formula,' ∧ ',value),state.nbargs+1);
+  END IF;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.bool_formula_delta(formula text) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+    AS $$
+BEGIN    
+  RETURN formula;
+END
+$$;
+
+CREATE OR REPLACE AGGREGATE public.bool_formula_plus(text) (
+    SFUNC = public.bool_formula_plus_state,
+    STYPE = public.bool_formula_state,
+    INITCOND = '(⊥,0)',
+    FINALFUNC = public.bool_formula_state2formula
+);
+
+CREATE OR REPLACE AGGREGATE public.bool_formula_times(text) (
+    SFUNC = public.bool_formula_times_state,
+    STYPE = public.bool_formula_state,
+    INITCOND = '(⊤,0)',
+    FINALFUNC = public.bool_formula_state2formula
+);
+
+CREATE OR REPLACE FUNCTION public.bool_formula(token UUID, token2value regclass) RETURNS text
     LANGUAGE plpgsql PARALLEL SAFE
     AS $$
 BEGIN
   RETURN provenance_evaluate(
     token,
     token2value,
-    1,
-    'counting_plus',
-    'counting_times',
-    'counting_monus',
-    'counting_delta');
+    '⊤'::text,
+    'bool_formula_plus',
+    'bool_formula_times',
+    'bool_formula_monus',
+    'bool_formula_delta');
 END
 $$;
 
-CREATE OR REPLACE FUNCTION public.counting_monus(counting1 integer, counting2 integer) RETURNS integer
-    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-    AS $$
-  SELECT CASE WHEN counting1 < counting2 THEN 0 ELSE counting1 - counting2 END
-$$;
-
-CREATE OR REPLACE FUNCTION public.counting_plus_state(state integer, value integer) RETURNS integer
-    LANGUAGE sql IMMUTABLE PARALLEL SAFE
-    AS $$
-  SELECT CASE WHEN state IS NULL THEN value ELSE state + value END
-$$;
-
-CREATE OR REPLACE FUNCTION public.counting_times_state(state integer, value integer) RETURNS integer
-    LANGUAGE sql IMMUTABLE PARALLEL SAFE
-    AS $$
-SELECT CASE WHEN state IS NULL THEN value ELSE state * value END
-$$;
-
-CREATE OR REPLACE AGGREGATE public.counting_plus(integer) (
-    SFUNC = public.counting_plus_state,
-    STYPE = integer,
-    INITCOND = '0'
-);
-
-CREATE OR REPLACE AGGREGATE public.counting_times(integer) (
-    SFUNC = public.counting_times_state,
-    STYPE = integer,
-    INITCOND = '1'
-);
-
-CREATE OR REPLACE FUNCTION public.counting_delta(counting integer) RETURNS integer
-    LANGUAGE sql IMMUTABLE STRICT
-    AS $$
-  SELECT CASE WHEN counting > 0 THEN 1 ELSE 1 END
-$$;
-
 -- semiring implementation for why provenance 
-
-
 
 CREATE OR REPLACE FUNCTION public.fmonus(state1 text[], state2 text[]) RETURNS text[]
     LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
