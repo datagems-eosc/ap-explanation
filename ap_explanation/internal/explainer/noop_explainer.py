@@ -7,4 +7,4 @@ class NoOpExplainer(Explainer):
     """
 
     async def explain(self, query: str, provenance: str, database_schema: str) -> str:
-        return "No-op explanation"
+        return "No explanation"
