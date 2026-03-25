@@ -8,7 +8,6 @@ safe regardless of whether the caller already has a running loop (e.g. pytest-as
 import asyncio
 import concurrent.futures
 import logging
-from json import loads
 from typing import List, Optional
 
 from ap_explanation.celery_app import celery_app
@@ -75,7 +74,7 @@ async def _do_explain(
         for table_name in tables_names:
             await service.remove_annotation(table_name, schema_name)
 
-        return loads(prov or "[]")
+        return [row.model_dump() for row in prov]
 
     return []
 

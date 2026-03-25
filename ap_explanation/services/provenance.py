@@ -1,10 +1,9 @@
 from logging import getLogger
 from typing import List
 
-from orjson import dumps
-
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings as all_semirings
+from ap_explanation.types.provenance import ProvenanceResult, SemiringProvenance
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -65,23 +64,14 @@ class ProvenanceService:
 
         return True
 
-    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
+    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> list[ProvenanceResult]:
         """
         Execute a SQL query with provenance tracking for each semiring, merge the
         results by ``provsql`` UUID, and return a JSON string.
 
-        The output is a JSON array of objects, each shaped::
-
-            {
-                "answer": { <original query columns> },
-                "provenance": {
-                    "<semiring_name>": {
-                        "expression": "<raw semiring expression>",
-                        "data": [ <resolved provenance references> ]
-                    },
-                    ...
-                }
-            }
+        Each returned :class:`~ap_explanation.types.provenance.ProvenanceResult`
+        contains the original query columns in ``answer`` and a per-semiring
+        mapping in ``provenance``.
 
         Args:
             schema_name: Schema where the query should be executed
@@ -89,7 +79,8 @@ class ProvenanceService:
             semirings: List of semiring configurations to compute
 
         Returns:
-            JSON string of merged results with provenance annotations
+            List of :class:`~ap_explanation.types.provenance.ProvenanceResult` instances,
+            one per result row, ordered as returned by the database.
         """
         # Merge rows across semirings by their provsql UUID.
         merged: dict[str, dict] = {}
@@ -106,10 +97,14 @@ class ProvenanceService:
                     }
                     row_order.append(provsql)
 
-                merged[provsql]["provenance"][semiring.name] = {
-                    "expression": row["expression"],
-                    "data": row["data"],
-                }
-
-        results = [merged[key] for key in row_order]
-        return dumps(results).decode('utf-8')
+                merged[provsql]["provenance"][semiring.name] = SemiringProvenance(
+                    expression=row["expression"],
+                    data=row["data"],
+                )
+        return [
+            ProvenanceResult(
+                answer=merged[key]["answer"],
+                provenance=merged[key]["provenance"],
+            )
+            for key in row_order
+        ]
