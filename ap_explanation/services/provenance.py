@@ -1,6 +1,7 @@
 from logging import getLogger
 from typing import List
 
+from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.provenance import ProvenanceResult, SemiringProvenance
@@ -17,9 +18,11 @@ class ProvenanceService:
     """
 
     _provenance_repo: ProvenanceRepository
+    _explanation_agent: Explainer
 
-    def __init__(self, provenance_repo: ProvenanceRepository):
+    def __init__(self, provenance_repo: ProvenanceRepository, explanation_agent: Explainer):
         self._provenance_repo = provenance_repo
+        self._explanation_agent = explanation_agent
 
     async def annotate_dataset(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
         """
