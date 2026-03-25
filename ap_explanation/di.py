@@ -12,7 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider
-from ap_explanation.internal.explainer import Explainer, ExplanationAgent
+from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
@@ -71,10 +71,17 @@ def get_explainer() -> Explainer:
     model = os.getenv("LLM_API_MODEL")
     ssl_verify = os.getenv("LLM_SSL_VERIFY", "true").lower() == "true"
 
+    if not api_base:
+        logger.warning(
+            "LLM_API_BASE not set, NL explanations will be disabled for provenance results."
+        )
+        return NoOpExplainer()
+
     if not all([api_base, model]):
         raise ValueError(
-            "Missing required environment variables for ExplanationAgent: LLM_API_BASE, LLM_API_KEY, LLM_API_MODEL"
+            "Missing required environment variables for LLM explanation: LLM_API_BASE, LLM_API_MODEL"
         )
+
     return ExplanationAgent(api_base, model, api_key, ssl_verify=ssl_verify)
 
 

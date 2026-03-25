@@ -10,8 +10,7 @@ from psycopg_pool import AsyncConnectionPool
 from testcontainers.core.image import DockerImage
 from testcontainers.postgres import PostgresContainer
 
-from ap_explanation.di import get_explainer
-from ap_explanation.internal.explainer import Explainer
+from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
@@ -89,33 +88,8 @@ async def provenance_repository(db_connection: AsyncConnection, sql_rewriter: Sq
 
 
 @pytest.fixture
-def noop_explainer() -> Explainer:
-    """ 
-    For testing, we use a no-op explainer that returns a fixed string regardless of input. 
-
-    """
-    class NoOpExplainer(Explainer):
-        async def explain(self, query: str, provenance: str, database_schema: str) -> str:
-            return "No-op explanation"
-
-    return NoOpExplainer()
-
-
-@pytest.fixture
-def agent_explainer() -> Explainer:
-    """ 
-    Real explainer for e2e
-    """
-    return get_explainer()
-
-
-# @pytest.fixture
-# def provenance_service(provenance_repository: ProvenanceRepository, agent_explainer: Explainer):
-#     return ProvenanceService(provenance_repository, agent_explainer)
-
-@pytest.fixture
-def provenance_service(provenance_repository: ProvenanceRepository, noop_explainer: Explainer):
-    return ProvenanceService(provenance_repository, noop_explainer)
+def provenance_service(provenance_repository: ProvenanceRepository):
+    return ProvenanceService(provenance_repository, NoOpExplainer())
 
 
 @pytest.fixture(scope="session")
