@@ -10,7 +10,7 @@ from psycopg.types.json import set_json_dumps
 
 from ap_explanation.errors import ProvSqlInternalError, ProvSqlMissingError
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.types.provenance import ProvenanceRow
+from ap_explanation.types.provenance import ProvSQLRow, SemiringProvenance
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -34,7 +34,7 @@ class ProvenanceRepository:
         self._conn = conn
         self._sql_rewriter = sql_rewriter
 
-    async def query(self, schema_name: str, query: str, semiring: DbSemiring) -> list[ProvenanceRow]:
+    async def query(self, schema_name: str, query: str, semiring: DbSemiring) -> list[ProvSQLRow]:
         """
         Execute a SQL query with provenance tracking and return structured results.
 
@@ -59,7 +59,7 @@ class ProvenanceRepository:
                 cursor = await self._conn.cursor(row_factory=dict_row).execute(SQL(cast(LiteralString, edited_query)))
                 rows = await cursor.fetchall()
 
-                results: list[ProvenanceRow] = []
+                results: list[ProvSQLRow] = []
                 for row in rows:
                     retrieval_name = semiring.retrieval_function
                     if semiring.aggregate_function is not None and semiring.aggregate_function in row:
@@ -82,11 +82,13 @@ class ProvenanceRepository:
                     answer = {k: v for k, v in row.items(
                     ) if k not in provenance_keys}
 
-                    results.append(ProvenanceRow(
+                    results.append(ProvSQLRow(
                         answer=answer,
                         provsql=str(row.get("provsql", "")),
-                        expression=expression,
-                        data=data,
+                        provenance=SemiringProvenance(
+                            expression=expression,
+                            data=data,
+                        ),
                     ))
 
             return results

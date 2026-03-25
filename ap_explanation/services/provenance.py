@@ -1,13 +1,11 @@
 from logging import getLogger
-from typing import Any, Dict, List
+from typing import List
 
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.provenance import (
-    ProvenanceMap,
-    ProvenanceResult,
-    SemiringProvenance,
+    Derivation,
 )
 from ap_explanation.types.semiring import DbSemiring
 
@@ -71,7 +69,7 @@ class ProvenanceService:
 
         return True
 
-    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> List[ProvenanceResult]:
+    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> List[Derivation]:
         """
         Execute a SQL query with provenance tracking for each semiring, merge the
         results by ``provsql`` UUID, and return a JSON string.
@@ -90,39 +88,20 @@ class ProvenanceService:
             one per result row, ordered as returned by the database.
         """
 
-        # NOTE: I'm not a big fan of python type aliases but if will help readability here, we can define some for the nested dicts below
-        type ProvSqlId = str
-        # Maps from ProvSQL UUID to the sql query answer
-        id_to_answer: Dict[ProvSqlId, Dict[str, Any]] = {}
-        # Maps from ProvSQL UUID to the provenance information for each semiring
-        id_to_provenance: Dict[ProvSqlId, ProvenanceMap] = {}
-        # Total order of rows as they were returned by the database, to preserve ordering in final output
-        row_order: List[ProvSqlId] = []
+        # Keyed by ProvSQL UUID; dict preserves insertion order so result ordering is maintained.
+        derivations: dict[str, Derivation] = {}
 
-        # Merge result by semirings
         for semiring in semirings:
             rows = await self._provenance_repo.query(schema_name, sql_query, semiring)
             for row in rows:
-                id: ProvSqlId = row.provsql
-                if id not in id_to_answer:
-                    id_to_answer[id] = row.answer
-                    id_to_provenance[id] = ProvenanceMap()
-                    row_order.append(id)
+                if row.provsql not in derivations:
+                    derivations[row.provsql] = Derivation(
+                        answer=row.answer, provenance={})
+                derivations[row.provsql].provenance[semiring.name] = row.provenance
 
-                setattr(id_to_provenance[id], semiring.name, SemiringProvenance(
-                    expression=row.expression,
-                    data=row.data,
-                ))
+        return list(derivations.values())
 
-        return [
-            ProvenanceResult(
-                answer=id_to_answer[id],
-                provenance=id_to_provenance[id],
-            )
-            for id in row_order
-        ]
-
-    async def explain(self, schema_name: str, sql_query: str, provenance_results: List[ProvenanceResult]) -> str:
+    async def explain(self, schema_name: str, sql_query: str, provenance_results: List[Derivation]) -> str:
         """
         Generate a human-readable explanation from provenance results.
         """
