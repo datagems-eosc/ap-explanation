@@ -8,7 +8,6 @@ safe regardless of whether the caller already has a running loop (e.g. pytest-as
 import asyncio
 import concurrent.futures
 import logging
-from json import loads
 from typing import List, Optional
 
 from ap_explanation.celery_app import celery_app
@@ -19,6 +18,7 @@ from ap_explanation.di import (
 )
 from ap_explanation.internal.cache import RedisCacheProvider
 from ap_explanation.semirings import semirings as all_semirings
+from ap_explanation.types.provenance import Provenance
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +69,19 @@ async def _do_explain(
             await service.annotate_dataset(table_name, schema_name, target_semirings)
 
         # 2. Compute provenance
-        prov = await service.compute_provenance(schema_name, query, target_semirings)
+        derivations = await service.compute_provenance(schema_name, query, target_semirings)
 
-        # 3. Remove annotation (see provsql issue #67 workaround)
+        # 3. Compute NL explanation (if enabled)
+        explanation = await service.explain(schema_name, query, derivations)
+
+        # 4. Remove annotation (see provsql issue #67 workaround)
         for table_name in tables_names:
             await service.remove_annotation(table_name, schema_name)
 
-        return loads(prov or "[]")
+        prov = Provenance(derivations=derivations, explanation=explanation)
+
+        # Serialize the provenance result to JSON for caching and eventual IPC back to the caller
+        return prov.model_dump(mode="json")
 
     return []
 

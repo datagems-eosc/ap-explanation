@@ -1,10 +1,12 @@
 from logging import getLogger
 from typing import List
 
-from orjson import dumps
-
+from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings as all_semirings
+from ap_explanation.types.provenance import (
+    Derivation,
+)
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -18,9 +20,11 @@ class ProvenanceService:
     """
 
     _provenance_repo: ProvenanceRepository
+    _explainer: Explainer
 
-    def __init__(self, provenance_repo: ProvenanceRepository):
+    def __init__(self, provenance_repo: ProvenanceRepository, explainer: Explainer):
         self._provenance_repo = provenance_repo
+        self._explainer = explainer
 
     async def annotate_dataset(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
         """
@@ -65,23 +69,14 @@ class ProvenanceService:
 
         return True
 
-    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> str | None:
+    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> List[Derivation]:
         """
         Execute a SQL query with provenance tracking for each semiring, merge the
         results by ``provsql`` UUID, and return a JSON string.
 
-        The output is a JSON array of objects, each shaped::
-
-            {
-                "answer": { <original query columns> },
-                "provenance": {
-                    "<semiring_name>": {
-                        "expression": "<raw semiring expression>",
-                        "data": [ <resolved provenance references> ]
-                    },
-                    ...
-                }
-            }
+        Each returned :class:`~ap_explanation.types.provenance.ProvenanceResult`
+        contains the original query columns in ``answer`` and a per-semiring
+        mapping in ``provenance``.
 
         Args:
             schema_name: Schema where the query should be executed
@@ -89,27 +84,26 @@ class ProvenanceService:
             semirings: List of semiring configurations to compute
 
         Returns:
-            JSON string of merged results with provenance annotations
+            List of :class:`~ap_explanation.types.provenance.ProvenanceResult` instances,
+            one per result row, ordered as returned by the database.
         """
-        # Merge rows across semirings by their provsql UUID.
-        merged: dict[str, dict] = {}
-        row_order: list[str] = []  # preserve original insertion order
+
+        # Keyed by ProvSQL UUID; dict preserves insertion order so result ordering is maintained.
+        derivations: dict[str, Derivation] = {}
 
         for semiring in semirings:
             rows = await self._provenance_repo.query(schema_name, sql_query, semiring)
             for row in rows:
-                provsql = row["provsql"]
-                if provsql not in merged:
-                    merged[provsql] = {
-                        "answer": row["answer"],
-                        "provenance": {},
-                    }
-                    row_order.append(provsql)
+                if row.provsql not in derivations:
+                    derivations[row.provsql] = Derivation(
+                        answer=row.answer, provenance={})
+                derivations[row.provsql].provenance[semiring.name] = row.provenance
 
-                merged[provsql]["provenance"][semiring.name] = {
-                    "expression": row["expression"],
-                    "data": row["data"],
-                }
+        return list(derivations.values())
 
-        results = [merged[key] for key in row_order]
-        return dumps(results).decode('utf-8')
+    async def explain(self, schema_name: str, sql_query: str, provenance_results: List[Derivation]) -> str:
+        """
+        Generate a human-readable explanation from provenance results.
+        """
+        schema = await self._provenance_repo.get_schema_definition(schema_name)
+        return await self._explainer.explain(sql_query, str(provenance_results), schema)

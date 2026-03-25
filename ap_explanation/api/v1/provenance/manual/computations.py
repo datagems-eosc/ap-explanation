@@ -1,4 +1,3 @@
-from json import loads
 from typing import List
 
 from fastapi import Depends, HTTPException, status
@@ -65,7 +64,7 @@ async def compute_provenance_ap(
             # Leaving provenance enabled blocks some queries; remove after computing.
             for table_name in tables_names:
                 await service.remove_annotation(table_name, schema_name)
-            result = loads(prov or "[]")
+            result = prov
         except Exception as e:
             _provenance_error_handler(e)
         break  # Only process with first connection from pool
@@ -105,7 +104,7 @@ async def compute_provenance_ap_with_semiring(
         try:
             query = sql_node.properties["query"] if sql_node.properties else ""
             prov = await service.compute_provenance(schema_name, query, [semiring])
-            result = loads(prov or "[]")
+            result = prov
         except Exception as e:
             _provenance_error_handler(e)
         break  # Only process with first connection from pool
