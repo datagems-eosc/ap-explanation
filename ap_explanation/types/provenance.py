@@ -30,6 +30,11 @@ class SemiringProvenance(BaseModel):
     data: list[Any]
 
 
+class ProvenanceMap(BaseModel):
+    why: SemiringProvenance | None = None
+    formula: SemiringProvenance | None = None
+
+
 class ProvenanceResult(BaseModel):
     """
     A single row of ``compute_provenance`` output.
@@ -37,10 +42,8 @@ class ProvenanceResult(BaseModel):
     Merges answer columns with per-semiring provenance information so that
     callers can access both without parsing raw JSON.
 
-    Attributes:
-        answer: Original query columns (excluding ProvSQL-internal columns).
-        provenance: Mapping from semiring name to its computed provenance.
     """
-
+    # Original SQL result in {column_name: value} format, excluding ProvSQL-internal columns like "provsql".
     answer: dict[str, Any]
-    provenance: dict[str, SemiringProvenance]
+    # Mapping from semiring name to its provenance information for this row.
+    provenance: ProvenanceMap

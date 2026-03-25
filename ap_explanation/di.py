@@ -12,6 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider
+from ap_explanation.internal.explainer import Explainer, ExplanationAgent
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
@@ -21,6 +22,10 @@ from ap_explanation.types.semiring import DbSemiring
 load_dotenv()
 logger = logging.getLogger(__name__)
 REDIS_BROKER_URI = os.getenv("REDIS_BROKER_URI", "redis://redis:6379/0")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 # When True (default), the FastAPI process spawns a Celery worker in a daemon
 # thread so no separate worker process is needed. Set to 'false' when running
 # dedicated standalone workers (e.g. via Docker) to avoid double-processing.
@@ -58,6 +63,18 @@ def _start_celery_worker() -> threading.Thread:
     thread.start()
     logger.info("Embedded Celery worker started")
     return thread
+
+
+def get_explainer() -> Explainer:
+    api_base = os.getenv("LLM_API_BASE")
+    api_key = os.getenv("LLM_API_KEY", "")
+    model = os.getenv("LLM_API_MODEL")
+
+    if not all([api_base, model]):
+        raise ValueError(
+            "Missing required environment variables for ExplanationAgent: LLM_API_BASE, LLM_API_KEY, LLM_API_MODEL"
+        )
+    return ExplanationAgent(api_base, api_key, model)
 
 
 @asynccontextmanager
@@ -153,11 +170,12 @@ def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[P
         # Try Postgres instance first
         postgres_connection_string = f"postgresql://{user}:{password}@{postgres_host}:{postgres_port}/{db_name}"
 
+        agent = get_explainer()
         try:
             async with get_dynamic_db_conn(postgres_connection_string) as conn:
                 repo = ProvenanceRepository(conn, SqlRewriter())
                 await repo.ensure_semiring_setup()
-                yield ProvenanceService(repo)
+                yield ProvenanceService(repo, agent)
                 return
         except OperationalError:
             # Database doesn't exist on Postgres, try Timescale
@@ -170,7 +188,7 @@ def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[P
             async with get_dynamic_db_conn(timescale_connection_string) as conn:
                 repo = ProvenanceRepository(conn, SqlRewriter())
                 await repo.ensure_semiring_setup()
-                yield ProvenanceService(repo)
+                yield ProvenanceService(repo, agent)
                 return
         except OperationalError:
             # Database doesn't exist on either instance

@@ -34,9 +34,9 @@ async def test_ok_compute_provenance_why_semiring(
     for row in results:
         assert row.answer
         assert row.provenance
-        assert "why" in row.provenance
-        assert row.provenance["why"].expression is not None
-        assert isinstance(row.provenance["why"].data, list)
+        assert row.provenance.why is not None
+        assert row.provenance.why.expression is not None
+        assert isinstance(row.provenance.why.data, list)
 
 
 @pytest.mark.asyncio
@@ -62,9 +62,9 @@ async def test_ok_compute_provenance_formula_semiring(
     for row in results:
         assert row.answer
         assert row.provenance
-        assert "formula" in row.provenance
-        assert row.provenance["formula"].expression is not None
-        assert isinstance(row.provenance["formula"].data, list)
+        assert row.provenance.formula is not None
+        assert row.provenance.formula.expression is not None
+        assert isinstance(row.provenance.formula.data, list)
 
 
 @pytest.mark.asyncio
@@ -87,11 +87,11 @@ async def test_ok_compute_provenance_with_all_semirings(
     assert len(results) > 0
 
     # Each row should have provenance data for every semiring
-    semiring_names = {s.name for s in all_semirings}
     for row in results:
         assert row.answer
         assert row.provenance
-        assert set(row.provenance.keys()) == semiring_names
+        assert row.provenance.why is not None
+        assert row.provenance.formula is not None
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ async def test_ok_compute_provenance_with_aggregation(
     for row in results:
         assert row.answer
         assert row.provenance
-        assert "formula" in row.provenance
+        assert row.provenance.formula is not None
 
 
 @pytest.mark.asyncio
