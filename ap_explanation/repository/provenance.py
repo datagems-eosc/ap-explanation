@@ -422,7 +422,7 @@ class ProvenanceRepository:
 
         return results
 
-    async def get_schema_info(self, schema_name: str) -> str:
+    async def get_schema_definition(self, schema_name: str) -> str:
         """
         Retrieve schema information such as table and column names for the specified schema.
 

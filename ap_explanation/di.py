@@ -67,14 +67,15 @@ def _start_celery_worker() -> threading.Thread:
 
 def get_explainer() -> Explainer:
     api_base = os.getenv("LLM_API_BASE")
-    api_key = os.getenv("LLM_API_KEY", "")
+    api_key = os.getenv("LLM_API_KEY", None)
     model = os.getenv("LLM_API_MODEL")
+    ssl_verify = os.getenv("LLM_SSL_VERIFY", "true").lower() == "true"
 
     if not all([api_base, model]):
         raise ValueError(
             "Missing required environment variables for ExplanationAgent: LLM_API_BASE, LLM_API_KEY, LLM_API_MODEL"
         )
-    return ExplanationAgent(api_base, api_key, model)
+    return ExplanationAgent(api_base, model, api_key, ssl_verify=ssl_verify)
 
 
 @asynccontextmanager

@@ -22,11 +22,11 @@ class ProvenanceService:
     """
 
     _provenance_repo: ProvenanceRepository
-    _explanation_agent: Explainer
+    _explainer: Explainer
 
-    def __init__(self, provenance_repo: ProvenanceRepository, explanation_agent: Explainer):
+    def __init__(self, provenance_repo: ProvenanceRepository, explainer: Explainer):
         self._provenance_repo = provenance_repo
-        self._explanation_agent = explanation_agent
+        self._explainer = explainer
 
     async def annotate_dataset(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
         """
@@ -121,3 +121,10 @@ class ProvenanceService:
             )
             for id in row_order
         ]
+
+    async def explain(self, schema_name: str, sql_query: str, provenance_results: List[ProvenanceResult]) -> str:
+        """
+        Generate a human-readable explanation from provenance results.
+        """
+        schema = await self._provenance_repo.get_schema_definition(schema_name)
+        return await self._explainer.explain(sql_query, str(provenance_results), schema)

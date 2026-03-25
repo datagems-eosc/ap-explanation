@@ -153,3 +153,43 @@ async def test_ko_aggregation_not_supported(
 
     assert why_semiring.name in str(exc_info.value)
     assert "aggregate" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_ok_explain_why(
+    provenance_service: ProvenanceService,
+    why_semiring: DbSemiring,
+    test_schema: TestSchema
+):
+    """Test that explain returns a non-empty string for valid provenance results."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+
+    query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 3"
+    provenance_results = await provenance_service.compute_provenance(test_schema.schema, query, [why_semiring])
+    assert len(provenance_results) > 0
+
+    explanation = await provenance_service.explain(test_schema.schema, query, provenance_results)
+
+    assert explanation is not None
+    assert isinstance(explanation, str)
+    assert len(explanation) > 0
+
+
+@pytest.mark.asyncio
+async def test_ok_explain_formula(
+    provenance_service: ProvenanceService,
+    formula_semiring: DbSemiring,
+    test_schema: TestSchema
+):
+    """Test that explain returns a non-empty string for valid provenance results."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 3"
+    provenance_results = await provenance_service.compute_provenance(test_schema.schema, query, [formula_semiring])
+    assert len(provenance_results) > 0
+
+    explanation = await provenance_service.explain(test_schema.schema, query, provenance_results)
+
+    assert explanation is not None
+    assert isinstance(explanation, str)
+    assert len(explanation) > 0

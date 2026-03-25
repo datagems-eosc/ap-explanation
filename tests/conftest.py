@@ -10,12 +10,12 @@ from psycopg_pool import AsyncConnectionPool
 from testcontainers.core.image import DockerImage
 from testcontainers.postgres import PostgresContainer
 
+from ap_explanation.di import get_explainer
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.provenance import ProvenanceResult
 from ap_explanation.types.semiring import DbSemiring
 
 
@@ -95,11 +95,23 @@ def noop_explainer() -> Explainer:
 
     """
     class NoOpExplainer(Explainer):
-        async def explain(self, provenance_results: List[ProvenanceResult]) -> str:
+        async def explain(self, query: str, provenance: str, database_schema: str) -> str:
             return "No-op explanation"
 
     return NoOpExplainer()
 
+
+@pytest.fixture
+def agent_explainer() -> Explainer:
+    """ 
+    Real explainer for e2e
+    """
+    return get_explainer()
+
+
+# @pytest.fixture
+# def provenance_service(provenance_repository: ProvenanceRepository, agent_explainer: Explainer):
+#     return ProvenanceService(provenance_repository, agent_explainer)
 
 @pytest.fixture
 def provenance_service(provenance_repository: ProvenanceRepository, noop_explainer: Explainer):

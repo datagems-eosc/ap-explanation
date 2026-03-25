@@ -1,15 +1,17 @@
 
-from typing import List, Protocol
-
-from ap_explanation.types.provenance import ProvenanceResult
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class Explainer(Protocol):
-    async def explain(self, provenance_results: List[ProvenanceResult]) -> str:
+
+    async def explain(self, query: str, provenance: str, database_schema: str) -> str:
         """
         Generate a human-readable explanation from provenance results.
         Args:
-            provenance_results: A list of ProvenanceResult objects containing query answers and their provenance information.
+            query: The SQL query for which to generate explanation.
+            provenance: The provenance information for the query.
+            database_schema: The schema definition of the database.
         Returns:
                 str: A human-readable explanation of the provenance information.
         """

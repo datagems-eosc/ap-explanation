@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 
+import litellm
 from litellm import Message, completion
 
 from .explainer import Explainer
@@ -7,17 +8,20 @@ from .explainer import Explainer
 
 class ExplanationAgent(Explainer):
 
-    def __init__(self, api_base: str, api_key: str, model: str):
+    def __init__(self, api_base: str, model: str, api_key: Optional[str] = None, *, ssl_verify: bool = True):
         self.api_base = api_base
         self.model = model
         self.api_key = api_key
+        # Some LLM Api use self-signed certificates
+        litellm.ssl_verify = ssl_verify
 
     def _completion(self, messages: List[Message]) -> str:
         response = completion(
             api_base=self.api_base,
-            api_key=self.api_key,
+            # Do not pass api_key if it's None, litellm will complain
+            **({"api_key": self.api_key} if self.api_key else {}),
             model=self.model,
-            messages=messages
+            messages=messages,
         )
         return response.choices[0].message.content
 
@@ -41,6 +45,7 @@ class ExplanationAgent(Explainer):
             Message(role="system", content=EXPLANATION_PROMPT),
             Message(role="user", content=user_query)
         ]
+
         return self._completion(messages)
 
 
