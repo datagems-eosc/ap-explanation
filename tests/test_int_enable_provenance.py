@@ -64,6 +64,7 @@ async def test_enable_provenance_not_installed_superuser_installs_extension(conn
     """
     When provsql is not installed but the user is a superuser,
     enable_provenance must install the extension and succeed.
+
     """
     async with await AsyncConnection.connect(connstr(), autocommit=True) as conn:
         await conn.execute("DROP EXTENSION IF EXISTS provsql CASCADE")
