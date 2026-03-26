@@ -125,11 +125,31 @@ class ProvenanceRepository:
         Returns:
             True if the table was newly annotated, False if it was already annotated.
         """
-        await self._set_search_path(schema_name)
         newly_annotated = True
         try:
             async with self._conn.transaction():
-                await self._conn.execute("CREATE EXTENSION IF NOT EXISTS provsql CASCADE")
+                # Check if provsql is already installed
+                cursor = await self._conn.execute(
+                    "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'provsql')"
+                )
+                provsql_installed = (await cursor.fetchone())[0]
+
+                if not provsql_installed:
+                    # provsql is not installed — verify the current user is a superuser before attempting
+                    cursor = await self._conn.execute(
+                        "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
+                    )
+                    row = await cursor.fetchone()
+                    is_superuser = row[0] if row else False
+
+                    if not is_superuser:
+                        raise ProvSqlMissingError(
+                            "ProvSQL extension is not installed and the current database user is not a superuser. "
+                            "Please ask a superuser to install the extension with: CREATE EXTENSION provsql CASCADE"
+                        )
+
+                    await self._conn.execute("CREATE EXTENSION IF NOT EXISTS provsql CASCADE")
+                await self._set_search_path(schema_name)
                 await self._conn.execute("SELECT add_provenance(%s)", (table_name,))
         except (errors.UndefinedFile, errors.FeatureNotSupported) as e:
             logger.error(

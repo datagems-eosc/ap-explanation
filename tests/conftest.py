@@ -50,16 +50,23 @@ def postgres_container():
             yield postgres
 
 
-@pytest_asyncio.fixture
-async def db_pool(postgres_container: PostgresContainer) -> AsyncGenerator[AsyncConnectionPool]:
-    """Provides a connection to the test database."""
-    qs = postgres_container.get_connection_url()
-    parsed = urlparse(qs)
-    scheme = parsed.scheme.split("+", 1)[0]  # remove +psycopg2
-    qs = urlunparse(parsed._replace(scheme=scheme))
+@pytest.fixture
+def connstr(postgres_container: PostgresContainer):
+    """Returns a factory that builds a psycopg connection string for the container, optionally overriding user/password."""
+    def _build(user: str = "provdemo", password: str = "provdemo") -> str:
+        qs = postgres_container.get_connection_url()
+        parsed = urlparse(qs)
+        scheme = parsed.scheme.split("+", 1)[0]  # strip +psycopg2 suffix
+        netloc = f"{user}:{password}@{parsed.hostname}:{parsed.port}"
+        return urlunparse(parsed._replace(scheme=scheme, netloc=netloc))
+    return _build
 
+
+@pytest_asyncio.fixture
+async def db_pool(connstr) -> AsyncGenerator[AsyncConnectionPool]:
+    """Provides a connection to the test database."""
     pool = AsyncConnectionPool(
-        conninfo=qs,
+        conninfo=connstr(),
         min_size=1,
         max_size=5,
     )
