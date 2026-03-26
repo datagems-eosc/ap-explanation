@@ -34,6 +34,13 @@ class ProvenanceRepository:
         self._conn = conn
         self._sql_rewriter = sql_rewriter
 
+    @classmethod
+    async def create(cls, conn: AsyncConnection, sql_rewriter: SqlRewriter) -> "ProvenanceRepository":
+        repo = cls(conn, sql_rewriter)
+        await repo.ensure_semiring_setup()
+        await conn.execute("SET provsql.active = 1")
+        return repo
+
     async def query(self, schema_name: str, query: str, semiring: DbSemiring) -> list[ProvSQLRow]:
         """
         Execute a SQL query with provenance tracking and return structured results.

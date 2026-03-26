@@ -74,9 +74,9 @@ async def _do_explain(
         # 3. Compute NL explanation (if enabled)
         explanation = await service.explain(schema_name, query, derivations)
 
-        # 4. Remove annotation (see provsql issue #67 workaround)
-        for table_name in tables_names:
-            await service.remove_annotation(table_name, schema_name)
+        # # 4. Remove annotation (see provsql issue #67 workaround)
+        # for table_name in tables_names:
+        #     await service.remove_annotation(table_name, schema_name)
 
         prov = Provenance(derivations=derivations, explanation=explanation)
 

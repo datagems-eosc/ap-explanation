@@ -51,7 +51,6 @@ async def compute_provenance_ap(
     """Compute provenance for the AP with all available semirings.
 
     Tables must already be annotated via POST /aps/explanation/manual/annotations.
-    Returns the result synchronously and removes the annotation afterwards.
     """
     service_factory = get_provenance_service_for_ap(db_name)
 
@@ -60,10 +59,6 @@ async def compute_provenance_ap(
         try:
             query = sql_node.properties["query"] if sql_node.properties else ""
             prov = await service.compute_provenance(schema_name, query, semirings)
-            # NOTE: mitigates https://github.com/PierreSenellart/provsql/issues/67
-            # Leaving provenance enabled blocks some queries; remove after computing.
-            for table_name in tables_names:
-                await service.remove_annotation(table_name, schema_name)
             result = prov
         except Exception as e:
             _provenance_error_handler(e)

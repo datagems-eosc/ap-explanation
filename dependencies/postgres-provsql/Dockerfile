@@ -32,6 +32,7 @@ COPY ${FIXTURES_PATH}/* /docker-entrypoint-initdb.d/
 RUN mkdir -p /etc/postgresql && \
     echo "shared_preload_libraries = 'provsql'" >> /etc/postgresql/postgresql.conf && \
     echo "listen_addresses = '*'" >> /etc/postgresql/postgresql.conf && \
+    echo "provsql.active = 0" >> /etc/postgresql/postgresql.conf && \
     echo "local all all trust" > /etc/postgresql/pg_hba.conf && \
     echo "host all all 0.0.0.0/0 trust" >> /etc/postgresql/pg_hba.conf
 

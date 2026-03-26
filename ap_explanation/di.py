@@ -181,8 +181,7 @@ def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[P
         agent = get_explainer()
         try:
             async with get_dynamic_db_conn(postgres_connection_string) as conn:
-                repo = ProvenanceRepository(conn, SqlRewriter())
-                await repo.ensure_semiring_setup()
+                repo = await ProvenanceRepository.create(conn, SqlRewriter())
                 yield ProvenanceService(repo, agent)
                 return
         except OperationalError:
@@ -194,8 +193,7 @@ def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[P
 
         try:
             async with get_dynamic_db_conn(timescale_connection_string) as conn:
-                repo = ProvenanceRepository(conn, SqlRewriter())
-                await repo.ensure_semiring_setup()
+                repo = await ProvenanceRepository.create(conn, SqlRewriter())
                 yield ProvenanceService(repo, agent)
                 return
         except OperationalError:

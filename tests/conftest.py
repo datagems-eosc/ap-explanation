@@ -82,9 +82,7 @@ async def provenance_repository(db_connection: AsyncConnection, sql_rewriter: Sq
     """
     Returns a ProvenanceRepository with semiring setup ensured.
     """
-    repo = ProvenanceRepository(db_connection, sql_rewriter)
-    await repo.ensure_semiring_setup()
-    return repo
+    return await ProvenanceRepository.create(db_connection, sql_rewriter)
 
 
 @pytest.fixture
