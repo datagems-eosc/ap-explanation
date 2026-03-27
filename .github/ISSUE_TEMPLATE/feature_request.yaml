@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-issue-forms.json
+---
+name: Feature Request
+description: Request a new feature or improvement
+title: "[Feature]: "
+labels: [feature]
+body:
+  - type: markdown
+    attributes:
+      value: "## Feature overview"
+  - type: textarea
+    attributes:
+      label: Overview
+      description: What are you proposing to add, update, or remove?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Motivation / use case
+      description: Why is this feature needed? Which problem does it solve or which workflow does it improve?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Acceptance criteria
+      description: What will need to be completed for this feature to be marked "Done"?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: "## Additional context"
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: Add any other context, screenshots, or references about the feature here.
+      placeholder: |
+        Links? References? Anything that will give us more context about the feature you are looking for!
+
+        Tip: You can attach images or files by clicking this area to highlight it and then dragging files in.
+    validations:
+      required: false
