@@ -49,4 +49,4 @@ py-modules = ["ap_explanation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-n auto --maxprocesses=12"
+addopts = "-n auto --maxprocesses=4"
