@@ -124,6 +124,12 @@ def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
     return next(s for s in all_semirings if s.name == "formula")
 
 
+@pytest.fixture(scope="session")
+def boolean_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+    """Boolean provenance semiring configuration for testing."""
+    return next(s for s in all_semirings if s.name == "boolean")
+
+
 @pytest.fixture(
     scope="session",
     params=list(Path(__file__).parent.parent.glob(

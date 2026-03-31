@@ -68,6 +68,34 @@ async def test_ok_compute_provenance_formula_semiring(
 
 
 @pytest.mark.asyncio
+async def test_ok_compute_provenance_boolean_semiring(
+    provenance_service: ProvenanceService,
+    boolean_semiring: DbSemiring,
+    test_schema: TestSchema
+):
+    """Test computing provenance with a single semiring."""
+    # First annotate the table
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [boolean_semiring])
+
+    # Query with provenance
+    query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
+    result_json = await provenance_service.compute_provenance(test_schema.schema, query, [boolean_semiring])
+
+    # Verify we got valid results
+    assert result_json is not None
+    results = result_json
+    assert len(results) > 0  # Has rows
+
+    # Verify each result has the new structure
+    for row in results:
+        assert row.answer
+        assert row.provenance
+        assert boolean_semiring.name in row.provenance
+        assert row.provenance[boolean_semiring.name].expression is not None
+        assert isinstance(row.provenance[boolean_semiring.name].data, list)
+
+
+@pytest.mark.asyncio
 async def test_ok_compute_provenance_with_all_semirings(
     provenance_service: ProvenanceService,
     all_semirings: List[DbSemiring],
