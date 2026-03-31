@@ -28,7 +28,7 @@ def _make_csv_source(csv_filenames: list[str], delimiter: str = ",") -> CsvSetDa
             labels=["CSV", "Data"],
             properties={
                 "name": name,
-                "contentUrl": f"s3:/real_mathe/{name}",
+                "contentUrl": f"s3:/csvs/{name}",
             },
         )
         for i, name in enumerate(csv_filenames)
