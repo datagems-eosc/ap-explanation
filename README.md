@@ -8,6 +8,52 @@ A FastAPI service that explains **where SQL query results come from**, using [Pr
 Given a query, the service returns:
 - **Formula semiring** — how results were computed: `(students₁ ⊗ grades₂) ⊕ students₃`
 - **Why semiring** — which source rows contributed: `["students(1)", "grades(2)"]`
+- **Natural-language explanation** (optional, LLM-powered) — a human-readable summary of the provenance
+
+The service supports two data source types, declared in the Analytical Pattern (AP) graph.
+
+### Relational Database
+
+The data node uses the label `Relational_Database` and points to an existing PostgreSQL database via `name`. Tables are listed as child nodes with label `Table`.
+
+```jsonc
+// fixtures/explain_sql_query_mathe.json (trimmed)
+{
+  "id": "...",
+  "labels": ["Relational_Database"],
+  "properties": {
+    "name": "mathe",
+  }
+}
+// child nodes:
+{ "labels": ["Table"], "properties": { "name": "mathe.assessment" } }
+{ "labels": ["Table"], "properties": { "name": "mathe.platform__topic" } }
+```
+
+The service connects directly to the database and runs provenance queries against the existing tables.
+
+### CSV Set
+
+The data node uses the label `CSV_Set`. Individual CSV files are child nodes with label `CSV` and a `contentUrl` referencing an S3 path.
+
+```jsonc
+// fixtures/explain_sql_query_csv.json (trimmed)
+{
+  "id": "...",
+  "labels": ["CSV_Set", "Data"],
+  "properties": { "delimiter": "," }
+}
+// child node:
+{
+  "labels": ["CSV", "Data", "cr:FileObject"],
+  "properties": {
+    "name": "assessment.csv",
+    "contentUrl": "s3:/assessment.csv"
+  }
+}
+```
+
+The service reads the CSV files from `S3_MOUNT_PATH`, loads them into a **temporary PostgreSQL schema**, runs the provenance query, then cleans up.
 
 > Full documentation: **https://datagems-eosc.github.io/ap-explanation/**
 
@@ -96,6 +142,7 @@ Copy `.env.example` to `.env` and fill in the values.
 |---|---|---|---|
 | `REDIS_BROKER_URI` | No | `redis://redis:6379/0` | Redis URL used as Celery broker, result backend, cache and distributed lock |
 | `USE_EMBEDDED_CELERY_WORKER` | No | `true` | Start a Celery worker inside the FastAPI process. Set to `false` when using standalone workers |
+| `S3_MOUNT_PATH` | No | `/mnt/s3` | Local path where CSV source files are mounted (used by the CSV data source) |
 | `ROOT_PATH` | No | `""` | API root path when behind a reverse proxy |
 
 ### LLM — Natural-language explanations (optional)
@@ -150,6 +197,13 @@ pytest tests/
 
 Tests use `testcontainers` to spin up a PostgreSQL + ProvSQL instance automatically — no manual setup needed.
 
+## Health & Readiness
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/v1/health` | Liveness check — always returns `{"status": "ok"}` |
+| `GET /api/v1/ready` | Readiness check — verifies Redis is reachable (returns 503 if not) |
+
 ## "Manual" endpoints
 
 > **Advanced usage — not recommended for most cases.** See the warning below.
@@ -162,7 +216,12 @@ The `/manual` endpoints expose the individual steps that the managed `POST /expl
 | `POST /api/v1/aps/explanation/manual/computations` | Run the query and retrieve provenance results, then remove annotations |
 | `DELETE /api/v1/aps/explanation/manual/annotations` | Remove annotations manually if the computation step was skipped or failed |
 
-**Why this is advanced:** while tables are annotated, ProvSQL rewrites every query touching them (including when NOT querying provenance). In particular, nested queries with aggregations on both the inner and outer level are not supported by ProvSQL and will fail even if they don't involve provenance at all. The managed endpoint avoids this window by keeping the annotated state as short as possible and locking the database. Using the manual endpoints means you own that responsibility.
+All manual endpoints accept a `/{semiring_name}` suffix to target a specific semiring.
+
+### Why this is advanced 
+
+while tables are annotated, ProvSQL rewrites every query touching them (including when NOT querying provenance). In particular, nested queries with aggregations on both the inner and outer level are not supported by ProvSQL and will fail even if they don't involve provenance at all. The managed endpoint avoids this window by keeping the annotated state as short as possible and locking the database. Using the manual endpoints means you own that responsibility.
+
 ---
 
 ## Documentation

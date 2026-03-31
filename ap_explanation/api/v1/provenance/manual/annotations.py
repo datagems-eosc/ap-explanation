@@ -4,13 +4,11 @@ from typing import List, Literal
 from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
 
-from ap_explanation.api.v1.dependencies.ap_parser import (
-    DatabaseName,
-    SchemaName,
-    TableNames,
-)
 from ap_explanation.di import get_provenance_service_for_ap, get_semirings
 from ap_explanation.errors import TableOrSchemaNotFoundError
+from ap_explanation.types.provenance_analytical_pattern import (
+    ProvenanceAnalyticalPattern,
+)
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -35,9 +33,7 @@ class RemovalResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 async def annotate_ap(
-    db_name: DatabaseName,
-    tables_names: TableNames,
-    schema_name: SchemaName,
+    ap: ProvenanceAnalyticalPattern,
     semirings: List[DbSemiring] = Depends(get_semirings)
 ) -> List[AnnotationResult]:
     """Annotate AP tables with all available semirings.
@@ -46,15 +42,16 @@ async def annotate_ap(
     POST /aps/explanation/manual/computations, then clean up via
     DELETE /aps/explanation/manual/annotations.
     """
-    logger.info(f"Annotating tables: {tables_names} with all semirings")
+    ds = ap.data_source
+    logger.info(f"Annotating tables: {ds.table_names} with all semirings")
     results: List[AnnotationResult] = []
 
-    service_factory = get_provenance_service_for_ap(db_name)
+    service_factory = get_provenance_service_for_ap(ds)
 
     async for prov_svc in service_factory():
-        for table_name in tables_names:
+        for table_name in ds.table_names:
             try:
-                was_annotated = await prov_svc.annotate_dataset(table_name, schema_name, semirings)
+                was_annotated = await prov_svc.annotate_dataset(table_name, ds.schema_name, semirings)
                 for semiring in semirings:
                     if was_annotated:
                         results.append(AnnotationResult(
@@ -98,9 +95,7 @@ async def annotate_ap(
 
 async def annotate_ap_with_semiring(
     semiring_name: str,
-    db_name: DatabaseName,
-    tables_names: TableNames,
-    schema_name: SchemaName,
+    ap: ProvenanceAnalyticalPattern,
     all_semirings: List[DbSemiring] = Depends(get_semirings)
 ) -> List[AnnotationResult]:
     """Annotate AP tables with a specific semiring.
@@ -118,16 +113,17 @@ async def annotate_ap_with_semiring(
             detail=f"Semiring '{semiring_name}' not found. Available semirings: {available}"
         )
 
+    ds = ap.data_source
     logger.info(
-        f"Annotating tables: {tables_names} with semiring '{semiring_name}'")
+        f"Annotating tables: {ds.table_names} with semiring '{semiring_name}'")
     results: List[AnnotationResult] = []
 
-    service_factory = get_provenance_service_for_ap(db_name)
+    service_factory = get_provenance_service_for_ap(ds)
 
     async for prov_svc in service_factory():
-        for table_name in tables_names:
+        for table_name in ds.table_names:
             try:
-                was_annotated = await prov_svc.annotate_dataset(table_name, schema_name, [semiring])
+                was_annotated = await prov_svc.annotate_dataset(table_name, ds.schema_name, [semiring])
                 if was_annotated:
                     results.append(AnnotationResult(
                         table_name=table_name,
@@ -170,9 +166,7 @@ async def annotate_ap_with_semiring(
 # ---------------------------------------------------------------------------
 
 async def remove_annotation_ap(
-    db_name: DatabaseName,
-    tables_names: TableNames,
-    schema_name: SchemaName,
+    ap: ProvenanceAnalyticalPattern,
     semirings: List[DbSemiring] = Depends(get_semirings)
 ) -> List[RemovalResult]:
     """Remove provenance annotations from AP tables.
@@ -180,16 +174,17 @@ async def remove_annotation_ap(
     Part of the manual explanation lifecycle. Call this after
     POST /aps/explanation/manual/computations to clean up annotations.
     """
+    ds = ap.data_source
     logger.info(
-        f"Removing annotations from tables: {tables_names} for all semirings")
+        f"Removing annotations from tables: {ds.table_names} for all semirings")
     results: List[RemovalResult] = []
 
-    service_factory = get_provenance_service_for_ap(db_name)
+    service_factory = get_provenance_service_for_ap(ds)
 
     async for prov_svc in service_factory():
-        for table_name in tables_names:
+        for table_name in ds.table_names:
             try:
-                was_removed = await prov_svc.remove_annotation(table_name, schema_name)
+                was_removed = await prov_svc.remove_annotation(table_name, ds.schema_name)
                 for semiring in semirings:
                     if was_removed:
                         results.append(RemovalResult(

@@ -38,3 +38,19 @@ class PgJson(BaseModel):
 
     def get_nodes_by_label(self, label: str) -> List[PgJsonNode]:
         return [n for n in self.nodes if label in n.labels]
+
+    def _dfs_iter_undirected(self, start_id: str) -> List[str]:
+        """Returns all node IDs reachable from start_id treating edges as undirected."""
+        visited: set = set()
+        stack = [start_id]
+        while stack:
+            node_id = stack.pop()
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+            for e in self.edges:
+                if e.from_ == node_id and e.to not in visited:
+                    stack.append(e.to)
+                elif e.to == node_id and e.from_ not in visited:
+                    stack.append(e.from_)
+        return list(visited)
