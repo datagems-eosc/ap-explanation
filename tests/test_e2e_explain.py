@@ -31,7 +31,7 @@ from ap_explanation.types.semiring import DbSemiring
 # CSV fixture files reference paths like "s3:/assessment.csv" which resolve
 # to ``<src_dir>/assessment.csv``.  The real CSVs live in fixtures/real_mathe/.
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
-CSV_SRC_DIR = FIXTURES_DIR / "real_mathe"
+CSV_SRC_DIR = FIXTURES_DIR / "csvs"
 
 
 @pytest.mark.asyncio
