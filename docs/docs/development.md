@@ -57,17 +57,25 @@ ap_explanation/
 │   │   ├── managed/     # Async lifecycle (dispatch + poll)
 │   │   └── manual/      # Sync lifecycle (annotate / compute / remove)
 │   ├── dependencies/    # FastAPI dependencies (AP parser)
-│   └── health.py        # Health check endpoint
+│   └── health.py        # Health & readiness endpoints
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
 ├── repository/          # Data access layer
 │   ├── mapping/         # Mapping strategies (ctid, etc.)
 │   └── resources/       # SQL scripts for semiring setup
-├── internal/            # SQL rewriting
-├── types/               # Type definitions (PG-JSON, semiring)
+├── internal/            # Internal modules
+│   ├── explainer/       # LLM-powered NL explanations
+│   ├── cache.py         # Redis cache provider
+│   ├── distributed_lock.py  # Redis distributed lock
+│   └── sql_rewriter.py  # SQL rewriting for provenance
+├── types/               # Type definitions
+│   ├── data_sources/    # Data source types (relational DB, CSV set)
+│   ├── analytical_pattern.py
+│   ├── semiring.py
+│   └── provenance.py
 ├── errors/              # Custom exceptions
 ├── semirings.py         # Semiring configurations
-├── di.py                # Dependency injection
+├── di.py                # Dependency injection & lifespan
 ├── celery_app.py        # Celery application
 └── main.py              # FastAPI application entry point
 ```
@@ -120,8 +128,7 @@ mypy ap_explanation/
 Build documentation locally:
 
 ```bash
-cd docs/
-mkdocs serve
+make docs
 ```
 
 Visit http://localhost:8000

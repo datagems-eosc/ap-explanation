@@ -47,6 +47,7 @@ def postgres_container():
             password="provdemo",
             dbname="mathe"
         ) as postgres:
+            print(postgres.get_logs())
             yield postgres
 
 
@@ -78,9 +79,11 @@ async def db_pool(connstr) -> AsyncGenerator[AsyncConnectionPool]:
 @pytest_asyncio.fixture
 async def db_connection(db_pool: AsyncConnectionPool) -> AsyncGenerator[AsyncConnection]:
     """
-    Returns a database connection from the pool.
+    Returns a database connection from the pool with autocommit enabled,
+    matching the production behaviour in create_connection_pool.
     """
     async with db_pool.connection() as conn:
+        await conn.set_autocommit(True)
         yield conn
 
 
@@ -125,6 +128,17 @@ def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
 def boolean_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
     """Boolean provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "boolean")
+
+
+@pytest.fixture(
+    scope="session",
+    params=list(Path(__file__).parent.parent.glob(
+        "fixtures/explain_sql_query*.json")),
+    ids=lambda p: p.stem,
+)
+def explain_sql_query_file(request) -> Path:
+    """Parametrized fixture yielding each explain_sql_query*.json fixture file path."""
+    return request.param
 
 
 @pytest.fixture(autouse=True, scope="session")

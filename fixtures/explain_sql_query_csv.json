@@ -1,0 +1,86 @@
+{
+  "$schema": "https://datagems-dev.scayle.es/moma2/v1/schemas/ap/ap-common.schema.json",
+  "edges": [
+    {
+      "from": "d2e917a5-563b-4a4c-a332-e4968ad6a20a",
+      "labels": [
+        "consist_of"
+      ],
+      "to": "ce77ef2b-d668-4dca-9314-3f38cde9cee2"
+    },
+    {
+      "from": "ce77ef2b-d668-4dca-9314-3f38cde9cee2",
+      "labels": [
+        "input"
+      ],
+      "to": "1928a6b4-9e92-40f9-b8e3-d28553694d6d"
+    },
+      {
+      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "labels": [
+        "containedIn"
+      ],
+      "to": "2a494fe5-e6bb-4202-b9cc-38ee26878d7f"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "d2e917a5-563b-4a4c-a332-e4968ad6a20a",
+      "labels": [
+        "Analytical_Pattern"
+      ],
+      "properties": {
+        "description": "Analytical Pattern to query a dataset using Provenance annotations",
+        "name": "Query Dataset AP",
+        "process": "query",
+        "publishedDate": "2025-06-30",
+        "startTime": "10:00:00"
+      }
+    },
+    {
+      "id": "ce77ef2b-d668-4dca-9314-3f38cde9cee2",
+      "labels": [
+        "Operator",
+        "Provenance_SQL_Operator"
+      ],
+      "properties": {
+        "description": "Query the dataset with the provenance explanations",
+        "name": "Provenance Query Operator",
+        "command": "query",
+        "queryType": "SELECT",
+        "publishedDate": "2025-06-30",
+        "query": "SELECT DISTINCT topic FROM assessment LIMIT 3",
+        "startTime": "10:00:00",
+        "step": 1,
+        "type": "SQL Query"
+      }
+    },
+    {
+      "id": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "labels": [
+        "CSV_Set",
+        "Data"
+      ],
+      "properties": {
+        "delimiter": ","
+      }
+    },
+    {
+      "id": "2a494fe5-e6bb-4202-b9cc-38ee26878d7f",
+      "labels": [
+        "CSV",
+        "Data",
+        "cr:FileObject"
+      ],
+      "properties": {
+        "contentSize": "154411 B",
+        "contentUrl": "s3:/assessment.csv",
+        "description": "",
+        "encodingFormat": "text/csv",
+        "name": "assessment.csv",
+        "sha256": "4557c4a41f3f53993afc5059e6f7e41a25414af281c189dfcff1303dc47f8706",
+        "type": "cr:FileObject"
+      }
+    }
+  ]
+}

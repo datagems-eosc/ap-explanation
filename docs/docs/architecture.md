@@ -40,6 +40,10 @@ The service has specific database prerequisites:
 
 - **Dynamic Connection Management**: Connection pools are created per-AP (Analytical Pattern) processing and cleaned up after completion, ensuring efficient resource utilization
 
+- **Data Source Types**: The service supports two data source types:
+  - **Relational Database** (`RelationalDbDataSource`): connects to existing PostgreSQL tables
+  - **CSV Set** (`CsvSetDataSource`): loads CSV files into a temporary schema in a `playground` database, runs provenance, then drops the schema
+
 - **Automatic Initialization**: When the service connects to the database, it automatically pushes semiring type definitions and related functions. This includes:
   - Custom PostgreSQL types for semiring state management
   - Semiring operation functions (addition, multiplication, monus)
@@ -137,6 +141,11 @@ Key points:
 - The **cache** (Redis) is checked first — identical requests are served without touching the database.
 - The **distributed lock** ensures only one task runs against a given database at a time, preventing annotation conflicts.
 - **Annotation** adds ProvSQL provenance tokens to the target tables, **computation** runs the rewritten query, and **removal** cleans up the tokens afterwards.
+
+### Caching and Locking
+
+- **Redis Cache** (`RedisCacheProvider`): Results are cached under a SHA-256 key derived from all input parameters. Cache hits skip the database entirely. Default TTL is 1 hour.
+- **Distributed Lock** (`RedisLockProvider`): A per-database Redis lock (`explain_lock:{db_name}`) ensures only one explain task runs against a given database at a time, preventing annotation conflicts.
 
 ### Dependency Injection
 

@@ -1,8 +1,10 @@
 services:
   devcontainer:
-    image: mcr.microsoft.com/devcontainers/python:3.14-trixie
+    image: mcr.microsoft.com/devcontainers/python:3.14
+
     volumes:
       - ../..:/workspaces:cached
+      - ./daemon.json:/etc/docker/daemon.json
     #    network_mode: service:db
     command: sleep infinity
     environment:
@@ -29,7 +31,6 @@ services:
       dockerfile: dependencies/postgres-provsql/Dockerfile
       args:
         FIXTURES_PATH: fixtures/postgres-seed
-    container_name: postgres-provsql
     ports:
       - "5432:5432"
     volumes:
@@ -49,7 +50,6 @@ services:
   # --- Redis Service ---
   redis:
     image: redis:7-alpine
-    container_name: redis
     restart: always
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -60,10 +60,10 @@ services:
   # --- Flower Dashboard (Celery monitoring) ---
   flower:
     image: mher/flower:master
-    container_name: flower
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_UNAUTHENTICATED_API=true
     ports:
       - "5555:5555"
     restart: always

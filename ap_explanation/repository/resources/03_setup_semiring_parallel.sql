@@ -1,8 +1,5 @@
 SET client_encoding = 'UTF8';
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS provsql WITH SCHEMA public;
-
 -- implementation for Formula semiring
 DROP TYPE IF EXISTS public.formula_state;
 CREATE TYPE public.formula_state AS (

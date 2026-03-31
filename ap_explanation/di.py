@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator, Callable
 
 from dotenv import load_dotenv
@@ -17,15 +18,13 @@ from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
 from ap_explanation.services.provenance import ProvenanceService
+from ap_explanation.types.data_sources import DataSource
 from ap_explanation.types.semiring import DbSemiring
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 REDIS_BROKER_URI = os.getenv("REDIS_BROKER_URI", "redis://redis:6379/0")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+S3_MOUNT_PATH = os.getenv("S3_MOUNT_PATH", "/mnt/s3")
 # When True (default), the FastAPI process spawns a Celery worker in a daemon
 # thread so no separate worker process is needed. Set to 'false' when running
 # dedicated standalone workers (e.g. via Docker) to avoid double-processing.
@@ -42,6 +41,10 @@ def get_lock_provider() -> LockProvider:
 
 def get_cache_provider() -> CacheProvider:
     return cache_provider
+
+
+def get_s3_mount_path() -> Path:
+    return Path(S3_MOUNT_PATH)
 
 
 def _start_celery_worker() -> threading.Thread:
@@ -108,7 +111,7 @@ async def container_lifespan(_: FastAPI):
 
 
 @asynccontextmanager
-async def get_dynamic_db_conn(connection_string: str) -> AsyncGenerator[AsyncConnection, None]:
+async def create_connection_pool(connection_string: str) -> AsyncGenerator[AsyncConnection, None]:
     """
     Validates the connection string by opening a direct connection first, then creates a
     temporary database connection pool, yields a connection, and closes the pool afterwards.
@@ -144,15 +147,13 @@ async def get_semirings() -> list[DbSemiring]:
     return semirings
 
 
-def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
+def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
     """
     Factory function to create a provenance service dependency with dynamic database connection.
     The connection pool is created when the AP is processed and closed when processing completes.
-    Tries to connect to the Postgres instance first, then falls back to Timescale if the database
-    doesn't exist on Postgres.
 
     Args:
-        db_name: Database name to connect to
+        data_source: The resolved data source from the Provenance AP.
 
     Returns:
         Dependency function for ProvenanceService that can be used in FastAPI routes
@@ -161,8 +162,7 @@ def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[P
         DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
 
-    async def _provide_service() -> AsyncGenerator[ProvenanceService, None]:
-        # Get connection parameters from environment variables
+    async def check_db_location(db_name: str) -> str:
         user = os.getenv("POSTGRES_USER")
         password = os.getenv("POSTGRES_PASSWORD")
         postgres_host = os.getenv("POSTGRES_HOST")
@@ -175,29 +175,34 @@ def get_provenance_service_for_ap(db_name: str) -> Callable[[], AsyncGenerator[P
                 "Missing required environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST"
             )
 
-        # Try Postgres instance first
         postgres_connection_string = f"postgresql://{user}:{password}@{postgres_host}:{postgres_port}/{db_name}"
-
-        agent = get_explainer()
-        try:
-            async with get_dynamic_db_conn(postgres_connection_string) as conn:
-                repo = await ProvenanceRepository.create(conn, SqlRewriter())
-                yield ProvenanceService(repo, agent)
-                return
-        except OperationalError:
-            # Database doesn't exist on Postgres, try Timescale
-            pass
-
-        # Try Timescale instance
         timescale_connection_string = f"postgresql://{user}:{password}@{timescale_host}:{timescale_port}/{db_name}"
 
+        # Try Postgres first
         try:
-            async with get_dynamic_db_conn(timescale_connection_string) as conn:
-                repo = await ProvenanceRepository.create(conn, SqlRewriter())
-                yield ProvenanceService(repo, agent)
-                return
+            check_conn = await AsyncConnection.connect(postgres_connection_string)
+            await check_conn.close()
+            return postgres_connection_string
         except OperationalError:
-            # Database doesn't exist on either instance
-            raise DatabaseNotFoundError(db_name)
+            pass
+
+        # Then try Timescale
+        try:
+            check_conn = await AsyncConnection.connect(timescale_connection_string)
+            await check_conn.close()
+            return timescale_connection_string
+        except OperationalError:
+            pass
+
+        raise DatabaseNotFoundError(db_name)
+
+    async def _provide_service() -> AsyncGenerator[ProvenanceService, None]:
+        qs = await check_db_location(data_source.db_name)
+        async with create_connection_pool(qs) as pool:
+            # NOTE: Some data sources require set up
+            async with data_source.seed_database(pool, get_s3_mount_path()):
+                repo = await ProvenanceRepository.create(pool, SqlRewriter())
+                yield ProvenanceService(repo, get_explainer())
+            return
 
     return _provide_service

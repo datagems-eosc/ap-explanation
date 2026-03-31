@@ -2,18 +2,15 @@ from typing import List
 
 from fastapi import Depends, HTTPException, status
 
-from ap_explanation.api.v1.dependencies.ap_parser import (
-    DatabaseName,
-    SchemaName,
-    SqlOperator,
-    TableNames,
-)
 from ap_explanation.di import get_provenance_service_for_ap, get_semirings
 from ap_explanation.errors import (
     ProvSqlInternalError,
     ProvSqlMissingError,
     SemiringOperationNotSupportedError,
     TableNotAnnotatedError,
+)
+from ap_explanation.types.provenance_analytical_pattern import (
+    ProvenanceAnalyticalPattern,
 )
 from ap_explanation.types.semiring import DbSemiring
 
@@ -42,23 +39,21 @@ def _provenance_error_handler(e: Exception) -> None:
 # ---------------------------------------------------------------------------
 
 async def compute_provenance_ap(
-    db_name: DatabaseName,
-    sql_node: SqlOperator,
-    schema_name: SchemaName,
-    tables_names: TableNames,
+    ap: ProvenanceAnalyticalPattern,
     semirings: List[DbSemiring] = Depends(get_semirings)
 ):
     """Compute provenance for the AP with all available semirings.
 
     Tables must already be annotated via POST /aps/explanation/manual/annotations.
     """
-    service_factory = get_provenance_service_for_ap(db_name)
+    ds = ap.data_source
+    query = ap.sql_operator.properties["query"]
+    service_factory = get_provenance_service_for_ap(ds)
 
     result = []
     async for service in service_factory():
         try:
-            query = sql_node.properties["query"] if sql_node.properties else ""
-            prov = await service.compute_provenance(schema_name, query, semirings)
+            prov = await service.compute_provenance(ds.schema_name, query, semirings)
             result = prov
         except Exception as e:
             _provenance_error_handler(e)
@@ -73,9 +68,7 @@ async def compute_provenance_ap(
 
 async def compute_provenance_ap_with_semiring(
     semiring_name: str,
-    db_name: DatabaseName,
-    sql_node: SqlOperator,
-    schema_name: SchemaName,
+    ap: ProvenanceAnalyticalPattern,
     all_semirings: List[DbSemiring] = Depends(get_semirings)
 ):
     """Compute provenance for the AP with a specific semiring.
@@ -92,13 +85,14 @@ async def compute_provenance_ap_with_semiring(
             detail=f"Semiring '{semiring_name}' not found. Available semirings: {available}"
         )
 
-    service_factory = get_provenance_service_for_ap(db_name)
+    ds = ap.data_source
+    query = ap.sql_operator.properties["query"]
+    service_factory = get_provenance_service_for_ap(ds)
 
     result = []
     async for service in service_factory():
         try:
-            query = sql_node.properties["query"] if sql_node.properties else ""
-            prov = await service.compute_provenance(schema_name, query, [semiring])
+            prov = await service.compute_provenance(ds.schema_name, query, [semiring])
             result = prov
         except Exception as e:
             _provenance_error_handler(e)

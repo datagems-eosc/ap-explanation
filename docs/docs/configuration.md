@@ -4,20 +4,38 @@ This document describes how to configure the AP Explanation service for differen
 
 ## Environment Variables
 
-The service requires the following environment variables to connect to PostgreSQL databases:
+Copy `.env.example` to `.env` and fill in the values.
 
-### Required Variables
+### PostgreSQL
 
-- `POSTGRES_USER`: PostgreSQL username
-- `POSTGRES_PASSWORD`: PostgreSQL password  
-- `POSTGRES_HOST`: Hostname or IP address of the primary PostgreSQL server
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POSTGRES_USER` | Yes | — | PostgreSQL username |
+| `POSTGRES_PASSWORD` | Yes | — | PostgreSQL password |
+| `POSTGRES_HOST` | Yes | — | Primary PostgreSQL host |
+| `POSTGRES_PORT` | No | `5432` | Primary PostgreSQL port |
+| `POSTGRES_TIMESCALE_HOST` | No | — | Fallback PostgreSQL host (e.g. a Timescale instance). If set, the service retries here when the target database is not found on the primary host |
+| `POSTGRES_TIMESCALE_PORT` | No | `5433` | Port for the fallback PostgreSQL host |
 
-### Optional Variables
+### Infrastructure
 
-- `POSTGRES_PORT`: Port for the primary PostgreSQL server (default: `5432`)
-- `POSTGRES_TIMESCALE_HOST`: Hostname for the Timescale/secondary PostgreSQL server
-- `POSTGRES_TIMESCALE_PORT`: Port for the Timescale server (default: `5433`)
-- `ROOT_PATH`: Root path for the API when behind a reverse proxy (default: `""`)
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `REDIS_BROKER_URI` | No | `redis://redis:6379/0` | Redis URL used as Celery broker, result backend, cache and distributed lock |
+| `USE_EMBEDDED_CELERY_WORKER` | No | `true` | Start a Celery worker inside the FastAPI process. Set to `false` when using standalone workers |
+| `S3_MOUNT_PATH` | No | `/mnt/s3` | Local path where CSV source files are mounted (used by the CSV data source) |
+| `ROOT_PATH` | No | `""` | API root path when behind a reverse proxy |
+
+### LLM — Natural-language explanations (optional)
+
+When `LLM_API_BASE` is not set, natural-language explanations are silently disabled and the service falls back to returning only the raw semiring result.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `LLM_API_BASE` | No | — | Base URL of an OpenAI-compatible LLM API. If omitted, NL explanations are disabled |
+| `LLM_API_MODEL` | If `LLM_API_BASE` set | — | Model name to pass to the LLM API (e.g. `gpt-4o`, `mistral-7b`) |
+| `LLM_API_KEY` | No | — | API key for the LLM endpoint. Leave empty for unauthenticated / local endpoints |
+| `LLM_SSL_VERIFY` | No | `true` | Set to `false` to disable TLS certificate verification for the LLM endpoint (useful for self-hosted models with self-signed certs) |
 
 ### Database Connection Behavior
 

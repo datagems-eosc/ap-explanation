@@ -8,7 +8,7 @@ safe regardless of whether the caller already has a running loop (e.g. pytest-as
 import asyncio
 import concurrent.futures
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import (
@@ -19,6 +19,9 @@ from ap_explanation.di import (
 from ap_explanation.internal.cache import RedisCacheProvider
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.provenance import Provenance
+from ap_explanation.types.provenance_analytical_pattern import (
+    ProvenanceAnalyticalPattern,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +38,7 @@ def _run_in_thread(coro):
 
 
 async def _do_explain(
-    db_name: str,
-    tables_names: List[str],
-    schema_name: str,
-    query: str,
+    ap_dict: dict,
     semiring_name: Optional[str] = None,
 ) -> list:
     """
@@ -61,22 +61,26 @@ async def _do_explain(
     else:
         target_semirings = all_semirings
 
-    service_factory = get_provenance_service_for_ap(db_name)
+    ap = ProvenanceAnalyticalPattern.model_validate(ap_dict)
+    ds = ap.data_source
+    query = ap.sql_operator.properties["query"]
+
+    service_factory = get_provenance_service_for_ap(ds)
 
     async for service in service_factory():
         # 1. Annotate
-        for table_name in tables_names:
-            await service.annotate_dataset(table_name, schema_name, target_semirings)
+        for table_name in ds.table_names:
+            await service.annotate_dataset(table_name, ds.schema_name, target_semirings)
 
         # 2. Compute provenance
-        derivations = await service.compute_provenance(schema_name, query, target_semirings)
+        derivations = await service.compute_provenance(ds.schema_name, query, target_semirings)
 
         # 3. Compute NL explanation (if enabled)
-        explanation = await service.explain(schema_name, query, derivations)
+        explanation = await service.explain(ds.schema_name, query, derivations)
 
         # # 4. Remove annotation (see provsql issue #67 workaround)
-        # for table_name in tables_names:
-        #     await service.remove_annotation(table_name, schema_name)
+        # for table_name in ds.table_names:
+        #     await service.remove_annotation(table_name, ds.schema_name)
 
         prov = Provenance(derivations=derivations, explanation=explanation)
 
@@ -89,10 +93,7 @@ async def _do_explain(
 @celery_app.task(bind=True, name="ap_explanation.tasks.explain.explain_task")
 def explain_task(
     self,
-    db_name: str,
-    tables_names: List[str],
-    schema_name: str,
-    query: str,
+    ap_dict: dict,
     semiring_name: Optional[str] = None,
 ) -> list:
     """Celery task: annotate + compute provenance + remove annotation.
@@ -105,9 +106,7 @@ def explain_task(
     The TTL is controlled by ``RedisCacheProvider.DEFAULT_TTL`` (default 1 h).
     """
     cache = get_cache_provider()
-    cache_key = RedisCacheProvider.make_key(
-        db_name, tables_names, schema_name, query, semiring_name
-    )
+    cache_key = RedisCacheProvider.make_key(ap_dict, semiring_name)
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -116,8 +115,12 @@ def explain_task(
         )
         return cached
 
+    # Parse the AP to determine the lock target (db_name) without doing any I/O.
+    ap = ProvenanceAnalyticalPattern.model_validate(ap_dict)
+    db_name = ap.data_source.db_name
+
     logger.info(
-        f"[task:{self.request.id}] Explaining tables {tables_names} in db '{db_name}'"
+        f"[task:{self.request.id}] Explaining AP in db '{db_name}'"
         + (f" with semiring '{semiring_name}'" if semiring_name else " with all semirings")
     )
 
@@ -130,8 +133,7 @@ def explain_task(
     with lock_provider.acquire(lock_key):
         logger.debug(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
         res = _run_in_thread(
-            _do_explain(db_name, tables_names,
-                        schema_name, query, semiring_name)
+            _do_explain(ap_dict, semiring_name)
         )
         logger.debug(f"[task:{self.request.id}] Released lock '{lock_key}'")
 

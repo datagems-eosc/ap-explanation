@@ -19,24 +19,17 @@ async def health_check():
 
 
 async def readiness_check():
-    """
-    Readiness check — verifies that the PostgreSQL database and the Redis broker
-    are reachable before the service is considered ready to handle traffic.
-
-    Returns HTTP 200 with ``status: ready`` when all dependencies are reachable,
-    or HTTP 503 with ``status: not_ready`` together with per-dependency details
-    when at least one dependency is unavailable.
-    """
     from fastapi.responses import JSONResponse
 
     from ap_explanation.di import REDIS_BROKER_URI
 
     redis_status = await _check_redis(REDIS_BROKER_URI)
 
-    all_ready = all(
-        s["status"] in ("reachable", "unconfigured")
-        for s in (redis_status)
-    )
+    # Put all dependency dicts in a list
+    dependencies = [redis_status]
+
+    all_ready = all(s["status"] in ("reachable", "unconfigured")
+                    for s in dependencies)
 
     body = {
         "status": "ready" if all_ready else "not_ready",
