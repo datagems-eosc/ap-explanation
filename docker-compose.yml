@@ -1,0 +1,75 @@
+services:
+  # --- Main Application ---
+  app:
+    image: ghcr.io/datagems-eosc/datagems-eosc/ap-explanation:v0.10.0
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   target: prod
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./bucket:/mnt/s3:rw
+    environment:
+      - POSTGRES_HOST=postgres-provsql
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=mathe
+      - POSTGRES_USER=provdemo
+      - POSTGRES_PASSWORD=provdemo
+      - POSTGRES_TIMESCALE_HOST=postgres-provsql
+      - POSTGRES_TIMESCALE_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      postgres-provsql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- PostgreSQL Service with ProvSQL compiled from source ---
+  postgres-provsql:
+    build:
+      context: .
+      dockerfile: dependencies/postgres-provsql/Dockerfile
+      args:
+        FIXTURES_PATH: fixtures/postgres-seed
+    volumes:
+      - wp4_poc_postgres_data:/var/lib/postgresql/data
+      - ./fixtures/postgres-seed:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_USER=provdemo
+      - POSTGRES_PASSWORD=provdemo
+      - POSTGRES_DB=mathe
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U provdemo -d mathe" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis Service ---
+  redis:
+    image: redis:7-alpine
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Flower Dashboard (Celery monitoring) ---
+  # flower:
+  #   image: mher/flower:master
+  #   environment:
+  #     - CELERY_BROKER_URL=redis://redis:6379/0
+  #     - CELERY_RESULT_BACKEND=redis://redis:6379/0
+  #     - FLOWER_UNAUTHENTICATED_API=true
+  #   ports:
+  #     - "5555:5555"
+  #   restart: always
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+volumes:
+  wp4_poc_postgres_data:

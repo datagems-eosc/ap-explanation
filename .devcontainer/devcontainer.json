@@ -1,7 +1,7 @@
 {
     "name": "WP4 - Explain AP",
-    "dockerComposeFile": "docker-compose.yml",
-    "service": "devcontainer",
+    "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
+    "service": "app",
     "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
     "features": {
         "ghcr.io/devcontainers-extra/features/uv:1": {},

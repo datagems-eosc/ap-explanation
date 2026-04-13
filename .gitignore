@@ -147,3 +147,5 @@ tests/test_val_*
 fixtures/real_mathe
 scripts/dump_tables.py
 scripts/reflect_schema.py
+
+bucket
