@@ -319,7 +319,7 @@ CREATE TABLE IF NOT EXISTS public.provsql_canary (
 
 -- Insert or update the canary record for this script
 INSERT INTO public.provsql_canary (script_name, version, executed_at)
-VALUES ('03_setup_semiring_parallel.sql', '1.0.0', NOW())
+VALUES ('03_setup_semiring_parallel.sql', '1.1.0', NOW())
 ON CONFLICT (script_name) 
 DO UPDATE SET 
     version = EXCLUDED.version,
