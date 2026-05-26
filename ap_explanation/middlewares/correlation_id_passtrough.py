@@ -15,7 +15,6 @@ async def correlation_id_passtrough(request: Request, call_next):
     correlation_id = request.headers.get(
         "x-tracking-correlation") or str(uuid4())
 
-    request.state.correlation_id = correlation_id
     # The correlation_id is required for logs, we can set it in the contextvars for this request here.
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(DGCorrelationId=correlation_id)
