@@ -1,15 +1,18 @@
 import logging
 from os import getenv
 from pathlib import Path
+from tomllib import loads as loads_toml
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from tomllib import loads as loads_toml
 
 from ap_explanation.api.v1.routes import router
 from ap_explanation.di import container_lifespan
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
+from ap_explanation.middlewares.correlation_id_passtrough import (
+    correlation_id_passtrough,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,6 +52,10 @@ def index():
 
 app.include_router(router)
 
+############
+# Middlewares
+############
+app.middleware("http")(correlation_id_passtrough)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5000)
