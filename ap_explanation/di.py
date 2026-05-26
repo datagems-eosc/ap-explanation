@@ -52,7 +52,7 @@ def _start_celery_worker() -> threading.Thread:
     from ap_explanation.celery_app import celery_app  # noqa: ensure tasks registered
 
     worker = celery_app.Worker(
-        loglevel="DEBUG",
+        loglevel="INFO",
         concurrency=2,
         pool="threads",
     )
