@@ -1,9 +1,23 @@
 services:
   # Overrides the base app service with the devcontainer image
   app:
-    image: mcr.microsoft.com/devcontainers/python:3.14
+    image: mcr.microsoft.com/devcontainers/python:3.14-bookworm
     volumes:
-      - ../..:/workspaces:cached
-      - ./daemon.json:/etc/docker/daemon.json
+      - ../:/workspaces:cached
+      #- ./daemon.json:/etc/docker/daemon.json
     #    network_mode: service:db
     command: sleep infinity
+
+  # --- Flower Dashboard (Celery monitoring) ---
+  flower:
+    image: mher/flower:master
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_UNAUTHENTICATED_API=true
+    ports:
+      - "5555:5555"
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy

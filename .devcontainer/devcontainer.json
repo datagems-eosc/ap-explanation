@@ -5,7 +5,7 @@
     "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
     "features": {
         "ghcr.io/devcontainers-extra/features/uv:1": {},
-        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+        "ghcr.io/devcontainers/features/docker-in-docker:3.0.1": {
             "moby": false,
             "disableIp6tables": true
         },
@@ -19,8 +19,6 @@
             "extensions": [
                 "ms-python.python",
                 "ms-ossdata.vscode-pgsql",
-                "github.copilot",
-                "github.copilot-chat",
                 "humao.rest-client",
                 "ms-python.vscode-pylance",
                 "charliermarsh.ruff",
