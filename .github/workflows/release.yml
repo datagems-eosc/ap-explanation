@@ -15,11 +15,60 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | grep -v "rc" | head -n 1)
+
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          if [ -f CHANGELOG.md ]; then
+            cp CHANGELOG.md changelog.md
+            echo "" >> changelog.md
+            echo "---" >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          echo "## What's Changed" >> changelog.md
+          echo "" >> changelog.md
+
+          FEATURES=$(git log $RANGE --pretty=format:"- %s" | grep -i "^- feat" || true)
+          if [ -n "$FEATURES" ]; then
+            echo "### Features" >> changelog.md
+            echo "$FEATURES" >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          FIXES=$(git log $RANGE --pretty=format:"- %s" | grep -i "^- fix" || true)
+          if [ -n "$FIXES" ]; then
+            echo "### Bug Fixes" >> changelog.md
+            echo "$FIXES" >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          OTHERS=$(git log $RANGE --pretty=format:"- %s" | grep -iv "^- feat\|^- fix" || true)
+          if [ -n "$OTHERS" ]; then
+            echo "### Other Changes" >> changelog.md
+            echo "$OTHERS" >> changelog.md
+            echo "" >> changelog.md
+          fi
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG}" >> changelog.md
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: changelog.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
