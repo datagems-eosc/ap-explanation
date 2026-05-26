@@ -156,6 +156,22 @@ When `LLM_API_BASE` is not set, natural-language explanations are silently disab
 | `LLM_API_KEY` | No | — | API key for the LLM endpoint. Leave empty for unauthenticated / local endpoints |
 | `LLM_SSL_VERIFY` | No | `true` | Set to `false` to disable TLS certificate verification for the LLM endpoint (useful for self-hosted models with self-signed certs) |
 
+### Authentication (OIDC)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OIDC_ISSUER` | No | — | OIDC issuer URL (e.g. `https://keycloak.example.com/realms/myrealm`). If not set, authentication is **disabled** and all endpoints are publicly accessible |
+| `OIDC_CLIENT_ID` | If `OIDC_ISSUER` set | — | Client ID used to validate the JWT audience and for token exchange |
+| `OIDC_CLIENT_SECRET` | If `OIDC_ISSUER` set | — | Client secret used for token exchange |
+| `OIDC_EXCHANGE_SCOPE` | If `OIDC_ISSUER` set | — | Scope requested during the token exchange flow |
+| `JWKS_TTL_SECONDS` | No | `300` | How long (in seconds) the JWKS public key cache is considered valid before being refreshed |
+
+When `OIDC_ISSUER` is set, every protected endpoint requires a valid `Authorization: Bearer <token>` header. The service:
+
+1. Fetches the JWKS from `{OIDC_ISSUER}/protocol/openid-connect/certs` (cached for `JWKS_TTL_SECONDS`)
+2. Validates the token signature (RS256), issuer, and audience
+3. Binds `UserId` (`sub`) and `ClientId` (`azp`) from the JWT claims to the structured logs for the request
+
 ---
 
 ## Quick Start
@@ -203,24 +219,6 @@ Tests use `testcontainers` to spin up a PostgreSQL + ProvSQL instance automatica
 |---|---|
 | `GET /api/v1/health` | Liveness check — always returns `{"status": "ok"}` |
 | `GET /api/v1/ready` | Readiness check — verifies Redis is reachable (returns 503 if not) |
-
-## "Manual" endpoints
-
-> **Advanced usage — not recommended for most cases.** See the warning below.
-
-The `/manual` endpoints expose the individual steps that the managed `POST /explain` task executes atomically:
-
-| Endpoint | Description |
-|---|---|
-| `POST /api/v1/aps/explanation/manual/annotations` | Annotate the AP tables with ProvSQL provenance tokens |
-| `POST /api/v1/aps/explanation/manual/computations` | Run the query and retrieve provenance results, then remove annotations |
-| `DELETE /api/v1/aps/explanation/manual/annotations` | Remove annotations manually if the computation step was skipped or failed |
-
-All manual endpoints accept a `/{semiring_name}` suffix to target a specific semiring.
-
-### Why this is advanced 
-
-while tables are annotated, ProvSQL rewrites every query touching them (including when NOT querying provenance). In particular, nested queries with aggregations on both the inner and outer level are not supported by ProvSQL and will fail even if they don't involve provenance at all. The managed endpoint avoids this window by keeping the annotated state as short as possible and locking the database. Using the manual endpoints means you own that responsibility.
 
 ---
 

@@ -26,13 +26,9 @@ Or install ProvSQL manually on your PostgreSQL instance.
 
 **Cause:** Attempting to compute provenance before annotating tables
 
-**Solution:** Use the managed lifecycle (handles annotation automatically):
+**Solution:** Use the managed lifecycle, which handles annotation automatically:
 ```bash
 POST /api/v1/aps/explanation
-```
-Or annotate manually first:
-```bash
-POST /api/v1/aps/explanation/manual/annotations
 ```
 
 ---

@@ -37,6 +37,24 @@ When `LLM_API_BASE` is not set, natural-language explanations are silently disab
 | `LLM_API_KEY` | No | — | API key for the LLM endpoint. Leave empty for unauthenticated / local endpoints |
 | `LLM_SSL_VERIFY` | No | `true` | Set to `false` to disable TLS certificate verification for the LLM endpoint (useful for self-hosted models with self-signed certs) |
 
+### Authentication (OIDC)
+
+When `OIDC_ISSUER` is not set, authentication is **disabled** and all endpoints are publicly accessible.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OIDC_ISSUER` | No | — | OIDC issuer URL (e.g. `https://keycloak.example.com/realms/myrealm`). If not set, authentication is disabled |
+| `OIDC_CLIENT_ID` | If `OIDC_ISSUER` set | — | Client ID used to validate the JWT audience and for token exchange |
+| `OIDC_CLIENT_SECRET` | If `OIDC_ISSUER` set | — | Client secret used for token exchange |
+| `OIDC_EXCHANGE_SCOPE` | If `OIDC_ISSUER` set | — | Scope requested during the OIDC token exchange flow |
+| `JWKS_TTL_SECONDS` | No | `300` | How long (seconds) the JWKS public key cache is valid before being refreshed |
+
+When enabled, every protected endpoint requires `Authorization: Bearer <token>`. The service:
+
+1. Fetches the JWKS from `{OIDC_ISSUER}/protocol/openid-connect/certs` (cached for `JWKS_TTL_SECONDS`)
+2. Validates the token signature (RS256), issuer, and audience
+3. Binds `UserId` (`sub`) and `ClientId` (`azp`) from the JWT claims to the structured logs for the request
+
 ### Database Connection Behavior
 
 The service supports a dual-database architecture:
