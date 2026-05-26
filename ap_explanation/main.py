@@ -10,11 +10,12 @@ from fastapi.responses import JSONResponse
 from ap_explanation.api.v1.routes import router
 from ap_explanation.di import container_lifespan
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
+from ap_explanation.logger import configure_logging
 from ap_explanation.middlewares.correlation_id_passtrough import (
     correlation_id_passtrough,
 )
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Retrieve current project version from toml (relative to this file)
