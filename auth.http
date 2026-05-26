@@ -1,0 +1,50 @@
+############
+# This file is a little auth helper to help during development
+# DO NOT COMMIT ANY SENSITIVE DATA IN THIS FILE, USE ENV VARIABLES INSTEAD
+#########################
+@baseUrl = https://datagems-dev.scayle.es
+@username = {{$dotenv TEST_USER}}
+@password = {{$dotenv TEST_USER_PASSWORD}}
+
+@oidcCLientId = {{$dotenv OIDC_CLIENT_ID}}
+@oidcClientSecret = {{$dotenv OIDC_CLIENT_SECRET}}
+@oidcExchangeScope = {{$dotenv OIDC_EXCHANGE_SCOPE}}
+
+### User auth 
+# @name login
+POST {{baseUrl}}/oauth/realms/dev/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password
+&client_id=swagger-client
+&username={{username}}
+&password={{password}}
+&scope=datagems
+
+
+### Token exchange
+# @name exchange
+@authToken = {{login.response.body.access_token}}
+POST {{baseUrl}}/oauth/realms/dev/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic {{oidcCLientId}}:{{oidcClientSecret}}
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+&subject_token={{authToken}}
+&subject_token_type=urn:ietf:params:oauth:token-type:access_token
+&requested_token_type=urn:ietf:params:oauth:token-type:access_token
+&scope={{oidcExchangeScope}}
+
+
+### Get user Grants
+@exchangeToken = {{exchange.response.body.access_token}}
+GET {{baseUrl}}/gw/api/principal/me/context-grants
+Content-Type: application/json
+Authorization: Bearer {{exchangeToken}}
+
+### User info
+# @name userInfo
+@exchangeToken = {{exchange.response.body.access_token}}
+GET {{baseUrl}}/gw/api/principal/me
+Content-Type: application/json
+Authorization: Bearer {{exchangeToken}}

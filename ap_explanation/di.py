@@ -2,8 +2,9 @@ import logging
 import os
 import threading
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator, Callable, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpE
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings
+from ap_explanation.services.authentication import Authentication
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.data_sources import DataSource
 from ap_explanation.types.semiring import DbSemiring
@@ -145,6 +147,22 @@ async def create_connection_pool(connection_string: str) -> AsyncGenerator[Async
 
 async def get_semirings() -> list[DbSemiring]:
     return semirings
+
+
+@lru_cache(maxsize=1)
+def get_authentication_service() -> Optional[Authentication]:
+    """Return a JwtValidator configured from environment variables."""
+    if not os.getenv("OIDC_ISSUER"):
+        logger.warning("OIDC_ISSUER not set, authentication disabled")
+        return None
+
+    return Authentication(
+        issuer=os.getenv("OIDC_ISSUER", ""),
+        ttl=int(os.getenv("JWKS_TTL_SECONDS", "300")),
+        client_id=os.getenv("OIDC_CLIENT_ID") or None,
+        client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        exchange_scope=os.getenv("OIDC_EXCHANGE_SCOPE"),
+    )
 
 
 def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:

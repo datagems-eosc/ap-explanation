@@ -1,8 +1,10 @@
 from logging import getLogger
+from typing import Never
 
-from fastapi import Response, status
+from fastapi import Depends, Response, status
 from pydantic import BaseModel
 
+from ap_explanation.middlewares.auth import require_authentication
 from ap_explanation.tasks.explain import explain_task
 from ap_explanation.types.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
@@ -19,6 +21,7 @@ class ManagedProvenanceTaskResponse(BaseModel):
 def managed_provenance_ap(
     ap: ProvenanceAnalyticalPattern,
     response: Response,
+    _auth: Never = Depends(require_authentication())
 ) -> ManagedProvenanceTaskResponse:
     """Dispatch an async task for the full explanation lifecycle with all semirings.
 
@@ -37,6 +40,7 @@ def managed_provenance_ap_with_semiring(
     semiring_name: str,
     ap: ProvenanceAnalyticalPattern,
     response: Response,
+    _auth: Never = Depends(require_authentication()),
 ) -> ManagedProvenanceTaskResponse:
     """Dispatch an async task for the full explanation lifecycle with a specific semiring.
 

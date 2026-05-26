@@ -1,9 +1,11 @@
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Never, Optional
 
 from celery.result import AsyncResult
+from fastapi.params import Depends
 from pydantic import BaseModel
 
 from ap_explanation.celery_app import celery_app
+from ap_explanation.middlewares.auth import require_authentication
 
 TaskStatus = Literal["pending", "started",
                      "success", "failure", "retry", "revoked"]
@@ -16,7 +18,10 @@ class TaskStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-def get_managed_task_status(task_id: str) -> TaskStatusResponse:
+def get_managed_task_status(
+        task_id: str,
+        _auth: Never = Depends(require_authentication())
+) -> TaskStatusResponse:
     """Return the current status and (if completed) the result of a managed explanation task.
 
     Poll this endpoint after POST /aps/explanation or POST /aps/explanation/{semiring_name}.
