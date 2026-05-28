@@ -1,7 +1,7 @@
-ARG PG_VERSION=17
-FROM postgres:${PG_VERSION}
+ARG PG_MAJOR=17
+FROM postgres:${PG_MAJOR}
 
-ARG PG_VERSION=17
+ARG PG_MAJOR=17
 ARG PROVSQL_VERSION=master
 
 # Install build dependencies, git, and other necessary tools
@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     libgmp-dev \
     libmpfr-dev \
     libmpc-dev \
-    postgresql-server-dev-${PG_VERSION} \
+    postgresql-server-dev-${PG_MAJOR} \
     ca-certificates \
     unzip\
     mercurial\
@@ -27,6 +27,9 @@ RUN git clone --branch ${PROVSQL_VERSION} --depth 1 https://github.com/PierreSen
 WORKDIR /provsql
 
 RUN make && make install
+
+ARG FIXTURES_PATH=fixtures/postgres-seed
+COPY ${FIXTURES_PATH}/* /docker-entrypoint-initdb.d/
 
 # Add custom configuration
 RUN mkdir -p /etc/postgresql && \

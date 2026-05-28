@@ -3,7 +3,7 @@ name: Build and Push postgres-provsql Image
 on:
   workflow_dispatch:
     inputs:
-      pg_version:
+      pg_major:
         description: "PostgreSQL major version"
         required: true
         default: "17"
@@ -41,18 +41,20 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ inputs.pg_version }}-${{ inputs.provsql_version }}
+            type=raw,value=${{ inputs.pg_major }}-${{ inputs.provsql_version }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.description=PostgreSQL ${{ inputs.pg_version }} with ProvSQL ${{ inputs.provsql_version }}
+            org.opencontainers.image.description=PostgreSQL ${{ inputs.pg_major }} with ProvSQL ${{ inputs.provsql_version }}
 
       - name: Build and push postgres-provsql Docker image
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
-          context: dependencies/postgres-provsql
+          context: .
+          file: dependencies/postgres-provsql/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            PG_VERSION=${{ inputs.pg_version }}
+            PG_MAJOR=${{ inputs.pg_major }}
             PROVSQL_VERSION=${{ inputs.provsql_version }}
+            FIXTURES_PATH=fixtures/postgres-seed
