@@ -43,5 +43,10 @@
                 }
             }
         }
+    },
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    "remoteEnv": {
+        "DOCKER_DNS_1": "195.83.24.30",
+        "DOCKER_DNS_2": "152.77.1.22"
     }
 }
