@@ -1,7 +1,7 @@
 services:
   # --- Main Application ---
   app:
-    image: ghcr.io/datagems-eosc/datagems-eosc/ap-explanation:v0.13.0
+    image: ghcr.io/datagems-eosc/datagems-eosc/ap-explanation:v0.12.0
     # build:
     #   context: .
     #   dockerfile: Dockerfile
