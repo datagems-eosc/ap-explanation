@@ -44,27 +44,26 @@ The service has specific database prerequisites:
   - **Relational Database** (`RelationalDbDataSource`): connects to existing PostgreSQL tables
   - **CSV Set** (`CsvSetDataSource`): loads CSV files into a temporary schema in a `playground` database, runs provenance, then drops the schema
 
-- **Automatic Initialization**: When the service connects to the database, it automatically pushes semiring type definitions and related functions. This includes:
-  - Custom PostgreSQL types for semiring state management
-  - Semiring operation functions (addition, multiplication, monus)
-  - Aggregate functions for combining provenance information
-  
-  This initialization is handled transparently by the repository layer and ensures the database has all necessary provenance tracking infrastructure.
+- **Automatic Initialization**: When the service connects to the database, it automatically sets up per-table provenance side tables and the union mapping table for each active semiring. No custom PostgreSQL functions are installed — all provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
 
 ## Core Concepts
 
 ### Semiring Annotations
 
-The service supports multiple semiring types for provenance tracking:
+The service supports the following ProvSQL built-in semirings, all defined in `ap_explanation/semirings.py`:
 
-- **formula**: Tracks the complete lineage formula showing how results derive from source data
-- **why**: Provides why-provenance explaining which source tuples contributed to results
+| Name | ProvSQL function | Description |
+|---|---|---|
+| `formula` | `sr_formula` | Algebraic expression showing how results derive from source data |
+| `why` | `sr_why` | Lists source tuples that contributed to each result row |
+| `boolexpr` | `sr_boolexpr` | Boolean provenance expression over source identifiers |
+| `how` | `sr_how` | How-provenance: multiset polynomial showing multiplicities |
+| `which` | `sr_which` | Which-provenance (lineage): set of contributing tuple identifiers |
 
 Each semiring has:
-- A retrieval function (e.g., `formula`, `whyprov_now`)
-- An optional aggregate function
-- A mapping table name, that will be the name of the table holding the info about provenance 
-- A "mapping strategy". Each row needs to be associated with a unique id to be able to trace back the data. The default mapping uses Postgres ctid to identify each row.
+- A **retrieval function** — one of ProvSQL's compiled `sr_*` functions, typed as `ANYELEMENT` so it works for both plain and aggregate provenance tokens without a separate aggregate function.
+- A **mapping table name** — the table that maps provenance tokens to source row labels, rebuilt as a UNION of all per-table provenance tables before each query.
+- A **mapping strategy** — `CtidMapping` by default, which labels each row as `table@ctid` using the PostgreSQL physical row identifier.
 
 ### SQL Rewriting
 
@@ -75,23 +74,25 @@ The `SqlRewriter` class (`internal/sql_rewriter.py`) transforms SQL queries to i
 -- Original
 SELECT name FROM students WHERE grade > 80
 
--- Rewritten
-SELECT name, whyprov_now(provenance(), 'why_mapping') 
+-- Rewritten (e.g. with sr_why)
+SELECT name, sr_why(provenance(), 'why_mapping')
 FROM students WHERE grade > 80
 ```
 
-**Aggregate queries:**
+**Aggregate queries** — wrapped as a subquery so ProvSQL can capture the aggregate token:
 ```sql
 -- Original
 SELECT department, COUNT(*) FROM employees GROUP BY department
 
--- Rewritten (wraps as subquery)
-SELECT department, COUNT(*), 
-       aggregation_formula(prov_agg, 'formula_mapping')
-FROM (SELECT department, COUNT(*) as cnt, 
-             provenance() as prov_agg
-      FROM employees GROUP BY department) AS subquery
+-- Rewritten (e.g. with sr_formula)
+SELECT x.department, sr_formula(x.cnt, 'formula_mapping')
+FROM (
+    SELECT department, COUNT(*) AS cnt
+    FROM employees GROUP BY department
+) AS x
 ```
+
+All `sr_*` functions are `ANYELEMENT` polymorphic — the same function name is used for both plain provenance tokens (`provenance()`) and aggregate tokens, so no separate aggregate function is needed.
 
 
 ## Limitations and Known Issues

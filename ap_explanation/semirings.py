@@ -5,23 +5,32 @@ from ap_explanation.types.semiring import DbSemiring
 semirings = [
     DbSemiring(
         name="formula",
-        retrieval_function="formula",
-        aggregate_function="aggregation_formula",
+        retrieval_function="sr_formula",
         mapping_table="formula_mapping",
         mappingStrategy=CtidMapping(),
     ),
     DbSemiring(
         name="why",
-        retrieval_function="whyPROV_now",
-        # aggregate_function="aggregation_formula",
+        retrieval_function="sr_why",
         mapping_table="why_mapping",
         mappingStrategy=CtidMapping(),
     ),
     DbSemiring(
-        name="boolean",
-        retrieval_function="bool_formula",
-        # aggregate_function="aggregation_formula",
-        mapping_table="boolean_mapping",
+        name="boolexpr",
+        retrieval_function="sr_boolexpr",
+        mapping_table="boolexpr_mapping",
+        mappingStrategy=CtidMapping(),
+    ),
+    DbSemiring(
+        name="how",
+        retrieval_function="sr_how",
+        mapping_table="how_mapping",
+        mappingStrategy=CtidMapping(),
+    ),
+    DbSemiring(
+        name="which",
+        retrieval_function="sr_which",
+        mapping_table="which_mapping",
         mappingStrategy=CtidMapping(),
     ),
 ]

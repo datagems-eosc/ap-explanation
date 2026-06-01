@@ -37,7 +37,6 @@ class ProvenanceRepository:
     @classmethod
     async def create(cls, conn: AsyncConnection, sql_rewriter: SqlRewriter) -> "ProvenanceRepository":
         repo = cls(conn, sql_rewriter)
-        await repo.ensure_semiring_setup()
         await conn.execute("SET provsql.active = 1")
         return repo
 
@@ -68,23 +67,15 @@ class ProvenanceRepository:
 
                 results: list[ProvSQLRow] = []
                 for row in rows:
-                    retrieval_name = semiring.retrieval_function
-                    if semiring.aggregate_function is not None and semiring.aggregate_function in row:
-                        retrieval_name = semiring.aggregate_function
-
-                    expression = row.get(retrieval_name, "")
+                    expression = row.get(semiring.retrieval_function, "")
                     data = await self._fetch_related_data(expression, semiring)
 
                     # Build the answer dict: everything except provenance-internal columns
                     provenance_keys = {
                         "provsql",
-                        retrieval_name,
+                        semiring.retrieval_function,
                         semiring.name,
                     }
-                    if semiring.aggregate_function:
-                        provenance_keys.add(semiring.aggregate_function)
-                    if semiring.retrieval_function != retrieval_name:
-                        provenance_keys.add(semiring.retrieval_function)
 
                     answer = {k: v for k, v in row.items(
                     ) if k not in provenance_keys}
@@ -169,80 +160,6 @@ class ProvenanceRepository:
             newly_annotated = False
 
         return newly_annotated
-
-    async def ensure_semiring_setup(self, required_version: str = "1.0.0") -> None:
-        """
-        Check if the semiring setup script has been executed and run it if needed.
-        Uses a canary table to track execution status.
-
-        Args:
-            required_version: The version of the script that should be present.
-        """
-        script_name = "03_setup_semiring_parallel.sql"
-
-        # Check if canary table exists and has the correct version
-        needs_execution = False
-
-        try:
-            async with self._conn.transaction():
-                cursor = await self._conn.execute(
-                    """
-                    SELECT version FROM public.provsql_canary 
-                    WHERE script_name = %s
-                    """,
-                    (script_name,),
-                )
-                result = await cursor.fetchone()
-
-                if result is None:
-                    logger.info(
-                        f"Canary not found for {script_name}, will execute script"
-                    )
-                    needs_execution = True
-                elif result[0] != required_version:
-                    logger.info(
-                        f"Version mismatch for {script_name}: found {result[0]}, expected {required_version}, will re-execute"
-                    )
-                    needs_execution = True
-                else:
-                    logger.debug(
-                        f"Semiring setup already executed (version {result[0]})"
-                    )
-        except errors.UndefinedTable:
-            logger.info(
-                f"Canary table does not exist, will execute {script_name}")
-            needs_execution = True
-
-        if needs_execution:
-            await self._execute_semiring_setup_script()
-
-    async def _execute_semiring_setup_script(self) -> None:
-        """
-        Execute the semiring setup script from the repository resources directory.
-        """
-        from pathlib import Path
-
-        # Find the script file relative to this module
-        script_path = Path(__file__).parent / "resources" / \
-            "03_setup_semiring_parallel.sql"
-
-        if not script_path.exists():
-            logger.error(f"Semiring setup script not found at {script_path}")
-            raise FileNotFoundError(
-                f"Required script not found: {script_path}")
-
-        logger.info(f"Executing semiring setup script: {script_path}")
-
-        # Read and execute the script
-        script_content = script_path.read_text(encoding='utf-8')
-
-        try:
-            async with self._conn.transaction():
-                await self._conn.execute(SQL(cast(LiteralString, script_content)))
-            logger.info("Semiring setup script executed successfully")
-        except Exception as e:
-            logger.error(f"Failed to execute semiring setup script: {e}")
-            raise
 
     async def add_semiring(self, schema_name: str, table_name: str, semiring: DbSemiring) -> bool:
         """
@@ -395,10 +312,6 @@ class ProvenanceRepository:
         )
         await self._conn.execute(composed_rq)
 
-        # Adjust the value column to be an Array and add primary key
-        # NOTE : This may be semiring specific, should be abstracted
-        await self._conn.execute(SQL("ALTER TABLE {} ALTER COLUMN value TYPE varchar").format(qualified_name))
-        await self._conn.execute(SQL("UPDATE {} SET value = '{{\"{{' || value || '}}\"}}'").format(qualified_name))
         await self._conn.execute(SQL("ALTER TABLE {} ADD PRIMARY KEY (provenance)").format(qualified_name))
 
         logger.info(

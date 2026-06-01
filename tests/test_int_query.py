@@ -3,7 +3,6 @@ from typing import List
 import pytest
 
 from ap_explanation.errors import (
-    SemiringOperationNotSupportedError,
     TableNotAnnotatedError,
 )
 from ap_explanation.services.provenance import ProvenanceService
@@ -68,18 +67,18 @@ async def test_ok_compute_provenance_formula_semiring(
 
 
 @pytest.mark.asyncio
-async def test_ok_compute_provenance_boolean_semiring(
+async def test_ok_compute_provenance_boolexpr_semiring(
     provenance_service: ProvenanceService,
-    boolean_semiring: DbSemiring,
+    boolexpr_semiring: DbSemiring,
     test_schema: TestSchema
 ):
     """Test computing provenance with a single semiring."""
     # First annotate the table
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [boolean_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [boolexpr_semiring])
 
     # Query with provenance
     query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
-    result_json = await provenance_service.compute_provenance(test_schema.schema, query, [boolean_semiring])
+    result_json = await provenance_service.compute_provenance(test_schema.schema, query, [boolexpr_semiring])
 
     # Verify we got valid results
     assert result_json is not None
@@ -90,9 +89,49 @@ async def test_ok_compute_provenance_boolean_semiring(
     for row in results:
         assert row.answer
         assert row.provenance
-        assert boolean_semiring.name in row.provenance
-        assert row.provenance[boolean_semiring.name].expression is not None
-        assert isinstance(row.provenance[boolean_semiring.name].data, list)
+        assert boolexpr_semiring.name in row.provenance
+        assert row.provenance[boolexpr_semiring.name].expression is not None
+        assert isinstance(row.provenance[boolexpr_semiring.name].data, list)
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_how_semiring(
+    provenance_service: ProvenanceService,
+    how_semiring: DbSemiring,
+    test_schema: TestSchema
+):
+    """Test computing provenance with the how-provenance semiring."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [how_semiring])
+
+    query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
+    results = await provenance_service.compute_provenance(test_schema.schema, query, [how_semiring])
+
+    assert len(results) > 0
+    for row in results:
+        assert row.answer
+        assert how_semiring.name in row.provenance
+        assert row.provenance[how_semiring.name].expression is not None
+        assert isinstance(row.provenance[how_semiring.name].data, list)
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_which_semiring(
+    provenance_service: ProvenanceService,
+    which_semiring: DbSemiring,
+    test_schema: TestSchema
+):
+    """Test computing provenance with the which-provenance (lineage) semiring."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [which_semiring])
+
+    query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
+    results = await provenance_service.compute_provenance(test_schema.schema, query, [which_semiring])
+
+    assert len(results) > 0
+    for row in results:
+        assert row.answer
+        assert which_semiring.name in row.provenance
+        assert row.provenance[which_semiring.name].expression is not None
+        assert isinstance(row.provenance[which_semiring.name].data, list)
 
 
 @pytest.mark.asyncio
@@ -161,26 +200,6 @@ async def test_ok_compute_provenance_with_aggregation(
         assert row.answer
         assert row.provenance
         assert formula_semiring.name in row.provenance
-
-
-@pytest.mark.asyncio
-async def test_ko_aggregation_not_supported(
-    provenance_service: ProvenanceService,
-    why_semiring: DbSemiring,
-    test_schema: TestSchema
-):
-    """Test that aggregation queries with non-aggregation semirings raise SemiringOperationNotSupportedError."""
-    # First annotate the table
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
-
-    # Aggregation query with a semiring that doesn't support aggregation
-    query = f"SELECT topic, COUNT(*) as cnt FROM {test_schema.schema}.{test_schema.table} GROUP BY topic LIMIT 5"
-
-    with pytest.raises(SemiringOperationNotSupportedError) as exc_info:
-        await provenance_service.compute_provenance(test_schema.schema, query, [why_semiring])
-
-    assert why_semiring.name in str(exc_info.value)
-    assert "aggregate" in str(exc_info.value).lower()
 
 
 @pytest.mark.asyncio

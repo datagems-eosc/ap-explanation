@@ -23,4 +23,7 @@ if ! docker info > /dev/null 2>&1; then
     sudo update-alternatives --set iptables /usr/sbin/iptables-nft
 fi
 
+# Workaround for docker in docker config being set to a wrong value by default 
+rm -f ~/.docker/config.json
+
 uv sync --all-groups

@@ -5,9 +5,18 @@
 
 A FastAPI service that explains **where SQL query results come from**, using [ProvSQL](https://github.com/PierreSenellart/provsql) to track data lineage through joins, aggregations, and transformations.
 
-Given a query, the service returns:
-- **Formula semiring** — how results were computed: `(students₁ ⊗ grades₂) ⊕ students₃`
-- **Why semiring** — which source rows contributed: `["students(1)", "grades(2)"]`
+Given a query, the service returns one or more provenance annotations:
+
+| Semiring | What it captures |
+|---|---|
+| `formula` | Algebraic expression showing how each result was derived: `(students₁ ⊗ grades₂) ⊕ students₃` |
+| `why` | Flat list of source tuples that contributed: `["students(1)", "grades(2)"]` |
+| `boolexpr` | Boolean provenance expression over source identifiers |
+| `how` | How-provenance: multiset polynomial showing multiplicities |
+| `which` | Which-provenance (lineage): set of contributing tuple identifiers |
+
+Each annotation is provided by ProvSQL's built-in `sr_*` semiring functions.
+
 - **Natural-language explanation** (optional, LLM-powered) — a human-readable summary of the provenance
 
 The service supports two data source types, declared in the Analytical Pattern (AP) graph.

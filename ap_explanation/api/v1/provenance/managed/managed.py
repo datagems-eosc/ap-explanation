@@ -1,3 +1,4 @@
+from enum import StrEnum
 from logging import getLogger
 from typing import Never
 
@@ -5,10 +6,13 @@ from fastapi import Depends, Response, status
 from pydantic import BaseModel
 
 from ap_explanation.middlewares.auth import require_authentication
+from ap_explanation.semirings import semirings
 from ap_explanation.tasks.explain import explain_task
 from ap_explanation.types.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
+
+SemiringName = StrEnum("SemiringName", {s.name: s.name for s in semirings})
 
 logger = getLogger(__name__)
 
@@ -37,7 +41,7 @@ def managed_provenance_ap(
 
 
 def managed_provenance_ap_with_semiring(
-    semiring_name: str,
+    semiring_name: SemiringName,
     ap: ProvenanceAnalyticalPattern,
     response: Response,
     _auth: Never = Depends(require_authentication()),

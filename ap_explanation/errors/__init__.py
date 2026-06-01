@@ -4,7 +4,6 @@ from ap_explanation.errors.exceptions import (
     DatabaseNotFoundError,
     ProvSqlInternalError,
     ProvSqlMissingError,
-    SemiringOperationNotSupportedError,
     TableNotAnnotatedError,
     TableOrSchemaNotFoundError,
 )
@@ -15,5 +14,4 @@ __all__ = [
     "ProvSqlMissingError",
     "TableOrSchemaNotFoundError",
     "TableNotAnnotatedError",
-    "SemiringOperationNotSupportedError",
 ]

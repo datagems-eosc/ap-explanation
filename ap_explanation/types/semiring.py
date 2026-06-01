@@ -17,14 +17,12 @@ class DbSemiring(BaseModel):
     name: str
 
     # PSQL query function to compute the semiring value
-    # For non aggregate queries
     retrieval_function: str
 
-    # For aggregate queries (optional)
-    aggregate_function: str | None = None
-
-    # Name of the mapping table in the database
-    mapping_table: str
+    # Name of the mapping table in the database.
+    # When None, the semiring function is called without a mapping argument
+    # (e.g. sr_boolexpr which has an optional mapping in newer provsql versions).
+    mapping_table: str | None = None
 
     # Provenance mapping strategy instance
     # This determines how database rows are mapped to provenance values

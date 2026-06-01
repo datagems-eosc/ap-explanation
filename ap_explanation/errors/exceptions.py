@@ -54,25 +54,6 @@ class TableNotAnnotatedError(Exception):
         super().__init__(self.message)
 
 
-class SemiringOperationNotSupportedError(Exception):
-    """
-    Exception raised when attempting to perform an operation that is not supported
-    by the specified semiring.
-
-    This error indicates that the semiring does not have the required functionality
-    for the requested operation (e.g., aggregation support).
-    """
-
-    def __init__(self, semiring_name: str | None = None, operation: str | None = None):
-        if semiring_name and operation:
-            self.message = f"The semiring '{semiring_name}' does not support {operation}. Please use a different semiring that supports this operation."
-        elif semiring_name:
-            self.message = f"The semiring '{semiring_name}' does not support this operation."
-        else:
-            self.message = "This operation is not supported by the selected semiring."
-        super().__init__(self.message)
-
-
 class ProvSqlInternalError(Exception):
     """
     Exception raised when ProvSQL encounters an internal error during query execution.

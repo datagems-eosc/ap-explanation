@@ -1,7 +1,7 @@
 services:
   # --- Main Application ---
   app:
-    image: ghcr.io/datagems-eosc/datagems-eosc/ap-explanation:v0.11.0
+    image: ghcr.io/datagems-eosc/datagems-eosc/ap-explanation:v0.13.0
     # build:
     #   context: .
     #   dockerfile: Dockerfile
@@ -28,7 +28,7 @@ services:
 
   # --- PostgreSQL Service with ProvSQL compiled from source ---
   postgres-provsql:
-    image : sotrx/postgres-provsql:v0.10.0
+    image : sotrx/postgres-provsql:17-v1.8.0
     # build:
     #   context: .
     #   dockerfile: dependencies/postgres-provsql/Dockerfile

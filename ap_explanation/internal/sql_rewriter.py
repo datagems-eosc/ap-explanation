@@ -34,11 +34,11 @@ class SqlRewriter:
         The rewriting rules are as follows:
         - Only SELECT queries are supported
         - HAVING operators are not supported yet
-        - Non-aggregate query: add whyPROV_now(provenance(), 'why_mapping')
+        - Non-aggregate query: add sr_why(provenance(), 'why_mapping')
         - Aggregate query: wrap the original query as a subquery, and add 
-          aggregation_formula(inner_aggregate_alias, 'formula_mapping') in outer SELECT
+          sr_formula(inner_aggregate_alias, 'formula_mapping') in outer SELECT
 
-        FOR THIS TO WORK, THE whyPROV_now function, why_mapping and formula_mapping 
+        FOR THIS TO WORK, THE why_mapping and formula_mapping 
         MUST BE DEFINED IN THE DATABASE /!\
 
         Args:
@@ -71,13 +71,6 @@ class SqlRewriter:
         # AND has a GROUP BY clause (required for provsql aggregate provenance tracking)
         if not self._has_top_level_aggregates(outer_select) or not outer_select.args.get('group'):
             return self._rewrite_non_aggregate(query, semiring)
-
-        if semiring.aggregate_function is None:
-            from ap_explanation.errors import SemiringOperationNotSupportedError
-            raise SemiringOperationNotSupportedError(
-                semiring_name=semiring.name,
-                operation="aggregate queries"
-            )
 
         return self._rewrite_aggregate(query, semiring)
 
@@ -133,7 +126,7 @@ class SqlRewriter:
             WHERE condition;
 
             Rewritten query:
-            SELECT col1, col2, whyPROV_now(provenance(), 'why_mapping')
+            SELECT col1, col2, sr_why(provenance(), 'why_mapping')
             FROM table
             WHERE condition;
 
@@ -152,13 +145,14 @@ class SqlRewriter:
         if not isinstance(ast, Select):
             raise ValueError("Expected SELECT query")
 
+        args = [Anonymous(this="provenance")]
+        if semiring.mapping_table is not None:
+            args.append(Literal.string(semiring.mapping_table))
+
         ast.expressions.append(
             Anonymous(
                 this=semiring.retrieval_function,
-                expressions=[
-                    Anonymous(this="provenance"),
-                    Literal.string(semiring.mapping_table),
-                ],
+                expressions=args,
             )
         )
 
@@ -167,7 +161,7 @@ class SqlRewriter:
     def _rewrite_aggregate(self, query: str, semiring: DbSemiring) -> str:
         """
         Rewrite an aggregate SELECT query by wrapping it as a subquery and adding
-        aggregation_formula on the outer select.
+        sr_formula on the outer select.
 
         Example:
             Original query:
@@ -176,7 +170,7 @@ class SqlRewriter:
             GROUP BY col1;
 
             Rewritten query:
-            SELECT col1, aggregation_formula(total, 'formula_mapping')
+            SELECT col1, sr_formula(total, 'formula_mapping')
             FROM (
                 SELECT col1, SUM(col2) AS total
                 FROM table
@@ -219,7 +213,7 @@ class SqlRewriter:
             else:
                 proj_non_agg.append(e)
 
-        # Find the first aggregate projection, this is the one that will be used in aggregation_formula
+        # Find the first aggregate projection, this is the one that will be used in the aggregate semiring function
         if len(proj_agg) == 0:
             raise ValueError("No aggregate found in query")
         agg = proj_agg[0]
@@ -235,13 +229,14 @@ class SqlRewriter:
                 Column(this=attr.alias_or_name, table=subquery_alias)
             )
 
+        agg_args = [Column(this=agg.alias_or_name, table=subquery_alias)]
+        if semiring.mapping_table is not None:
+            agg_args.append(Literal.string(semiring.mapping_table))
+
         outer_columns.append(
             Anonymous(
-                this=semiring.aggregate_function,
-                expressions=[
-                    Column(this=agg.alias_or_name, table=subquery_alias),
-                    Literal.string(semiring.mapping_table)
-                ]
+                this=semiring.retrieval_function,
+                expressions=agg_args,
             )
         )
 

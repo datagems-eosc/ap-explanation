@@ -39,4 +39,11 @@ RUN mkdir -p /etc/postgresql && \
     echo "local all all trust" > /etc/postgresql/pg_hba.conf && \
     echo "host all all 0.0.0.0/0 trust" >> /etc/postgresql/pg_hba.conf
 
+# Wrapper that runs ALTER EXTENSION provsql UPDATE on every start so that
+# rebuilding the image with a newer provsql version automatically upgrades
+# an existing data volume without requiring manual intervention.
+COPY dependencies/postgres-provsql/entrypoint.sh /usr/local/bin/provsql-entrypoint.sh
+RUN chmod +x /usr/local/bin/provsql-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/provsql-entrypoint.sh"]
 CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]

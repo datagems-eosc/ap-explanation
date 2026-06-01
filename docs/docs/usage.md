@@ -39,7 +39,12 @@ curl http://localhost:5000/api/v1/aps/explanation/abc123
 
 ## Semiring Types
 
-| Name | Description |
-|---|---|
-| `formula` | Algebraic formula showing how results derive from source data |
-| `why` | Lists source tuples that contributed to each result row |
+All semirings use ProvSQL's built-in `sr_*` functions with a `CtidMapping` strategy (row identity via PostgreSQL `ctid`).
+
+| Name | ProvSQL function | Description |
+|---|---|---|
+| `formula` | `sr_formula` | Algebraic expression showing how each result was derived |
+| `why` | `sr_why` | Flat list of source tuples that contributed to each result row |
+| `boolexpr` | `sr_boolexpr` | Boolean provenance expression over source identifiers |
+| `how` | `sr_how` | How-provenance: multiset polynomial showing multiplicities |
+| `which` | `sr_which` | Which-provenance (lineage): set of contributing tuple identifiers |

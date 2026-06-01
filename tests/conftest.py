@@ -125,9 +125,21 @@ def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
 
 
 @pytest.fixture(scope="session")
-def boolean_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
-    """Boolean provenance semiring configuration for testing."""
-    return next(s for s in all_semirings if s.name == "boolean")
+def boolexpr_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+    """Boolean-expression provenance semiring configuration for testing."""
+    return next(s for s in all_semirings if s.name == "boolexpr")
+
+
+@pytest.fixture(scope="session")
+def how_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+    """How-provenance semiring configuration for testing."""
+    return next(s for s in all_semirings if s.name == "how")
+
+
+@pytest.fixture(scope="session")
+def which_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+    """Which-provenance semiring configuration for testing."""
+    return next(s for s in all_semirings if s.name == "which")
 
 
 @pytest.fixture(
