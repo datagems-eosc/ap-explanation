@@ -175,17 +175,30 @@ class ProvenanceRepository:
 
         await self._set_search_path(schema_name)
 
+        # Check existence explicitly rather than relying on DuplicateTable from
+        # create_provenance_mapping, whose behavior varies across ProvSQL versions.
+        async with self._conn.transaction():
+            cursor = await self._conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s)",
+                (schema_name, prov_table)
+            )
+            result = await cursor.fetchone()
+            table_already_exists = result[0] if result else False
+
+        if table_already_exists:
+            logger.info(f"Provenance table '{prov_table}' already exists, skipping creation")
+            async with self._conn.transaction():
+                await self._rebuild_union_mapping(schema_name, semiring)
+            return False
+
         # Drop any existing temp table from previous operations
-        # ProvSQl can leave temp tables behind if an error occurs
+        # ProvSQL can leave temp tables behind if an error occurs
         async with self._conn.transaction():
             try:
                 await self._conn.execute("DROP TABLE IF EXISTS tmp_provsql")
             except Exception:
                 pass
 
-        # Attempt to create the semiring's provenance mapping table.
-        # If it already exists, the semiring is already active.
-        # We need to handle DuplicateTable carefully because it leaves the transaction in a failed state.
         semiring_created = True
         try:
             async with self._conn.transaction():
