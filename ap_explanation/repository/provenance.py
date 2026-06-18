@@ -116,7 +116,20 @@ class ProvenanceRepository:
         Returns:
             True if the table was newly annotated, False if it was already annotated.
         """
-        newly_annotated = True
+        # Check existence explicitly rather than relying on DuplicateColumn from
+        # add_provenance, whose behavior varies across ProvSQL versions.
+        async with self._conn.transaction():
+            cursor = await self._conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = %s AND table_name = %s AND column_name = 'provsql')",
+                (schema_name, table_name)
+            )
+            result = await cursor.fetchone()
+            already_annotated = result[0] if result else False
+
+        if already_annotated:
+            logger.info(f"Provenance column for table '{table_name}' already exists, skipping")
+            return False
+
         try:
             async with self._conn.transaction():
                 # Check if provsql is already installed
@@ -157,9 +170,9 @@ class ProvenanceRepository:
         except errors.DuplicateColumn:
             logger.info(
                 f"Provenance column for table '{table_name}' already exists, ignoring")
-            newly_annotated = False
+            return False
 
-        return newly_annotated
+        return True
 
     async def add_semiring(self, schema_name: str, table_name: str, semiring: DbSemiring) -> bool:
         """
