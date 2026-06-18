@@ -36,21 +36,21 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
             )
         prov_node = prov_nodes[0]
 
-        # Check the edge "input" from the provenance operator to Data nodes
+        # Check the edge "input" from Data nodes to the provenance operator
         input_edges = [
-            e for e in self.get_edges_from(prov_node.id)
+            e for e in self.get_edges_to(prov_node.id)
             if "input" in e.labels
         ]
         if not input_edges:
             raise ValueError(
-                f"The '{self.PROVENANCE_OP}' node (id: {prov_node.id}) has no outgoing edges, "
-                "but it should have at least one edge labeled 'input' to a Data node!"
+                f"The '{self.PROVENANCE_OP}' node (id: {prov_node.id}) has no incoming edges, "
+                "but it should have at least one edge labeled 'input' from a Data node!"
             )
 
-        # Collect the target nodes of these "input" edges and check they are in the allowed Data nodes
+        # Collect the source nodes of these "input" edges and check they are in the allowed Data nodes
         found: List[DataSource] = []
         for edge in input_edges:
-            node = self.get_node_by_id(edge.to)
+            node = self.get_node_by_id(edge.from_)
             if node is None:
                 raise ValueError(
                     f"The '{self.PROVENANCE_OP}' node (id: {prov_node.id}) has an 'input' edge "

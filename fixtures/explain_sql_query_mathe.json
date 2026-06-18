@@ -23,18 +23,18 @@
       "to": "d4eace36-65dc-48ec-8834-39f6375e2496"
     },
     {
-      "from": "d4eace36-65dc-48ec-8834-39f6375e2496",
+      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
       "labels": [
         "input"
       ],
-      "to": "1928a6b4-9e92-40f9-b8e3-d28553694d6d"
+      "to": "d4eace36-65dc-48ec-8834-39f6375e2496"
     },
     {
-      "from": "ce77ef2b-d668-4dca-9314-3f38cde9cee2",
+      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
       "labels": [
         "input"
       ],
-      "to": "1928a6b4-9e92-40f9-b8e3-d28553694d6d"
+      "to": "ce77ef2b-d668-4dca-9314-3f38cde9cee2"
     },
     {
       "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
@@ -96,7 +96,7 @@
         "command": "query",
         "queryType": "SELECT",
         "publishedDate": "2025-06-30",
-        "query": "SELECT distinct t.name FROM assessment a JOIN platform__sna__questions q ON(a.question_id=q.id) JOIN platform__topic t ON(t.id=q.topic) WHERE id_lect=78 AND answer=-1 AND question_level=4",
+        "query": "SELECT distinct t.name FROM assessment a JOIN platform__sna__questions q ON(a.question_id=q.id) JOIN platform__topic t ON(t.id=q.topic) WHERE answer=-1 AND question_level=4 LIMIT 3;",
         "startTime": "10:00:00",
         "step": 1,
         "type": "SQL Query"
@@ -109,8 +109,7 @@
       ],
       "properties": {
         "name": "mathe",
-        "description": "The mathe database",
-        "contentUrl": "postgresql://provdemo:provdemo@postgres-provsql:5432/mathe"
+        "description": "The mathe database"
       }
     },
     {
