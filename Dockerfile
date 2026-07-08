@@ -27,4 +27,4 @@ FROM builder AS prod
 
 RUN uv sync --frozen
 
-CMD [ "uv", "run", "python", "ap_explanation/main.py" ]
+CMD [ "uv", "run", "opentelemetry-instrument", "python", "ap_explanation/main.py" ]

@@ -55,6 +55,19 @@ When enabled, every protected endpoint requires `Authorization: Bearer <token>`.
 2. Validates the token signature (RS256), issuer, and audience
 3. Binds `UserId` (`sub`) and `ClientId` (`azp`) from the JWT claims to the structured logs for the request
 
+### Observability (OpenTelemetry)
+
+The app and the Celery worker are launched via [zero-code auto-instrumentation](https://signoz.io/docs/instrumentation/opentelemetry-python/) (`opentelemetry-instrument`, see `Dockerfile`), so no code changes are needed to get traces for FastAPI, Celery, psycopg, redis, httpx, and the LLM client. Export is **disabled by default** — set an OTLP endpoint and switch the exporters on to enable it.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OTEL_SERVICE_NAME` | No | `ap-explanation` | Service name reported to the OTLP backend |
+| `OTEL_TRACES_EXPORTER` | No | `none` | Set to `otlp` to export traces |
+| `OTEL_METRICS_EXPORTER` | No | `none` | Set to `otlp` to export metrics |
+| `OTEL_LOGS_EXPORTER` | No | `none` | Set to `otlp` to export logs |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | If any exporter is enabled | — | OTLP collector endpoint, e.g. `http://otel-collector:4317` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | No | — | Extra headers for the OTLP exporter (e.g. an ingestion key), comma-separated `key=value` pairs |
+
 ### Database Connection Behavior
 
 The service supports a dual-database architecture:

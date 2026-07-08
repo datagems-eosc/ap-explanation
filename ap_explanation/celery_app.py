@@ -12,7 +12,7 @@ load_dotenv()
 # docker run --rm \
 #   --env-file .env \
 #   ap-explanation:prod \
-#   uv run celery -A ap_explanation.celery_app:celery_app worker --loglevel=info
+#   uv run opentelemetry-instrument celery -A ap_explanation.celery_app:celery_app worker --loglevel=info
 
 
 celery_app = Celery(

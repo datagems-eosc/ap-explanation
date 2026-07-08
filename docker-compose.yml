@@ -20,6 +20,11 @@ services:
       - POSTGRES_TIMESCALE_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OTEL_SERVICE_NAME=ap-explanation
+      - OTEL_TRACES_EXPORTER=${OTEL_TRACES_EXPORTER:-none}
+      - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-none}
+      - OTEL_LOGS_EXPORTER=${OTEL_LOGS_EXPORTER:-none}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       postgres-provsql:
         condition: service_healthy

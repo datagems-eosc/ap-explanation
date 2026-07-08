@@ -149,3 +149,6 @@ scripts/dump_tables.py
 scripts/reflect_schema.py
 
 bucket
+
+# Slop 
+.claude
