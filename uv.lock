@@ -228,7 +228,7 @@ dev = [
     { name = "pytest", specifier = ">=7.2.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
-    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.14.0" },
+    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.14.2" },
 ]
 
 [[package]]
