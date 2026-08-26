@@ -13,11 +13,14 @@ trap 'kill -TERM $PG_PID' TERM INT
 PGUSER="${POSTGRES_USER:-postgres}"
 until pg_isready -U "$PGUSER" -q 2>/dev/null; do
     sleep 1
-done
+doneÊ
 
 # Upgrade provsql in every non-template database that has it installed.
 # This is a no-op when the extension is already at the current version.
-for db in $(psql -U "$PGUSER" -Atc \
+# Connects to the always-present "postgres" maintenance database to run the
+# discovery query itself, since POSTGRES_USER has no same-named database
+# when POSTGRES_DB is set to something else.
+for db in $(psql -U "$PGUSER" -d postgres -Atc \
     "SELECT datname FROM pg_database WHERE datistemplate = false"); do
     psql -U "$PGUSER" -d "$db" -c "
         DO \$\$ BEGIN
