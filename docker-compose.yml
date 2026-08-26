@@ -33,14 +33,13 @@ services:
 
   # --- PostgreSQL Service with ProvSQL compiled from source ---
   postgres-provsql:
-    image : sotrx/postgres-provsql:17-v1.8.0
+    image : ghcr.io/datagems-eosc/postgres-provsql:17-v1.9.0
     # build:
     #   context: .
     #   dockerfile: dependencies/postgres-provsql/Dockerfile
     #   args:
     #     FIXTURES_PATH: fixtures/postgres-seed
     volumes:
-      - wp4_poc_postgres_data:/var/lib/postgresql/data
       - ./fixtures/postgres-seed:/docker-entrypoint-initdb.d:ro
     environment:
       - POSTGRES_USER=provdemo
@@ -63,5 +62,3 @@ services:
       timeout: 5s
       retries: 5
 
-volumes:
-  wp4_poc_postgres_data:
