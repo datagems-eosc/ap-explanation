@@ -13,7 +13,7 @@ trap 'kill -TERM $PG_PID' TERM INT
 PGUSER="${POSTGRES_USER:-postgres}"
 until pg_isready -U "$PGUSER" -q 2>/dev/null; do
     sleep 1
-doneÊ
+done
 
 # Upgrade provsql in every non-template database that has it installed.
 # This is a no-op when the extension is already at the current version.
