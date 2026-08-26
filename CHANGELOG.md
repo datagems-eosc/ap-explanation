@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.0 — 2026-08-26
+
+### Breaking Changes
+
+- **provsql 1.12.0 required** — Existing database volumes upgrade automatically on restart via `ALTER EXTENSION provsql UPDATE` in the entrypoint; annotating a table afterwards (`add_semiring`) migrates its mapping to the new format
+- **AP labels now follow the MoMa vocabulary** — `Relational_Database` → `RelationalDatabase`, `CSV_Set` → `CsvSet`, and the `contain` edge → `containedIn`. APs using the old labels are rejected. The `Provenance_SQL_Operator` / `Provenance_Annotate_Dataset_Operator` operators are unchanged — MoMa has no provenance node types yet.
+- **APs are validated against the MoMa graph schema** — node and edge ids must be valid UUIDs, every node must carry a `properties` object whose keys match `^[a-z@][a-zA-Z0-9_]*$`, and edge labels are restricted to MoMa's closed set. Any string was previously accepted.
+
+### New Features
+
+- **Stable row references**:  Instead of using CTIDs, every annotated table now carries a `provsql_ref` column instead of relying on physical row location. `CtidMapping` is removed; `KeyMapping` replaces it. 
+- **AP models come from `moma-domain`** — the hand-maintained `PgJson` copy is gone; `AnalyticalPattern` now builds on `moma_management.domain`, so the graph vocabulary stays owned by moma-management. Only moma's `StructureStep` runs, not its full `SchemaStep & StructureStep & MappingStep` chain, since `SchemaStep` would reject the provenance operators.
+
+### Misc
+
+- Provsql >=1.11.0 add_provenance() and remove_provenance() are now idempotent, unnecessary workaround were removed as a consequence.
+
 ## v0.12.0 — 2026-06-01
 
 ### Breaking Changes

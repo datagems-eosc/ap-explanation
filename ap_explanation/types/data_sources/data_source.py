@@ -6,12 +6,12 @@ from fastapi.concurrency import asynccontextmanager
 from psycopg import AsyncConnection
 from pydantic import BaseModel
 
-from ap_explanation.types.pg_json import PgJsonNode
+from ap_explanation.types.moma_graph import Node
 
 
 class DataSource(BaseModel):
     """Base class for data sources."""
-    base_node: PgJsonNode
+    base_node: Node
 
     @property
     @abstractmethod

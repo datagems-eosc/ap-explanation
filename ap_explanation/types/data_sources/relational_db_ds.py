@@ -4,7 +4,7 @@ from typing import AsyncGenerator, List
 
 from psycopg import AsyncConnection
 
-from ap_explanation.types.pg_json import PgJsonNode
+from ap_explanation.types.moma_graph import Node
 
 from .data_source import DataSource
 
@@ -12,7 +12,7 @@ from .data_source import DataSource
 class RelationalDbDataSource(DataSource):
     """Represents a relational database as a data source."""
 
-    table_nodes: List[PgJsonNode] = []
+    table_nodes: List[Node] = []
 
     @property
     def db_name(self) -> str:

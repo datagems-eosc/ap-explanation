@@ -26,6 +26,24 @@ def test_ap_has_sql_operator(ap: ProvenanceAnalyticalPattern):
     assert "query" in sql_node.properties
 
 
+def test_ap_survives_a_wire_round_trip(ap: ProvenanceAnalyticalPattern):
+    """
+    to_wire() output must parse back into an AP.
+
+    The managed endpoints hand this dict to Celery, which re-validates it in
+    the worker — so a dump that loses the ``from`` edge alias only fails there,
+    well away from the request that caused it.
+    """
+    dumped = ap.to_wire()
+
+    assert all("from" in e for e in dumped["edges"]), "edges lost the 'from' alias"
+    assert not any("from_" in e for e in dumped["edges"])
+
+    reparsed = ProvenanceAnalyticalPattern.model_validate(dumped)
+    assert reparsed.data_source.table_names == ap.data_source.table_names
+    assert reparsed.sql_operator.properties["query"] == ap.sql_operator.properties["query"]
+
+
 def test_ap_relational_db_source(ap: ProvenanceAnalyticalPattern):
     ds = ap.data_source
     if not hasattr(ds, 'table_nodes'):  # not a RelationalDbDataSource

@@ -27,33 +27,52 @@ The service processes **Analytical Patterns (AP)** in PG-JSON format—a graph s
 
 ### Example AP Structure
 
+Node and edge ids must be valid UUIDs, and every node must carry a `properties`
+object. Edge direction matters: `input` runs *from* the data node *to* the
+operator, and `containedIn` runs *from* the container *to* what it contains.
+
 ```json
 {
   "nodes": [
     {
-      "id": "db-node-id",
-      "labels": ["Relational_Database"],
-      "properties": {
-        "contentUrl": "postgresql://user:pass@host/db",
-        "name": "public"
-      }
+      "id": "0f1a2b3c-0001-4a00-8a00-000000000001",
+      "labels": ["Analytical_Pattern"],
+      "properties": {"name": "Query Students AP"}
     },
     {
-      "id": "table-node-id",
-      "labels": ["Table"],
-      "properties": {"name": "students"}
-    },
-    {
-      "id": "query-node-id",
-      "labels": ["Provenance_SQL_Operator"],
+      "id": "0f1a2b3c-0002-4a00-8a00-000000000002",
+      "labels": ["Operator", "Provenance_SQL_Operator"],
       "properties": {
         "query": "SELECT name FROM students WHERE grade > 80"
       }
+    },
+    {
+      "id": "0f1a2b3c-0003-4a00-8a00-000000000003",
+      "labels": ["RelationalDatabase"],
+      "properties": {"name": "school"}
+    },
+    {
+      "id": "0f1a2b3c-0004-4a00-8a00-000000000004",
+      "labels": ["Table"],
+      "properties": {"name": "public.students"}
     }
   ],
   "edges": [
-    {"from": "query-node-id", "to": "table-node-id", "labels": ["input"]},
-    {"from": "table-node-id", "to": "db-node-id", "labels": ["contain"]}
+    {
+      "from": "0f1a2b3c-0001-4a00-8a00-000000000001",
+      "to": "0f1a2b3c-0002-4a00-8a00-000000000002",
+      "labels": ["consist_of"]
+    },
+    {
+      "from": "0f1a2b3c-0003-4a00-8a00-000000000003",
+      "to": "0f1a2b3c-0002-4a00-8a00-000000000002",
+      "labels": ["input"]
+    },
+    {
+      "from": "0f1a2b3c-0003-4a00-8a00-000000000003",
+      "to": "0f1a2b3c-0004-4a00-8a00-000000000004",
+      "labels": ["containedIn"]
+    }
   ]
 }
 ```

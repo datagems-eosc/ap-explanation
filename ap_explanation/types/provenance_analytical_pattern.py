@@ -7,7 +7,7 @@ from ap_explanation.types.data_sources.relational_db_ds import RelationalDbDataS
 
 from .analytical_pattern import AnalyticalPattern
 from .data_sources import DataSource
-from .pg_json import PgJsonNode
+from .moma_graph import EdgeLabel, Node
 
 
 class ProvenanceAnalyticalPattern(AnalyticalPattern):
@@ -29,7 +29,7 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
 
         # TODO: This should be allowed at some point
         if len(prov_nodes) > 1:
-            prov_ids = ", ".join(n.id for n in prov_nodes)
+            prov_ids = ", ".join(str(n.id) for n in prov_nodes)
             raise ValueError(
                 f"Multiple '{self.PROVENANCE_OP}' nodes detected (ids: {prov_ids}), "
                 "which is not yet allowed for a Provenance AP!"
@@ -39,7 +39,7 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
         # Check the edge "input" from Data nodes to the provenance operator
         input_edges = [
             e for e in self.get_edges_to(prov_node.id)
-            if "input" in e.labels
+            if EdgeLabel.input in e.labels
         ]
         if not input_edges:
             raise ValueError(
@@ -58,29 +58,17 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
                 )
             ds: DataSource
             match node.labels:
-                case labels if "Relational_Database" in labels:
-                    table_nodes = [
-                        t
-                        for e in self.get_edges_from(node.id)
-                        if "contain" in e.labels
-                        for t in [self.get_node_by_id(e.to)]
-                        if t is not None
-                    ]
+                case labels if "RelationalDatabase" in labels:
+                    table_nodes = self._contained_nodes(node)
                     ds = RelationalDbDataSource(
                         base_node=node, table_nodes=table_nodes)
-                case labels if "CSV_Set" in labels:
-                    csv_nodes = [
-                        c
-                        for e in self.get_edges_from(node.id)
-                        if "containedIn" in e.labels
-                        for c in [self.get_node_by_id(e.to)]
-                        if c is not None
-                    ]
+                case labels if "CsvSet" in labels:
+                    csv_nodes = self._contained_nodes(node)
                     ds = CsvSetDataSource(base_node=node, csv_nodes=csv_nodes)
                 case _:
                     raise ValueError(
                         f"The '{self.PROVENANCE_OP}' node (id: {prov_node.id}) has an 'input' edge to a node (id: {node.id}) "
-                        "which is not a valid Data node (Relational_Database or CSV_Set)!"
+                        "which is not a valid Data node (RelationalDatabase or CsvSet)!"
                     )
             found.append(ds)
 
@@ -93,7 +81,23 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
         self.data_source = found[0]
         return self
 
+    def _contained_nodes(self, node: Node) -> List[Node]:
+        """
+        The leaf data items a container node holds.
+
+        MoMa models containment with a single ``containedIn`` edge for every
+        Data sub-type pair (``RelationalDatabase → Table``, ``CsvSet → CSV``),
+        so both data sources resolve their children the same way.
+        """
+        return [
+            child
+            for e in self.get_edges_from(node.id)
+            if EdgeLabel.contained_in in e.labels
+            for child in [self.get_node_by_id(e.to)]
+            if child is not None
+        ]
+
     @property
-    def sql_operator(self) -> PgJsonNode:
+    def sql_operator(self) -> Node:
         """Return the Provenance_SQL_Operator node (guaranteed by check_prov_structure)."""
         return self.get_nodes_by_label(self.PROVENANCE_OP)[0]

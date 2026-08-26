@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 import pytest_asyncio
@@ -6,7 +7,7 @@ from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier
 
 from ap_explanation.types.data_sources.csv_set_ds import CsvSetDataSource
-from ap_explanation.types.pg_json import PgJsonNode
+from ap_explanation.types.moma_graph import Node
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 # All CSV files are stored under fixtures/real_mathe/ and referenced via s3:/ URIs
@@ -15,16 +16,21 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 CSV_SRC_DIR = FIXTURES_DIR
 
 
+def _nid(name: str):
+    """A stable node id. MoMa node ids are UUIDs, so placeholders have to be too."""
+    return uuid5(NAMESPACE_OID, name)
+
+
 def _make_csv_source(csv_filenames: list[str], delimiter: str = ",") -> CsvSetDataSource:
     """Build a CsvSetDataSource backed by files in fixtures/real_mathe/."""
-    base_node = PgJsonNode(
-        id="base",
-        labels=["CSV_Set", "Data"],
+    base_node = Node(
+        id=_nid("base"),
+        labels=["CsvSet", "Data"],
         properties={"delimiter": delimiter},
     )
     csv_nodes = [
-        PgJsonNode(
-            id=f"csv_{i}",
+        Node(
+            id=_nid(f"csv_{i}"),
             labels=["CSV", "Data"],
             properties={
                 "name": name,
@@ -137,8 +143,8 @@ async def test_seed_database_teardown_on_exception(db_connection: AsyncConnectio
 @pytest.mark.asyncio
 async def test_seed_database_missing_content_url_raises(db_connection: AsyncConnection):
     """seed_database raises ValueError when a CSV node lacks 'contentUrl'."""
-    base_node = PgJsonNode(id="base", labels=["CSV_Set"], properties={})
-    bad_node = PgJsonNode(id="bad", labels=["CSV"], properties={
+    base_node = Node(id=_nid("base"), labels=["CsvSet"], properties={})
+    bad_node = Node(id=_nid("bad"), labels=["CSV"], properties={
                           "name": "assessment.csv"})
     ds = CsvSetDataSource(base_node=base_node, csv_nodes=[bad_node])
 

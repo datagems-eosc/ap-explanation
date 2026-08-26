@@ -24,44 +24,25 @@ jobs:
           CURRENT_TAG="${{ github.ref_name }}"
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | grep -v "rc" | head -n 1)
 
-          if [ -z "$PREV_TAG" ]; then
-            RANGE="HEAD"
-          else
-            RANGE="${PREV_TAG}..HEAD"
-          fi
+          # Extract just the section for this tag from CHANGELOG.md, e.g. the
+          # block starting at "## v1.0.0 ..." up to (not including) the next
+          # "## " heading. Escape regex metacharacters in the tag so a literal
+          # match is used.
+          ESCAPED_TAG=$(printf '%s' "$CURRENT_TAG" | sed 's/[.[\*^$/]/\\&/g')
 
-          if [ -f CHANGELOG.md ]; then
-            cp CHANGELOG.md changelog.md
-            echo "" >> changelog.md
-            echo "---" >> changelog.md
-            echo "" >> changelog.md
-          fi
+          awk -v tag="$ESCAPED_TAG" '
+            $0 ~ "^## " tag "([^0-9.]|$)" { found=1; print; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > changelog.md
 
-          echo "## What's Changed" >> changelog.md
-          echo "" >> changelog.md
-
-          FEATURES=$(git log $RANGE --pretty=format:"- %s" | grep -i "^- feat" || true)
-          if [ -n "$FEATURES" ]; then
-            echo "### Features" >> changelog.md
-            echo "$FEATURES" >> changelog.md
-            echo "" >> changelog.md
-          fi
-
-          FIXES=$(git log $RANGE --pretty=format:"- %s" | grep -i "^- fix" || true)
-          if [ -n "$FIXES" ]; then
-            echo "### Bug Fixes" >> changelog.md
-            echo "$FIXES" >> changelog.md
-            echo "" >> changelog.md
-          fi
-
-          OTHERS=$(git log $RANGE --pretty=format:"- %s" | grep -iv "^- feat\|^- fix" || true)
-          if [ -n "$OTHERS" ]; then
-            echo "### Other Changes" >> changelog.md
-            echo "$OTHERS" >> changelog.md
-            echo "" >> changelog.md
+          if [ ! -s changelog.md ]; then
+            echo "::warning::No CHANGELOG.md section found for ${CURRENT_TAG}; falling back to a placeholder body"
+            echo "## ${CURRENT_TAG}" > changelog.md
           fi
 
           if [ -n "$PREV_TAG" ]; then
+            echo "" >> changelog.md
             echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG}" >> changelog.md
           fi
 

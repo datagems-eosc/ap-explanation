@@ -1,90 +1,74 @@
-from typing import Self
+from typing import ClassVar, List, Optional, Self, Union
+from uuid import UUID
 
+from moma_management.domain.pg_json_graph import MomaEntity
+from moma_management.domain.validation import StructureStep, ValidationStep
 from pydantic import model_validator
 
-from .pg_json import PgJson, PgJsonNode
+from .moma_graph import Edge, Node
+
+NodeId = Union[str, UUID]
 
 
-# NOTE: This is meant to be loaded from a lib at some point
-class AnalyticalPattern(PgJson):
+class AnalyticalPattern(MomaEntity):
+    """
+    A MoMa Analytical Pattern graph.
 
-    _root: PgJsonNode
+    The graph models, the structural rules and ``normalize``/``difference`` all
+    come from ``moma-domain`` — see :mod:`ap_explanation.types.moma_graph`.
+
+    Only :class:`StructureStep` is run, not moma's full
+    ``SchemaStep() & StructureStep() & MappingStep()`` chain. The APs this
+    service handles carry ``Provenance_SQL_Operator`` and
+    ``Provenance_Annotate_Dataset_Operator`` nodes, which have no schema in
+    moma-management (it has no notion of provenance at all), so ``SchemaStep``
+    would reject every AP we are asked to explain. Drop this override and
+    inherit ``moma_management.domain.analytical_pattern.AnalyticalPattern``
+    directly once those node types and their edge constraints are upstreamed.
+    """
+
+    _root_label: ClassVar[str] = "Analytical_Pattern"
+    validation_chain: ClassVar[ValidationStep] = StructureStep()
 
     @model_validator(mode="after")
-    def check_root_node(self: Self) -> Self:
-        ROOT_LABEL = "Analytical_Pattern"
-
-        # Basic check
-        ap_nodes = [n for n in self.nodes if ROOT_LABEL in n.labels]
-        if not ap_nodes:
-            raise ValueError(f"No '{ROOT_LABEL}' nodes found")
-
-        if len(ap_nodes) > 1:
-            root_ids = ", ".join(n.id for n in ap_nodes)
+    def validate(self: Self) -> Self:
+        errors = self.__class__.validation_chain.handle(self)
+        if errors:
             raise ValueError(
-                f"Multi-root AP detected (root nodes ids: {root_ids})"
-            )
-
-        root = ap_nodes[0]
-
-        if not root.id:
-            raise ValueError(f"The root '{ROOT_LABEL}' node has no id!")
-
-        self._root = root
-
-        # Check that the root node is truly a root (no edges lead to it)
-        edges_to_root = [e for e in self.edges if e.to == root.id]
-        if edges_to_root:
-            edge_sources = ", ".join(
-                f"({e.from_} -> {e.to})" for e in edges_to_root)
-            raise ValueError(
-                f"The root '{ROOT_LABEL}' node is not a root. "
-                f"The following edges lead to it: {edge_sources}"
-                "Did you leave the Task node in the AP graph?"
-            )
-
-        # Ensure the undirected graph is properly connected to the root
-        # i.e : "Ensure all nodes are reachable from the root, no matter the direction"
-        reachable = set(self._dfs_iter_undirected(self.root.id))
-        all_ids = {n.id for n in self.nodes}
-
-        if reachable != all_ids:
-            if reachable - all_ids:
-                # Reaching more nodes than existing ones -> An edge references a missing node
-                extra = ", ".join(sorted(reachable - all_ids))
-                raise ValueError(
-                    f"Graph traversal returned unknown node IDs: {extra}. "
-                    f"Edges may reference missing nodes."
-                )
-
-            if all_ids - reachable:
-                # There are nodes not reachable from the root
-                unreachable = ", ".join(sorted(all_ids - reachable))
-                raise ValueError(
-                    f"Graph is not fully connected. "
-                    f"Unreachable nodes from root: {unreachable}"
-                )
+                f"AnalyticalPattern validation failed with errors: {errors}")
         return self
 
     @property
-    def root(self) -> PgJsonNode:
-        """Return the AP root node"""
-        return self._root
+    def root(self) -> Node:
+        """Return the single ``Analytical_Pattern`` root node."""
+        return next(n for n in self.nodes if self.__class__._root_label in n.labels)
 
-    def normalize(self) -> Self:
+    def to_wire(self) -> dict:
         """
-        Normalize the AP in place:
-        - Sorts nodes by id
-        - Sorts edges by from_, to, labels
-        - Sorts labels alphabetically
-        """
-        for n in self.nodes:
-            if getattr(n, "labels", None):
-                n.labels = sorted(n.labels)
-        self.nodes.sort(key=lambda n: n.id)
+        Dump the AP back to its JSON wire form.
 
-        for e in self.edges:
-            if getattr(e, "labels", None):
-                e.labels = sorted(e.labels)
-        self.edges.sort(key=lambda e: (e.from_, e.to, tuple(e.labels)))
-        return self
+        Always use this rather than a bare ``model_dump`` when the result will
+        be validated again — over a Celery boundary, say. ``Edge.from_`` is
+        populated from the ``from`` alias and moma's model does not set
+        ``populate_by_name``, so a dump without ``by_alias`` produces a
+        ``from_`` key that no longer parses.
+        """
+        return self.model_dump(mode="json", by_alias=True)
+
+    # Lookup helpers. Node ids are UUIDs in the MoMa schema, so each one matches
+    # on the string form and callers may pass either a UUID or its text form.
+
+    def get_node_by_id(self, node_id: NodeId) -> Optional[Node]:
+        target = str(node_id)
+        return next((n for n in self.nodes if str(n.id) == target), None)
+
+    def get_edges_from(self, node_id: NodeId) -> List[Edge]:
+        target = str(node_id)
+        return [e for e in (self.edges or []) if str(e.from_) == target]
+
+    def get_edges_to(self, node_id: NodeId) -> List[Edge]:
+        target = str(node_id)
+        return [e for e in (self.edges or []) if str(e.to) == target]
+
+    def get_nodes_by_label(self, label: str) -> List[Node]:
+        return [n for n in self.nodes if label in (n.labels or [])]

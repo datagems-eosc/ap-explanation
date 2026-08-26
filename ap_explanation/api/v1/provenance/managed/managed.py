@@ -35,7 +35,7 @@ def managed_provenance_ap(
     logger.info(
         f"Dispatching managed provenance task for tables: {ds.table_names} with all semirings")
     # NOTE: Type of celery tasks must be ignored, as celery annotation monkey patches the function object
-    task = explain_task.delay(ap.model_dump(mode="json"))  # type: ignore # noqa
+    task = explain_task.delay(ap.to_wire())  # type: ignore # noqa
     response.status_code = status.HTTP_202_ACCEPTED
     return ManagedProvenanceTaskResponse(task_id=task.id)
 
@@ -55,6 +55,6 @@ def managed_provenance_ap_with_semiring(
         f"Dispatching managed provenance task for tables: {ds.table_names} with semiring '{semiring_name}'"
     )
     # NOTE: Type of celery tasks must be ignored, as celery annotation monkey patches the function object
-    task = explain_task.delay(ap.model_dump(mode="json"), semiring_name)  # type: ignore # noqa
+    task = explain_task.delay(ap.to_wire(), semiring_name)  # type: ignore # noqa
     response.status_code = status.HTTP_202_ACCEPTED
     return ManagedProvenanceTaskResponse(task_id=task.id)

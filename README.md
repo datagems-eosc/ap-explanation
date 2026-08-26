@@ -23,13 +23,13 @@ The service supports two data source types, declared in the Analytical Pattern (
 
 ### Relational Database
 
-The data node uses the label `Relational_Database` and points to an existing PostgreSQL database via `name`. Tables are listed as child nodes with label `Table`.
+The data node uses the label `RelationalDatabase` and points to an existing PostgreSQL database via `name`. Tables are listed as child nodes with label `Table`.
 
 ```jsonc
 // fixtures/explain_sql_query_mathe.json (trimmed)
 {
   "id": "...",
-  "labels": ["Relational_Database"],
+  "labels": ["RelationalDatabase"],
   "properties": {
     "name": "mathe",
   }
@@ -43,13 +43,13 @@ The service connects directly to the database and runs provenance queries agains
 
 ### CSV Set
 
-The data node uses the label `CSV_Set`. Individual CSV files are child nodes with label `CSV` and a `contentUrl` referencing an S3 path.
+The data node uses the label `CsvSet`. Individual CSV files are child nodes with label `CSV` and a `contentUrl` referencing an S3 path.
 
 ```jsonc
 // fixtures/explain_sql_query_csv.json (trimmed)
 {
   "id": "...",
-  "labels": ["CSV_Set", "Data"],
+  "labels": ["CsvSet", "Data"],
   "properties": { "delimiter": "," }
 }
 // child node:

@@ -10,7 +10,7 @@ from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier, Literal
 from pydantic import PrivateAttr
 
-from ap_explanation.types.pg_json import PgJsonNode
+from ap_explanation.types.moma_graph import Node
 
 from .data_source import DataSource
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class CsvSetDataSource(DataSource):
     """Represents a set of CSV files as a data source."""
 
-    csv_nodes: List[PgJsonNode] = []
+    csv_nodes: List[Node] = []
     _schema_name: str = PrivateAttr(
         default_factory=lambda: "csv_" + uuid4().hex[:16])
 

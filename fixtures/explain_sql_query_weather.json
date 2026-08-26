@@ -28,8 +28,8 @@
     },
     {
       "from": "a1b2c3d4-0004-40f9-b8e3-d28553694d6d",
-      "labels": ["contain"],
-      "to": "a1b2c3d4-0005-e2ec-40f8-ab76-c21c5c97d55c"
+      "labels": ["containedIn"],
+      "to": "a1b2c3d4-0005-e2ec-40f8-c21c5c97d55c"
     }
   ],
   "nodes": [
@@ -76,7 +76,7 @@
     },
     {
       "id": "a1b2c3d4-0004-40f9-b8e3-d28553694d6d",
-      "labels": ["Relational_Database"],
+      "labels": ["RelationalDatabase"],
       "properties": {
         "name": "ds_era5_land",
         "description": "Meteorological database",
@@ -84,7 +84,7 @@
       }
     },
     {
-      "id": "a1b2c3d4-0005-e2ec-40f8-ab76-c21c5c97d55c",
+      "id": "a1b2c3d4-0005-e2ec-40f8-c21c5c97d55c",
       "labels": ["Table"],
       "properties": {
         "name": "public.meteo_elevation_chunk",
