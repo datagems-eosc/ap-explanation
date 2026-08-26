@@ -9,21 +9,21 @@
 
 # docker-in-docker starts dockerd directly (not via a service), so we need to
 # kill the running daemon and restart it for daemon.json to be picked up.
-# sudo pkill dockerd || true
-# sleep 2
-# sudo dockerd &>/var/log/docker.log &
+sudo pkill dockerd || true
+sleep 2
+sudo dockerd &>/var/log/docker.log &
 
 # # Wait for Docker to be ready (up to 60s)
-# timeout 60 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done'
+timeout 60 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done'
 
-# # Workaround for newer linux kernel 
-# # https://github.com/devcontainers/features/issues/1235#event-21749942947
-# set -ex
-# if ! docker info > /dev/null 2>&1; then
-#     sudo update-alternatives --set iptables /usr/sbin/iptables-nft
-# fi
+# Workaround for newer linux kernel 
+# https://github.com/devcontainers/features/issues/1235#event-21749942947
+set -ex
+if ! docker info > /dev/null 2>&1; then
+    sudo update-alternatives --set iptables /usr/sbin/iptables-nft
+fi
 
-# # Workaround for docker in docker config being set to a wrong value by default 
-# rm -f ~/.docker/config.json
+# Workaround for docker in docker config being set to a wrong value by default 
+rm -f ~/.docker/config.json
 
 uv sync --all-groups

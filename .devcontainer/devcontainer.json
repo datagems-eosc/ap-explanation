@@ -5,11 +5,11 @@
     "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
     "features": {
         "ghcr.io/devcontainers-extra/features/uv:1": {},
-        "ghcr.io/devcontainers/features/docker-in-docker:3.0.1": {
-            "moby": false,
-            "disableIp6tables": true
+        "ghcr.io/devcontainers/features/docker-in-docker:4": {
+            "moby": false        
         },
         "ghcr.io/devcontainers-extra/features/ruff:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {},
         "ghcr.io/devcontainers-extra/features/apt-packages:1": {
             "packages": "postgresql-client"
         }
