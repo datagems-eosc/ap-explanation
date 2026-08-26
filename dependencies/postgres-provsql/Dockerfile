@@ -2,7 +2,7 @@ ARG PG_MAJOR=17
 FROM postgres:${PG_MAJOR}
 
 ARG PG_MAJOR=17
-ARG PROVSQL_VERSION=master
+ARG PROVSQL_VERSION=v1.12.0
 
 # Install build dependencies, git, and other necessary tools
 RUN apt-get update && apt-get install -y \

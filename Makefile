@@ -41,10 +41,10 @@ help:
 	[[print(f'\033[36m{m[0]:<20}\033[0m {m[1]}') for m in re.findall(r'^([a-zA-Z_-]+):.*?## (.*)$$', open(makefile).read(), re.M)] for makefile in ('$(MAKEFILE_LIST)').strip().split()]"
 
 PG_MAJOR ?= 17
-PROVSQL_VERSION ?= v1.8.0
+PROVSQL_VERSION ?= v1.12.0
 
 .PHONY: build-postgres-provsql
-build-postgres-provsql: ## Build the Docker image for PostgreSQL with ProvSQL (PG_MAJOR=17, PROVSQL_VERSION=v1.8.0)
+build-postgres-provsql: ## Build the Docker image for PostgreSQL with ProvSQL (PG_MAJOR=17, PROVSQL_VERSION=v1.12.0)
 	@echo "🚀 Building postgres-provsql image (PG=$(PG_MAJOR), ProvSQL=$(PROVSQL_VERSION))"
 	@docker build \
 		--build-arg PG_MAJOR=$(PG_MAJOR) \

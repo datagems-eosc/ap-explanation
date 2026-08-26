@@ -39,13 +39,16 @@ def postgres_container():
         dockerfile_path="dependencies/postgres-provsql/Dockerfile",
         tag="testdb:latest",
         clean_up=False,
-        buildargs={"FIXTURES_PATH": "fixtures/postgres-seed"}
+        buildargs={
+            "FIXTURES_PATH": "fixtures/postgres-seed",
+            # Pin explicitly: an unset arg used to fall through to the
+            # Dockerfile default, so the suite validated against a different
+            # ProvSQL than docker-compose runs.
+            "PROVSQL_VERSION": "v1.12.0",
+        },
     ) as image:
         with PostgresContainer(
-            image=str(image),
-            username="provdemo",
-            password="provdemo",
-            dbname="mathe"
+            image=str(image), username="provdemo", password="provdemo", dbname="mathe"
         ) as postgres:
             print(postgres.get_logs())
             yield postgres
@@ -54,12 +57,14 @@ def postgres_container():
 @pytest.fixture
 def connstr(postgres_container: PostgresContainer):
     """Returns a factory that builds a psycopg connection string for the container, optionally overriding user/password."""
+
     def _build(user: str = "provdemo", password: str = "provdemo") -> str:
         qs = postgres_container.get_connection_url()
         parsed = urlparse(qs)
         scheme = parsed.scheme.split("+", 1)[0]  # strip +psycopg2 suffix
         netloc = f"{user}:{password}@{parsed.hostname}:{parsed.port}"
         return urlunparse(parsed._replace(scheme=scheme, netloc=netloc))
+
     return _build
 
 
@@ -77,7 +82,9 @@ async def db_pool(connstr) -> AsyncGenerator[AsyncConnectionPool]:
 
 
 @pytest_asyncio.fixture
-async def db_connection(db_pool: AsyncConnectionPool) -> AsyncGenerator[AsyncConnection]:
+async def db_connection(
+    db_pool: AsyncConnectionPool,
+) -> AsyncGenerator[AsyncConnection]:
     """
     Returns a database connection from the pool with autocommit enabled,
     matching the production behaviour in create_connection_pool.
@@ -88,7 +95,9 @@ async def db_connection(db_pool: AsyncConnectionPool) -> AsyncGenerator[AsyncCon
 
 
 @pytest_asyncio.fixture
-async def provenance_repository(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
+async def provenance_repository(
+    db_connection: AsyncConnection, sql_rewriter: SqlRewriter
+):
     """
     Returns a ProvenanceRepository with semiring setup ensured.
     """
@@ -144,8 +153,7 @@ def which_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
 
 @pytest.fixture(
     scope="session",
-    params=list(Path(__file__).parent.parent.glob(
-        "fixtures/explain_sql_query*.json")),
+    params=list(Path(__file__).parent.parent.glob("fixtures/explain_sql_query*.json")),
     ids=lambda p: p.stem,
 )
 def explain_sql_query_file(request) -> Path:
