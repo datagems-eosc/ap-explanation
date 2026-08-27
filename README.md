@@ -164,6 +164,7 @@ When `LLM_API_BASE` is not set, natural-language explanations are silently disab
 | `LLM_API_MODEL` | If `LLM_API_BASE` set | — | Model name to pass to the LLM API (e.g. `gpt-4o`, `mistral-7b`) |
 | `LLM_API_KEY` | No | — | API key for the LLM endpoint. Leave empty for unauthenticated / local endpoints |
 | `LLM_SSL_VERIFY` | No | `true` | Set to `false` to disable TLS certificate verification for the LLM endpoint (useful for self-hosted models with self-signed certs) |
+| `LLM_TIMEOUT` | No | `300` | Seconds to wait for a completion before giving up. Without it an unresponsive endpoint stalls the explain task for as long as it holds the per-database lock |
 
 ### Authentication (OIDC)
 

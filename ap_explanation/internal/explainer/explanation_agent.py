@@ -8,10 +8,21 @@ from .explainer import Explainer
 
 class ExplanationAgent(Explainer):
 
-    def __init__(self, api_base: str, model: str, api_key: Optional[str] = None, *, ssl_verify: bool = True):
+    DEFAULT_TIMEOUT: float = 300.0
+
+    def __init__(
+        self,
+        api_base: str,
+        model: str,
+        api_key: Optional[str] = None,
+        *,
+        ssl_verify: bool = True,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
         self.api_base = api_base
         self.model = model
         self.api_key = api_key
+        self.timeout = timeout
         # Some LLM Api use self-signed certificates
         litellm.ssl_verify = ssl_verify
 
@@ -22,6 +33,7 @@ class ExplanationAgent(Explainer):
             **({"api_key": self.api_key} if self.api_key else {}),
             model=self.model,
             messages=messages,
+            timeout=self.timeout,
         )
         return response.choices[0].message.content
 

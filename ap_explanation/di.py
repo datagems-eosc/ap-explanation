@@ -87,7 +87,23 @@ def get_explainer() -> Explainer:
             "Missing required environment variables for LLM explanation: LLM_API_BASE, LLM_API_MODEL"
         )
 
-    return ExplanationAgent(api_base, model, api_key, ssl_verify=ssl_verify)
+    raw_timeout = os.getenv("LLM_TIMEOUT")
+    try:
+        timeout = (
+            float(raw_timeout) if raw_timeout else ExplanationAgent.DEFAULT_TIMEOUT
+        )
+    except ValueError:
+        raise ValueError(
+            f"LLM_TIMEOUT must be a number of seconds, got '{raw_timeout}'"
+        ) from None
+    if timeout <= 0:
+        raise ValueError(
+            f"LLM_TIMEOUT must be a positive number of seconds, got '{raw_timeout}'"
+        )
+
+    return ExplanationAgent(
+        api_base, model, api_key, ssl_verify=ssl_verify, timeout=timeout
+    )
 
 
 @asynccontextmanager
