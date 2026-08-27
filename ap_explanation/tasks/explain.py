@@ -129,13 +129,13 @@ def explain_task(
     lock_provider = get_lock_provider()
     lock_key = f"explain_lock:{db_name}"
 
-    logger.debug(f"[task:{self.request.id}] Acquiring lock '{lock_key}'")
+    logger.info(f"[task:{self.request.id}] Acquiring lock '{lock_key}'")
     with lock_provider.acquire(lock_key):
-        logger.debug(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
+        logger.info(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
         res = _run_in_thread(
             _do_explain(ap_dict, semiring_name)
         )
-        logger.debug(f"[task:{self.request.id}] Released lock '{lock_key}'")
+        logger.info(f"[task:{self.request.id}] Released lock '{lock_key}'")
 
     cache.set(cache_key, res)
     logger.debug(
