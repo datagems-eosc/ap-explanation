@@ -66,11 +66,23 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
                     csv_nodes = self._contained_nodes(node)
                     ds = CsvSetDataSource(base_node=node, csv_nodes=csv_nodes)
                 case _:
-                    raise ValueError(
-                        f"The '{self.PROVENANCE_OP}' node (id: {prov_node.id}) has an 'input' edge to a node (id: {node.id}) "
-                        "which is not a valid Data node (RelationalDatabase or CsvSet)!"
-                    )
+                    # A provenance operator composed into a larger AP legitimately
+                    # has non-Data inputs: ap-executor carries an upstream
+                    # operator's output on an `input` edge into the consuming
+                    # operator's node, because that is where it looks for
+                    # `properties.mapping` (see resolve_operator_input_values).
+                    # Those edges are wiring, not data sources - skip them. The
+                    # data source is still mandatory; the check just moved from
+                    # "every input edge is a data source" to "at least one is",
+                    # asserted below.
+                    continue
             found.append(ds)
+
+        if not found:
+            raise ValueError(
+                f"The '{self.PROVENANCE_OP}' node (id: {prov_node.id}) has no 'input' edge "
+                "from a Data node (RelationalDatabase or CsvSet)!"
+            )
 
         if len(found) > 1:
             raise ValueError(
