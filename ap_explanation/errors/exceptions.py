@@ -68,6 +68,19 @@ class ProvSqlInternalError(Exception):
         super().__init__(self.message)
 
 
+class InvalidProbabilityColumnError(Exception):
+    """
+    Exception raised when a table's probability column cannot be used as tuple probabilities.
+
+    This error indicates that the column named by a data node's ``probabilityColumn``
+    property does not exist, holds non-numeric values, or holds values outside [0, 1].
+    """
+
+    def __init__(self, table_name: str, column: str, reason: str):
+        self.message = f"Invalid probability column '{column}' on table '{table_name}': {reason}"
+        super().__init__(self.message)
+
+
 class DatabaseNotFoundError(Exception):
     """
     Exception raised when a database cannot be found on either the Postgres or Timescale instance.

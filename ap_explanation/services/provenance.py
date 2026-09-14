@@ -1,5 +1,5 @@
 from logging import getLogger
-from typing import List
+from typing import Dict, List, Optional
 
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
@@ -69,7 +69,19 @@ class ProvenanceService:
 
         return True
 
-    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring]) -> List[Derivation]:
+    async def set_probabilities(self, schema_name: str, probability_columns: Dict[str, Optional[str]]) -> None:
+        """
+        Set the tuple probabilities of annotated tables.
+
+        Args:
+            schema_name: Schema where the tables are located
+            probability_columns: Maps each table to the column holding its tuples'
+                probabilities, or to None when all its tuples are certain
+        """
+        for table_name, column in probability_columns.items():
+            await self._provenance_repo.set_probabilities(schema_name, table_name, column)
+
+    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring], compute_probability: bool = False) -> List[Derivation]:
         """
         Execute a SQL query with provenance tracking for each semiring, merge the
         results by ``provsql`` UUID, and return a JSON string.
@@ -82,6 +94,8 @@ class ProvenanceService:
             schema_name: Schema where the query should be executed
             sql_query: The SQL query to execute with provenance
             semirings: List of semiring configurations to compute
+            compute_probability: Also evaluate each row's probability. Tuple
+                probabilities must have been set with :meth:`set_probabilities`
 
         Returns:
             List of :class:`~ap_explanation.types.provenance.ProvenanceResult` instances,
@@ -98,6 +112,15 @@ class ProvenanceService:
                     derivations[row.provsql] = Derivation(
                         answer=row.answer, provenance={})
                 derivations[row.provsql].provenance[semiring.name] = row.provenance
+
+        if compute_probability:
+            probabilities = await self._provenance_repo.query_probability(schema_name, sql_query)
+            for provsql, probability in probabilities.items():
+                if provsql not in derivations:
+                    logger.warning(
+                        f"Probability computed for row '{provsql}', which no semiring returned")
+                    continue
+                derivations[provsql].probability = probability
 
         return list(derivations.values())
 

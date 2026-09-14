@@ -44,6 +44,10 @@ class Derivation(BaseModel):
     # Keys correspond to DbSemiring.name values from the semirings passed to compute_provenance.
     provenance: Dict[str, SemiringProvenance]
 
+    # Probability that this row is part of the result, given the tuple probabilities
+    # of the queried tables. None when the probability was not requested.
+    probability: Optional[float] = None
+
 
 class Provenance(BaseModel):
     """

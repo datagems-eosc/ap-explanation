@@ -37,6 +37,29 @@ curl http://localhost:5000/api/v1/aps/explanation/abc123
 
 ---
 
+## Probabilities
+
+Add `?probability=true` to either dispatch endpoint to also compute, for each result row, the probability that it belongs to the result (ProvSQL's `probability_evaluate`). It is returned as `probability` on each derivation, and is `null` when not requested.
+
+Tuple probabilities come from a column of each queried table, named by the `probabilityColumn` property of its `Table` (or `CSV`) node:
+
+```json
+{
+  "labels": ["Table"],
+  "properties": {
+    "name": "mathe.assessment",
+    "probabilityColumn": "reliability"
+  }
+}
+```
+
+- Tables without `probabilityColumn`, and NULL values in the column, count as certain (probability 1).
+- Values must be numeric and within [0, 1]; otherwise the task fails with an `Invalid probability column` error.
+- For a `GROUP BY` query, the probability is that of the group existing, i.e. at least one of its tuples being present.
+- Probabilities are exact, computed with ProvSQL's default method. Hard queries (e.g. `SUM` over large values) may be slow.
+
+---
+
 ## Semiring Types
 
 All semirings use ProvSQL's built-in `sr_*` functions with a `CtidMapping` strategy (row identity via PostgreSQL `ctid`).

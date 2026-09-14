@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from pathlib import Path
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator, Dict, List, Optional
 
 from fastapi.concurrency import asynccontextmanager
 from psycopg import AsyncConnection
@@ -24,6 +24,25 @@ class DataSource(BaseModel):
     @property
     @abstractmethod
     def table_names(self) -> List[str]: ...
+
+    @property
+    @abstractmethod
+    def probability_columns(self) -> Dict[str, Optional[str]]:
+        """
+        Map each table name to the column holding its tuples' probabilities, as
+        declared by the data node's ``probabilityColumn`` property, or ``None``
+        when the node declares none (every tuple of that table is certain).
+        """
+        ...
+
+    def _probability_columns_of(self, nodes: List[Node]) -> Dict[str, Optional[str]]:
+        """Pair *nodes* with ``table_names``, which is derived from them in the same order."""
+        PROBABILITY_COLUMN_PROPERTY = "probabilityColumn"
+        return {
+            table_name: (node.properties or {}).get(
+                PROBABILITY_COLUMN_PROPERTY)
+            for node, table_name in zip(nodes, self.table_names)
+        }
 
     @abstractmethod
     @asynccontextmanager

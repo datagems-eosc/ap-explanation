@@ -86,6 +86,8 @@ operator, and `containedIn` runs *from* the container *to* what it contains.
 
 To target a single semiring: `POST /api/v1/aps/explanation/{semiring_name}`
 
+To also compute each result row's probability, add `?probability=true` (see [Usage](usage.md#probabilities)).
+
 The AP graph defines the database connection, tables, and query. The service extracts these components and applies provenance tracking.
 
 ## Getting Started

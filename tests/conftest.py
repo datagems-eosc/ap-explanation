@@ -29,6 +29,23 @@ def test_schema() -> TestSchema:
     return TestSchema()
 
 
+@pytest_asyncio.fixture
+async def two_rows_of_one_student(db_connection: AsyncConnection, test_schema: TestSchema) -> str:
+    """
+    Ids of two rows of the test table sharing a student, comma-separated for an
+    IN list, so a DISTINCT on the student merges them. Read with ProvSQL paused.
+    """
+    table = f"{test_schema.schema}.{test_schema.table}"
+    async with db_connection.transaction():
+        await db_connection.execute("SET LOCAL provsql.active = 0")
+        cursor = await db_connection.execute(
+            f"SELECT id FROM {table} WHERE student_id = ("
+            f"  SELECT student_id FROM {table} GROUP BY student_id HAVING count(*) >= 2 LIMIT 1"
+            ") ORDER BY id LIMIT 2"
+        )
+        return ", ".join(str(r[0]) for r in await cursor.fetchall())
+
+
 @pytest.fixture(scope="function")
 def postgres_container():
     # Get the project root directory (parent of tests/)

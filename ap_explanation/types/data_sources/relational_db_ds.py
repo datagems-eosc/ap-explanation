@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator, Dict, List, Optional
 
 from psycopg import AsyncConnection
 
@@ -59,6 +59,10 @@ class RelationalDbDataSource(DataSource):
                 )
             names.append(parts[1])
         return names
+
+    @property
+    def probability_columns(self) -> Dict[str, Optional[str]]:
+        return self._probability_columns_of(self.table_nodes)
 
     @asynccontextmanager
     async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None, None]:

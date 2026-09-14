@@ -2,7 +2,7 @@ from enum import StrEnum
 from logging import getLogger
 from typing import Never
 
-from fastapi import Depends, Response, status
+from fastapi import Depends, Query, Response, status
 from pydantic import BaseModel
 
 from ap_explanation.middlewares.auth import require_authentication
@@ -22,9 +22,20 @@ class ManagedProvenanceTaskResponse(BaseModel):
     status: str = "pending"
 
 
+ProbabilityFlag = Query(
+    False,
+    description=(
+        "Also compute the probability of each result row. Tuple probabilities are read "
+        "from the column named by each Table/CSV node's `probabilityColumn` property; "
+        "tables without one are treated as certain."
+    ),
+)
+
+
 def managed_provenance_ap(
     ap: ProvenanceAnalyticalPattern,
     response: Response,
+    probability: bool = ProbabilityFlag,
     _auth: Never = Depends(require_authentication())
 ) -> ManagedProvenanceTaskResponse:
     """Dispatch an async task for the full explanation lifecycle with all semirings.
@@ -35,7 +46,7 @@ def managed_provenance_ap(
     logger.info(
         f"Dispatching managed provenance task for tables: {ds.table_names} with all semirings")
     # NOTE: Type of celery tasks must be ignored, as celery annotation monkey patches the function object
-    task = explain_task.delay(ap.to_wire())  # type: ignore # noqa
+    task = explain_task.delay(ap.to_wire(), compute_probability=probability)  # type: ignore # noqa
     response.status_code = status.HTTP_202_ACCEPTED
     return ManagedProvenanceTaskResponse(task_id=task.id)
 
@@ -44,6 +55,7 @@ def managed_provenance_ap_with_semiring(
     semiring_name: SemiringName,
     ap: ProvenanceAnalyticalPattern,
     response: Response,
+    probability: bool = ProbabilityFlag,
     _auth: Never = Depends(require_authentication()),
 ) -> ManagedProvenanceTaskResponse:
     """Dispatch an async task for the full explanation lifecycle with a specific semiring.
@@ -55,6 +67,6 @@ def managed_provenance_ap_with_semiring(
         f"Dispatching managed provenance task for tables: {ds.table_names} with semiring '{semiring_name}'"
     )
     # NOTE: Type of celery tasks must be ignored, as celery annotation monkey patches the function object
-    task = explain_task.delay(ap.to_wire(), semiring_name)  # type: ignore # noqa
+    task = explain_task.delay(ap.to_wire(), semiring_name, compute_probability=probability)  # type: ignore # noqa
     response.status_code = status.HTTP_202_ACCEPTED
     return ManagedProvenanceTaskResponse(task_id=task.id)

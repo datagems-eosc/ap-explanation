@@ -2,6 +2,7 @@
 
 from ap_explanation.errors.exceptions import (
     DatabaseNotFoundError,
+    InvalidProbabilityColumnError,
     ProvSqlInternalError,
     ProvSqlMissingError,
     TableNotAnnotatedError,
@@ -10,8 +11,9 @@ from ap_explanation.errors.exceptions import (
 
 __all__ = [
     "DatabaseNotFoundError",
+    "InvalidProbabilityColumnError",
     "ProvSqlInternalError",
     "ProvSqlMissingError",
-    "TableOrSchemaNotFoundError",
     "TableNotAnnotatedError",
+    "TableOrSchemaNotFoundError",
 ]

@@ -8,7 +8,11 @@ from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
 
-from ap_explanation.errors import ProvSqlInternalError, ProvSqlMissingError
+from ap_explanation.errors import (
+    InvalidProbabilityColumnError,
+    ProvSqlInternalError,
+    ProvSqlMissingError,
+)
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
 from ap_explanation.types.provenance import ProvSQLRow, SemiringProvenance
@@ -123,6 +127,112 @@ class ProvenanceRepository:
             raise ProvSqlInternalError(
                 f"ProvSQL internal error occurred. The table may have lost its provenance annotations. "
                 f"Please re-annotate the table with the '{semiring.name}' semiring and try again. "
+                f"Error details: {str(e)}"
+            ) from e
+
+    async def query_probability(self, schema_name: str, query: str) -> dict[str, float]:
+        """
+        Execute a SQL query and evaluate the probability of each result row.
+
+        Tuple probabilities must have been set beforehand with
+        :meth:`set_probabilities`.
+
+        Returns:
+            The probability of each result row, keyed by its ProvSQL UUID.
+        """
+        edited_query = self._sql_rewriter.rewrite_probability(query)
+
+        try:
+            async with self._conn.transaction():
+                await self._set_search_path(schema_name)
+
+                cursor = await self._conn.cursor(row_factory=dict_row).execute(
+                    SQL(cast(LiteralString, edited_query))
+                )
+                rows = await cursor.fetchall()
+        except errors.InternalError_ as e:
+            logger.error(f"ProvSQL internal error while evaluating probabilities: {e}")
+            raise ProvSqlInternalError(
+                f"ProvSQL internal error occurred while evaluating probabilities. "
+                f"Error details: {str(e)}"
+            ) from e
+
+        return {
+            str(row["provsql"]): row[SqlRewriter.PROBABILITY_FUNCTION] for row in rows
+        }
+
+    async def set_probabilities(
+        self, schema_name: str, table_name: str, column: str | None
+    ) -> None:
+        """
+        Set the probability of every tuple of a provenance-annotated table.
+
+        ProvSQL keeps probabilities in its circuit store, not in the table, so
+        they outlive the request that set them. Every tuple is therefore set on
+        each call: to its value in *column*, or to 1 (certain) when *column* is
+        ``None`` or the value is NULL, so that nothing an earlier request set
+        lingers. ``set_prob`` overwrites the stored value but does not check
+        its range (ProvSQL 1.12), hence the validation beforehand.
+
+        Args:
+            schema_name: The schema where the table is located.
+            table_name: The annotated table.
+            column: The column holding the probabilities, if any.
+
+        Raises:
+            InvalidProbabilityColumnError: If the column does not exist, is not
+                numeric, or holds a value outside [0, 1].
+        """
+        table = Identifier(table_name)
+        probability = (
+            SQL("COALESCE({}::float8, 1.0)").format(Identifier(column))
+            if column
+            else SQL("1.0")
+        )
+
+        try:
+            async with self._conn.transaction():
+                await self._set_search_path(schema_name)
+                # The provsql column is read directly, so ProvSQL's rewriter
+                # has nothing to add. SET LOCAL reverts at commit.
+                await self._conn.execute("SET LOCAL provsql.active = 0")
+
+                if column:
+                    cursor = await self._conn.execute(
+                        SQL("SELECT count(*) FROM {} WHERE {} NOT BETWEEN 0 AND 1").format(
+                            table, probability
+                        )
+                    )
+                    (out_of_range,) = await cursor.fetchone()
+                    if out_of_range:
+                        raise InvalidProbabilityColumnError(
+                            table_name,
+                            column,
+                            f"{out_of_range} value(s) outside [0, 1]",
+                        )
+
+                # Counted rather than fetched, to avoid shipping back one
+                # void value per tuple.
+                await self._conn.execute(
+                    SQL(
+                        "SELECT count(*) FROM (SELECT set_prob(provsql, {}) FROM {}) AS s"
+                    ).format(probability, table)
+                )
+        except (
+            errors.UndefinedColumn,
+            errors.InvalidTextRepresentation,
+            errors.CannotCoerce,
+        ) as e:
+            # Only a column we were asked to read can be at fault here
+            raise InvalidProbabilityColumnError(
+                table_name, column or "", str(e)
+            ) from e
+        except errors.InternalError_ as e:
+            logger.error(
+                f"ProvSQL internal error while setting probabilities on '{table_name}': {e}"
+            )
+            raise ProvSqlInternalError(
+                f"ProvSQL internal error occurred while setting probabilities on '{table_name}'. "
                 f"Error details: {str(e)}"
             ) from e
 

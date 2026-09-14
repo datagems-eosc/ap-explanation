@@ -22,67 +22,42 @@
         }
       }
     },
-    "/api/v1/aps/annotate": {
+    "/api/v1/aps/explanation": {
       "post": {
         "tags": [
-          "v1"
+          "analytical patterns"
         ],
-        "summary": "Annotate Ap",
-        "description": "Annotate the AP with all available semirings using dynamic database connection.",
-        "operationId": "annotate_ap_api_v1_aps_annotate_post",
+        "summary": "Managed Provenance Ap",
+        "description": "Dispatch an async task for the full explanation lifecycle with all semirings.\n\nReturns HTTP 202 Accepted. Poll the result at GET /api/v1/aps/explanation/{task_id}.",
+        "operationId": "managed_provenance_ap_api_v1_aps_explanation_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "probability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also compute the probability of each result row. Tuple probabilities are read from the column named by each Table/CSV node's `probabilityColumn` property; tables without one are treated as certain.",
+              "default": false,
+              "title": "Probability"
+            },
+            "description": "Also compute the probability of each result row. Tuple probabilities are read from the column named by each Table/CSV node's `probabilityColumn` property; tables without one are treated as certain."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PgJson"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/AnnotationResult"
-                  },
-                  "type": "array",
-                  "title": "Response Annotate Ap Api V1 Aps Annotate Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
+                "$ref": "#/components/schemas/ProvenanceAnalyticalPattern"
               }
             }
           }
-        }
-      },
-      "delete": {
-        "tags": [
-          "v1"
-        ],
-        "summary": "Remove Annotation Ap",
-        "description": "Remove annotations from AP tables for all available semirings using dynamic database connection.",
-        "operationId": "remove_annotation_ap_api_v1_aps_annotate_delete",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PgJson"
-              }
-            }
-          },
-          "required": true
         },
         "responses": {
           "200": {
@@ -90,11 +65,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/RemovalResult"
-                  },
-                  "type": "array",
-                  "title": "Response Remove Annotation Ap Api V1 Aps Annotate Delete"
+                  "$ref": "#/components/schemas/ManagedProvenanceTaskResponse"
                 }
               }
             }
@@ -112,78 +83,39 @@
         }
       }
     },
-    "/api/v1/aps/annotate/{semiring_name}": {
+    "/api/v1/aps/explanation/{semiring_name}": {
       "post": {
         "tags": [
-          "v1"
+          "analytical patterns"
         ],
-        "summary": "Annotate Ap With Semiring",
-        "description": "Annotate the AP with the chosen semiring using dynamic database connection.",
-        "operationId": "annotate_ap_with_semiring_api_v1_aps_annotate__semiring_name__post",
+        "summary": "Managed Provenance Ap With Semiring",
+        "description": "Dispatch an async task for the full explanation lifecycle with a specific semiring.\n\nReturns HTTP 202 Accepted. Poll the result at GET /api/v1/aps/explanation/{task_id}.",
+        "operationId": "managed_provenance_ap_with_semiring_api_v1_aps_explanation__semiring_name__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "semiring_name",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Semiring Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PgJson"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AnnotationResult"
-                  },
-                  "title": "Response Annotate Ap With Semiring Api V1 Aps Annotate  Semiring Name  Post"
-                }
-              }
+              "$ref": "#/components/schemas/SemiringName"
             }
           },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "v1"
-        ],
-        "summary": "Remove Annotation Ap With Semiring",
-        "description": "Remove annotations from AP tables for the chosen semiring using dynamic database connection.",
-        "operationId": "remove_annotation_ap_with_semiring_api_v1_aps_annotate__semiring_name__delete",
-        "parameters": [
           {
-            "name": "semiring_name",
-            "in": "path",
-            "required": true,
+            "name": "probability",
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "title": "Semiring Name"
-            }
+              "type": "boolean",
+              "description": "Also compute the probability of each result row. Tuple probabilities are read from the column named by each Table/CSV node's `probabilityColumn` property; tables without one are treated as certain.",
+              "default": false,
+              "title": "Probability"
+            },
+            "description": "Also compute the probability of each result row. Tuple probabilities are read from the column named by each Table/CSV node's `probabilityColumn` property; tables without one are treated as certain."
           }
         ],
         "requestBody": {
@@ -191,7 +123,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PgJson"
+                "$ref": "#/components/schemas/ProvenanceAnalyticalPattern"
               }
             }
           }
@@ -202,11 +134,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RemovalResult"
-                  },
-                  "title": "Response Remove Annotation Ap With Semiring Api V1 Aps Annotate  Semiring Name  Delete"
+                  "$ref": "#/components/schemas/ManagedProvenanceTaskResponse"
                 }
               }
             }
@@ -224,81 +152,38 @@
         }
       }
     },
-    "/api/v1/aps/explain": {
-      "post": {
+    "/api/v1/aps/explanation/{task_id}": {
+      "get": {
         "tags": [
-          "v1"
+          "analytical patterns"
         ],
-        "summary": "Explain Ap",
-        "description": "Explain the AP with all available semirings using dynamic database connection.",
-        "operationId": "explain_ap_api_v1_aps_explain_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PgJson"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+        "summary": "Get Managed Task Status",
+        "description": "Return the current status and (if completed) the result of a managed explanation task.\n\nPoll this endpoint after POST /aps/explanation or POST /aps/explanation/{semiring_name}.",
+        "operationId": "get_managed_task_status_api_v1_aps_explanation__task_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
           }
-        }
-      }
-    },
-    "/api/v1/aps/explain/{semiring_name}": {
-      "post": {
-        "tags": [
-          "v1"
         ],
-        "summary": "Explain Ap With Semiring",
-        "description": "Explain the AP with only the chosen semiring using dynamic database connection.",
-        "operationId": "explain_ap_with_semiring_api_v1_aps_explain__semiring_name__post",
         "parameters": [
           {
-            "name": "semiring_name",
+            "name": "task_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Semiring Name"
+              "title": "Task Id"
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PgJson"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatusResponse"
+                }
               }
             }
           },
@@ -318,10 +203,30 @@
     "/api/v1/health": {
       "get": {
         "tags": [
-          "v1"
+          "analytical patterns"
         ],
         "summary": "Health Check",
+        "description": "Liveness check \u2014 returns service version info.",
         "operationId": "health_check_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "tags": [
+          "analytical patterns"
+        ],
+        "summary": "Readiness Check",
+        "operationId": "readiness_check_api_v1_ready_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -337,38 +242,87 @@
   },
   "components": {
     "schemas": {
-      "AnnotationResult": {
+      "DataSource": {
         "properties": {
-          "table_name": {
-            "type": "string",
-            "title": "Table Name"
-          },
-          "semiring": {
-            "type": "string",
-            "title": "Semiring"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "success",
-              "already_annotated",
-              "error"
-            ],
-            "title": "Status"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
+          "base_node": {
+            "$ref": "#/components/schemas/Node"
           }
         },
         "type": "object",
         "required": [
-          "table_name",
-          "semiring",
-          "status",
-          "message"
+          "base_node"
         ],
-        "title": "AnnotationResult"
+        "title": "DataSource",
+        "description": "Base class for data sources."
+      },
+      "Edge": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "uuid",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "uuid",
+            "title": "To"
+          },
+          "labels": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeLabel"
+            },
+            "type": "array",
+            "title": "Labels"
+          },
+          "properties": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Properties"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "labels"
+        ],
+        "title": "Edge"
+      },
+      "EdgeLabel": {
+        "type": "string",
+        "enum": [
+          "distribution",
+          "recordSet",
+          "linkTo",
+          "containedIn",
+          "field",
+          "source/fileObject",
+          "source/fileSet",
+          "statistics",
+          "intervalStatistics",
+          "dataQuality",
+          "error",
+          "consist_of",
+          "input",
+          "output",
+          "follows",
+          "uses",
+          "is_accomplished_by",
+          "perform_inference",
+          "is_measured_by",
+          "fitted_on",
+          "trained_on",
+          "VIRTUAL_BELONGS_TO",
+          "HAS_COMPARISON",
+          "HAS_EVIDENCE",
+          "HAS_TARGET"
+        ],
+        "title": "EdgeLabel"
       },
       "HTTPValidationError": {
         "properties": {
@@ -383,72 +337,29 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "PgJson": {
+      "ManagedProvenanceTaskResponse": {
         "properties": {
-          "nodes": {
-            "items": {
-              "$ref": "#/components/schemas/PgJsonNode"
-            },
-            "type": "array",
-            "title": "Nodes"
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
           },
-          "edges": {
-            "items": {
-              "$ref": "#/components/schemas/PgJsonEdge"
-            },
-            "type": "array",
-            "title": "Edges"
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "pending"
           }
         },
         "type": "object",
         "required": [
-          "nodes",
-          "edges"
+          "task_id"
         ],
-        "title": "PgJson"
+        "title": "ManagedProvenanceTaskResponse"
       },
-      "PgJsonEdge": {
-        "properties": {
-          "from": {
-            "type": "string",
-            "title": "From"
-          },
-          "labels": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Labels"
-          },
-          "to": {
-            "type": "string",
-            "title": "To"
-          },
-          "properties": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Properties"
-          }
-        },
-        "type": "object",
-        "required": [
-          "from",
-          "labels",
-          "to"
-        ],
-        "title": "PgJsonEdge"
-      },
-      "PgJsonNode": {
+      "Node": {
         "properties": {
           "id": {
             "type": "string",
+            "format": "uuid",
             "title": "Id"
           },
           "labels": {
@@ -459,6 +370,24 @@
             "title": "Labels"
           },
           "properties": {
+            "patternProperties": {
+              "^[a-z@][a-zA-Z0-9_]*$": {}
+            },
+            "type": "object",
+            "title": "Properties"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "labels",
+          "properties"
+        ],
+        "title": "Node"
+      },
+      "Properties": {
+        "properties": {
+          "mapping": {
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -468,48 +397,152 @@
                 "type": "null"
               }
             ],
-            "title": "Properties"
+            "title": "Mapping"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "chunk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk"
+          },
+          "similarityScore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarityscore"
+          }
+        },
+        "type": "object",
+        "title": "Properties"
+      },
+      "ProvenanceAnalyticalPattern": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Edge"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edges"
+          },
+          "data_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "labels"
+          "nodes"
         ],
-        "title": "PgJsonNode"
+        "title": "ProvenanceAnalyticalPattern"
       },
-      "RemovalResult": {
+      "SemiringName": {
+        "type": "string",
+        "enum": [
+          "formula",
+          "why",
+          "boolexpr",
+          "how",
+          "which"
+        ],
+        "title": "SemiringName"
+      },
+      "TaskStatusResponse": {
         "properties": {
-          "table_name": {
+          "task_id": {
             "type": "string",
-            "title": "Table Name"
-          },
-          "semiring": {
-            "type": "string",
-            "title": "Semiring"
+            "title": "Task Id"
           },
           "status": {
             "type": "string",
             "enum": [
+              "pending",
+              "started",
               "success",
-              "not_found",
-              "error"
+              "failure",
+              "retry",
+              "revoked"
             ],
             "title": "Status"
           },
-          "message": {
-            "type": "string",
-            "title": "Message"
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
           }
         },
         "type": "object",
         "required": [
-          "table_name",
-          "semiring",
-          "status",
-          "message"
+          "task_id",
+          "status"
         ],
-        "title": "RemovalResult"
+        "title": "TaskStatusResponse"
       },
       "ValidationError": {
         "properties": {
@@ -534,6 +567,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -543,6 +583,12 @@
           "type"
         ],
         "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

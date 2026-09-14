@@ -3,7 +3,7 @@ import logging
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator, Dict, List, Optional
 from uuid import uuid4
 
 from psycopg import AsyncConnection
@@ -43,6 +43,10 @@ class CsvSetDataSource(DataSource):
             safe = re.sub(r'[^a-zA-Z0-9]+', '_', stem).strip('_').lower()
             names.append(safe)
         return names
+
+    @property
+    def probability_columns(self) -> Dict[str, Optional[str]]:
+        return self._probability_columns_of(self.csv_nodes)
 
     @asynccontextmanager
     async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None, None]:

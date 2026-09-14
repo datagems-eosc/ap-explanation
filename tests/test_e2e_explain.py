@@ -63,12 +63,17 @@ async def test_e2e_explain_sql_query(
                 f"Required table(s) not present in the test DB for {explain_sql_query_file.name}"
             )
 
-        # 2. Compute provenance for all configured semirings
+        # 2. Set tuple probabilities from the fixture's probabilityColumn
+        #    properties; tables without one are certain
+        await service.set_probabilities(ds.schema_name, ds.probability_columns)
+        uncertain = any(ds.probability_columns.values())
+
+        # 3. Compute provenance for all configured semirings, with probabilities
         derivations = await service.compute_provenance(
-            ds.schema_name, query, all_semirings
+            ds.schema_name, query, all_semirings, compute_probability=True
         )
 
-        # 3. Generate explanation (no-op explainer returns empty string)
+        # 4. Generate explanation (no-op explainer returns empty string)
         explanation = await service.explain(ds.schema_name, query, derivations)
 
         # --- Assertions ---
@@ -80,6 +85,14 @@ async def test_e2e_explain_sql_query(
         for d in derivations:
             assert d.answer, "Each derivation must have an answer"
             assert d.provenance, "Each derivation must have provenance data"
+            if uncertain:
+                assert d.probability is not None and 0 < d.probability < 1, (
+                    "Rows over uncertain tuples must have a probability below 1"
+                )
+            else:
+                assert d.probability == pytest.approx(1.0), (
+                    "Rows over certain tuples must have probability 1"
+                )
             for semiring in all_semirings:
                 assert semiring.name in d.provenance, (
                     f"Missing semiring '{semiring.name}' in provenance"

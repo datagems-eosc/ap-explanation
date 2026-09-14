@@ -18,6 +18,7 @@ Given a query, the service returns one or more provenance annotations:
 Each annotation is provided by ProvSQL's built-in `sr_*` semiring functions.
 
 - **Natural-language explanation** (optional, LLM-powered) — a human-readable summary of the provenance
+- **Result probability** (optional) — the probability of each result row, computed by ProvSQL from per-tuple probabilities (see [Result probabilities](#result-probabilities))
 
 The service supports two data source types, declared in the Analytical Pattern (AP) graph.
 
@@ -64,6 +65,20 @@ The data node uses the label `CsvSet`. Individual CSV files are child nodes with
 
 The service reads the CSV files from `S3_MOUNT_PATH`, loads them into a **temporary PostgreSQL schema**, runs the provenance query, then cleans up.
 
+### Result probabilities
+
+Add `?probability=true` to `POST /api/v1/aps/explanation` (or `/{semiring_name}`) to also get, on each result row, the probability that it belongs to the result (ProvSQL's `probability_evaluate`). It is `null` when not requested.
+
+Tuple probabilities are read from a column of each table, named by the `probabilityColumn` property of its `Table` or `CSV` node:
+
+```jsonc
+{ "labels": ["Table"], "properties": { "name": "mathe.assessment", "probabilityColumn": "reliability" } }
+```
+
+- Tables without `probabilityColumn`, and NULL values, are certain (probability 1).
+- Values must be numeric and within [0, 1], otherwise the task fails.
+- For `DISTINCT` and `GROUP BY` queries, the probability is that of the row existing at all, i.e. of at least one of the tuples it was merged from being present.
+
 > Full documentation: **https://datagems-eosc.github.io/ap-explanation/**
 
 ---
@@ -107,7 +122,7 @@ sequenceDiagram
     participant Worker as Celery Worker
     participant PG as PostgreSQL + ProvSQL
 
-    Client->>API: POST /explain
+    Client->>API: POST /api/v1/aps/explanation
     API->>Redis: dispatch explain_task
     Redis->>Worker: consume task
 
@@ -117,9 +132,14 @@ sequenceDiagram
         Worker-->>Client: result (no DB work)
     else cache miss
         Worker->>Redis: acquire explain_lock:{db}
-        Worker->>PG: annotate tables
+        Worker->>PG: annotate tables (kept for later requests)
+        opt ?probability=true
+            Worker->>PG: set tuple probabilities
+        end
         Worker->>PG: compute provenance
-        Worker->>PG: remove annotation
+        opt ?probability=true
+            Worker->>PG: compute result probabilities
+        end
         Worker->>Redis: release lock
         Worker->>Redis: set(cache_key, result, ttl=1h)
         Worker-->>Client: result

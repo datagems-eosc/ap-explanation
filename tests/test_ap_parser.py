@@ -51,3 +51,23 @@ def test_ap_relational_db_source(ap: ProvenanceAnalyticalPattern):
     assert isinstance(ds.schema_name, str) and len(ds.schema_name) > 0
     assert isinstance(ds.db_name, str) and len(ds.db_name) > 0
     assert isinstance(ds.table_names, list) and len(ds.table_names) > 0
+
+
+def test_ap_probability_columns_keyed_by_table(ap: ProvenanceAnalyticalPattern):
+    ds = ap.data_source
+    assert list(ds.probability_columns) == ds.table_names
+
+
+def test_ap_probability_column_read_from_data_node(explain_sql_query_file: Path):
+    raw = json.loads(explain_sql_query_file.read_text())
+    data_nodes = [n for n in raw["nodes"] if {"Table", "CSV"} & set(n["labels"])]
+    data_nodes[0]["properties"]["probabilityColumn"] = "reliability"
+
+    ap = ProvenanceAnalyticalPattern.model_validate(raw)
+    columns = ap.data_source.probability_columns
+
+    assert list(columns.values()).count("reliability") == 1
+    assert list(columns.values()).count(None) == len(data_nodes) - 1
+    # The property must reach the Celery worker too
+    reparsed = ProvenanceAnalyticalPattern.model_validate(ap.to_wire())
+    assert reparsed.data_source.probability_columns == columns

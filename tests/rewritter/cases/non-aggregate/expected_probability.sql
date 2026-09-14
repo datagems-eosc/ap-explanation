@@ -1,5 +1,5 @@
--- Wrapped: sr_why must apply to each result row, after DISTINCT merged rows
-SELECT x.name, sr_why(provenance(),'why_mapping')
+-- Wrapped: the probability is evaluated on each result row's token, after DISTINCT merged rows
+SELECT probability_evaluate(provenance())
 FROM (
     SELECT DISTINCT t.name
     FROM assessment a

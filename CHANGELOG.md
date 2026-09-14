@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+- **DISTINCT queries return one derivation per result row** — semirings are now evaluated outside the `DISTINCT`, as they already were for `GROUP BY`. Previously the semiring value was part of the `DISTINCT` key, so a result row merged from several tuples came back once per tuple, each with that tuple's provenance only; it now comes back once, with provenance combining all of them.
+
+### New Features
+
+- **Result probabilities** — `POST /api/v1/aps/explanation[/{semiring_name}]?probability=true` evaluates each result row's probability with ProvSQL's `probability_evaluate`, returned as `probability` on each derivation. Tuple probabilities are read from the column named by each `Table`/`CSV` node's `probabilityColumn` property; tables without one are certain.
+
+### Misc
+
+- Cached results are keyed on the new `probability` flag too, so entries cached before the upgrade are not reused.
+
 ## v1.0.0 — 2026-08-26
 
 ### Breaking Changes

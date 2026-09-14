@@ -162,6 +162,33 @@ async def test_ok_compute_provenance_with_all_semirings(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("projection, expected_rows", [("student_id", 1), ("*", 2)])
+async def test_ok_compute_provenance_distinct_merges_rows(
+    provenance_service: ProvenanceService,
+    all_semirings: List[DbSemiring],
+    test_schema: TestSchema,
+    two_rows_of_one_student: str,
+    projection: str,
+    expected_rows: int,
+):
+    """
+    A DISTINCT query returns one derivation per result row, whose provenance
+    combines every tuple merged into it, not one derivation per tuple.
+    """
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, all_semirings)
+
+    query = f"SELECT DISTINCT {projection} FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
+    results = await provenance_service.compute_provenance(test_schema.schema, query, all_semirings)
+
+    assert len(results) == expected_rows
+    for row in results:
+        assert set(row.provenance.keys()) == {s.name for s in all_semirings}
+        if expected_rows == 1:
+            # Both tuples are referenced by the merged row
+            assert len(row.provenance["why"].data) == 2
+
+
+@pytest.mark.asyncio
 async def test_ok_compute_provenance_without_annotation(
     provenance_service: ProvenanceService,
     why_semiring: DbSemiring,

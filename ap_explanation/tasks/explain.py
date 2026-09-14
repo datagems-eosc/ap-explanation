@@ -40,12 +40,15 @@ def _run_in_thread(coro):
 async def _do_explain(
     ap_dict: dict,
     semiring_name: Optional[str] = None,
+    compute_probability: bool = False,
 ) -> list:
     """
     Core async logic: annotate tables → compute provenance → remove annotation.
 
     If *semiring_name* is ``None`` all configured semirings are used; otherwise
-    only the requested one.
+    only the requested one. If *compute_probability* is set, tuple probabilities
+    are read from each data node's ``probabilityColumn`` and every result row
+    gets its probability.
     """
 
     # Resolve semirings to use
@@ -72,8 +75,13 @@ async def _do_explain(
         for table_name in ds.table_names:
             await service.annotate_dataset(table_name, ds.schema_name, target_semirings)
 
+        # 1b. Set tuple probabilities (if requested)
+        if compute_probability:
+            await service.set_probabilities(ds.schema_name, ds.probability_columns)
+
         # 2. Compute provenance
-        derivations = await service.compute_provenance(ds.schema_name, query, target_semirings)
+        derivations = await service.compute_provenance(
+            ds.schema_name, query, target_semirings, compute_probability)
 
         # 3. Compute NL explanation (if enabled)
         explanation = await service.explain(ds.schema_name, query, derivations)
@@ -95,6 +103,7 @@ def explain_task(
     self,
     ap_dict: dict,
     semiring_name: Optional[str] = None,
+    compute_probability: bool = False,
 ) -> list:
     """Celery task: annotate + compute provenance + remove annotation.
 
@@ -106,7 +115,8 @@ def explain_task(
     The TTL is controlled by ``RedisCacheProvider.DEFAULT_TTL`` (default 1 h).
     """
     cache = get_cache_provider()
-    cache_key = RedisCacheProvider.make_key(ap_dict, semiring_name)
+    cache_key = RedisCacheProvider.make_key(
+        ap_dict, semiring_name, compute_probability)
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -133,7 +143,7 @@ def explain_task(
     with lock_provider.acquire(lock_key):
         logger.info(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
         res = _run_in_thread(
-            _do_explain(ap_dict, semiring_name)
+            _do_explain(ap_dict, semiring_name, compute_probability)
         )
         logger.info(f"[task:{self.request.id}] Released lock '{lock_key}'")
 
