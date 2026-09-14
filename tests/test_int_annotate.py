@@ -1,5 +1,4 @@
 
-from typing import List
 
 import pytest
 
@@ -18,12 +17,12 @@ async def test_ok_single_semiring(provenance_service: ProvenanceService, why_sem
 
 
 @pytest.mark.asyncio
-async def test_ok_all_semiring(provenance_service: ProvenanceService, all_semirings: List[DbSemiring], test_schema: TestSchema):
+async def test_ok_all_semiring(provenance_service: ProvenanceService, all_semirings: list[DbSemiring], test_schema: TestSchema):
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, all_semirings)
 
 
 @pytest.mark.asyncio
-async def test_ok_multiple_calls(provenance_service: ProvenanceService, all_semirings: List[DbSemiring], test_schema: TestSchema):
+async def test_ok_multiple_calls(provenance_service: ProvenanceService, all_semirings: list[DbSemiring], test_schema: TestSchema):
     """
     Annotate the same dataset multiple times with different semirings. This should work without issues.
     """
@@ -64,9 +63,9 @@ async def test_ko_schema_does_not_exists(provenance_service: ProvenanceService, 
 
 @pytest.mark.asyncio
 async def test_ok_remove_annotation_from_non_annotated_table(provenance_service: ProvenanceService, test_schema: TestSchema):
-    was_removed = await provenance_service.remove_annotation(test_schema.table, test_schema.schema)
+    await provenance_service.remove_annotation(test_schema.table, test_schema.schema)
     # NOTE: Not checked yet as the ability to remove a single semiring has been removed. Effectively everything will be removed and the
-    # was_removed variable will always be True. This can be re-enabled once the ability to remove a single semiring is added back.
+    # result will always be True. This can be re-enabled once the ability to remove a single semiring is added back.
     # assert was_removed is False
 
 

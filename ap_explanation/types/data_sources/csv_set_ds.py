@@ -1,14 +1,14 @@
 import csv
 import logging
 import re
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional
 from uuid import uuid4
 
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier, Literal
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from ap_explanation.types.moma_graph import Node
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class CsvSetDataSource(DataSource):
     """Represents a set of CSV files as a data source."""
 
-    csv_nodes: List[Node] = []
+    csv_nodes: list[Node] = Field(default_factory=list)
     _schema_name: str = PrivateAttr(
         default_factory=lambda: "csv_" + uuid4().hex[:16])
 
@@ -33,7 +33,7 @@ class CsvSetDataSource(DataSource):
         return self._schema_name
 
     @property
-    def table_names(self) -> List[str]:
+    def table_names(self) -> list[str]:
         names = []
         for node in self.csv_nodes:
             if not node.properties or "name" not in node.properties:
@@ -45,11 +45,11 @@ class CsvSetDataSource(DataSource):
         return names
 
     @property
-    def probability_columns(self) -> Dict[str, Optional[str]]:
+    def probability_columns(self) -> dict[str, str | None]:
         return self._probability_columns_of(self.csv_nodes)
 
     @asynccontextmanager
-    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None, None]:
+    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None]:
         """Create a new schema and populate it with tables based on the CSV nodes.
         The schema is dropped when the context exits.
         Args:

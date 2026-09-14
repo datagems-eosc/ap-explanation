@@ -13,7 +13,6 @@ seeded test container.
 
 import json
 from pathlib import Path
-from typing import List
 
 import pytest
 from psycopg import AsyncConnection
@@ -39,7 +38,7 @@ async def test_e2e_explain_sql_query(
     explain_sql_query_file: Path,
     db_connection: AsyncConnection,
     sql_rewriter: SqlRewriter,
-    all_semirings: List[DbSemiring],
+    all_semirings: list[DbSemiring],
 ):
     """Parse an AP fixture and run the full provenance pipeline end-to-end."""
     ap = ProvenanceAnalyticalPattern.model_validate(

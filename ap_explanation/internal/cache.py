@@ -1,6 +1,6 @@
 import hashlib
 import json
-from typing import Any, Optional, Protocol, cast
+from typing import Any, Protocol, cast
 
 import redis
 
@@ -12,7 +12,7 @@ class CacheProvider(Protocol):
     worker pool uses threads by default).
     """
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """Return the deserialised value stored under *key*, or ``None`` if absent."""
         ...
 
@@ -60,9 +60,9 @@ class RedisCacheProvider:
     # Protocol implementation
     # ------------------------------------------------------------------
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """Return the deserialised value stored under *key*, or ``None``."""
-        raw = cast(Optional[bytes], self._client.get(key))
+        raw = cast(bytes | None, self._client.get(key))
         if raw is None:
             return None
         return json.loads(raw)

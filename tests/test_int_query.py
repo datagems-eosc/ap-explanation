@@ -1,4 +1,3 @@
-from typing import List
 
 import pytest
 
@@ -137,7 +136,7 @@ async def test_ok_compute_provenance_which_semiring(
 @pytest.mark.asyncio
 async def test_ok_compute_provenance_with_all_semirings(
     provenance_service: ProvenanceService,
-    all_semirings: List[DbSemiring],
+    all_semirings: list[DbSemiring],
     test_schema: TestSchema
 ):
     """Test computing provenance with all available semirings."""
@@ -165,7 +164,7 @@ async def test_ok_compute_provenance_with_all_semirings(
 @pytest.mark.parametrize("projection, expected_rows", [("student_id", 1), ("*", 2)])
 async def test_ok_compute_provenance_distinct_merges_rows(
     provenance_service: ProvenanceService,
-    all_semirings: List[DbSemiring],
+    all_semirings: list[DbSemiring],
     test_schema: TestSchema,
     two_rows_of_one_student: str,
     projection: str,

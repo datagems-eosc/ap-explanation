@@ -1,4 +1,4 @@
-from typing import Any, Literal, Never, Optional
+from typing import Any, Literal, Never
 
 from celery.result import AsyncResult
 from fastapi.params import Depends
@@ -14,8 +14,8 @@ TaskStatus = Literal["pending", "started",
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: TaskStatus
-    result: Optional[Any] = None
-    error: Optional[str] = None
+    result: Any | None = None
+    error: str | None = None
 
 
 def get_managed_task_status(

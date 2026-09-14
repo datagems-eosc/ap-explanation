@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Annotated
 
 import structlog
 from fastapi import Depends, HTTPException
@@ -53,10 +53,8 @@ def require_authentication():
     from ap_explanation.di import get_authentication_service  # Avoid circular import
 
     async def _check(
-        credentials: HTTPAuthorizationCredentials | None = Depends(
-            bearer_scheme),
-        authentication: Optional[Authentication] = Depends(
-            get_authentication_service),
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+        authentication: Annotated[Authentication | None, Depends(get_authentication_service)],
     ) -> dict | None:
         if authentication is None:
             return None

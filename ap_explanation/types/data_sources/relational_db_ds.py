@@ -1,8 +1,9 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional
 
 from psycopg import AsyncConnection
+from pydantic import Field
 
 from ap_explanation.types.moma_graph import Node
 
@@ -12,7 +13,7 @@ from .data_source import DataSource
 class RelationalDbDataSource(DataSource):
     """Represents a relational database as a data source."""
 
-    table_nodes: List[Node] = []
+    table_nodes: list[Node] = Field(default_factory=list)
 
     @property
     def db_name(self) -> str:
@@ -45,7 +46,7 @@ class RelationalDbDataSource(DataSource):
         return schemas.pop()
 
     @property
-    def table_names(self) -> List[str]:
+    def table_names(self) -> list[str]:
         names = []
         for node in self.table_nodes:
             if not node.properties or "name" not in node.properties:
@@ -61,10 +62,10 @@ class RelationalDbDataSource(DataSource):
         return names
 
     @property
-    def probability_columns(self) -> Dict[str, Optional[str]]:
+    def probability_columns(self) -> dict[str, str | None]:
         return self._probability_columns_of(self.table_nodes)
 
     @asynccontextmanager
-    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None, None]:
+    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None]:
         """Relational databases don't require seeding, so this is a no-op."""
         yield

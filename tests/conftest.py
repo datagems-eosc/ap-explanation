@@ -1,6 +1,6 @@
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncGenerator, List
 from urllib.parse import urlparse, urlunparse
 
 import pytest
@@ -51,24 +51,26 @@ def postgres_container():
     # Get the project root directory (parent of tests/)
     project_root = Path(__file__).parent.parent
 
-    with DockerImage(
-        path=str(project_root),
-        dockerfile_path="dependencies/postgres-provsql/Dockerfile",
-        tag="testdb:latest",
-        clean_up=False,
-        buildargs={
-            "FIXTURES_PATH": "fixtures/postgres-seed",
-            # Pin explicitly: an unset arg used to fall through to the
-            # Dockerfile default, so the suite validated against a different
-            # ProvSQL than docker-compose runs.
-            "PROVSQL_VERSION": "v1.12.0",
-        },
-    ) as image:
-        with PostgresContainer(
+    with (
+        DockerImage(
+            path=str(project_root),
+            dockerfile_path="dependencies/postgres-provsql/Dockerfile",
+            tag="testdb:latest",
+            clean_up=False,
+            buildargs={
+                "FIXTURES_PATH": "fixtures/postgres-seed",
+                # Pin explicitly: an unset arg used to fall through to the
+                # Dockerfile default, so the suite validated against a different
+                # ProvSQL than docker-compose runs.
+                "PROVSQL_VERSION": "v1.12.0",
+            },
+        ) as image,
+        PostgresContainer(
             image=str(image), username="provdemo", password="provdemo", dbname="mathe"
-        ) as postgres:
-            print(postgres.get_logs())
-            yield postgres
+        ) as postgres,
+    ):
+        print(postgres.get_logs())
+        yield postgres
 
 
 @pytest.fixture
@@ -133,37 +135,37 @@ def sql_rewriter():
 
 
 @pytest.fixture(scope="session")
-def all_semirings() -> List[DbSemiring]:
+def all_semirings() -> list[DbSemiring]:
     """Why provenance semiring configuration for testing."""
     return semirings
 
 
 @pytest.fixture(scope="session")
-def why_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+def why_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
     """Why provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "why")
 
 
 @pytest.fixture(scope="session")
-def formula_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+def formula_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
     """How provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "formula")
 
 
 @pytest.fixture(scope="session")
-def boolexpr_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+def boolexpr_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
     """Boolean-expression provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "boolexpr")
 
 
 @pytest.fixture(scope="session")
-def how_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+def how_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
     """How-provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "how")
 
 
 @pytest.fixture(scope="session")
-def which_semiring(all_semirings: List[DbSemiring]) -> DbSemiring:
+def which_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
     """Which-provenance semiring configuration for testing."""
     return next(s for s in all_semirings if s.name == "which")
 

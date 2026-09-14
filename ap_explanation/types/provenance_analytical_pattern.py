@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Optional, Self
+from typing import ClassVar, Self
 
 from pydantic import Field, model_validator
 
@@ -13,7 +13,7 @@ from .moma_graph import EdgeLabel, Node
 class ProvenanceAnalyticalPattern(AnalyticalPattern):
 
     PROVENANCE_OP: ClassVar[str] = "Provenance_SQL_Operator"
-    data_source: Optional[DataSource] = Field(default=None, exclude=True)
+    data_source: DataSource | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def check_prov_structure(self: Self) -> Self:
@@ -48,7 +48,7 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
             )
 
         # Collect the source nodes of these "input" edges and check they are in the allowed Data nodes
-        found: List[DataSource] = []
+        found: list[DataSource] = []
         for edge in input_edges:
             node = self.get_node_by_id(edge.from_)
             if node is None:
@@ -93,7 +93,7 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
         self.data_source = found[0]
         return self
 
-    def _contained_nodes(self, node: Node) -> List[Node]:
+    def _contained_nodes(self, node: Node) -> list[Node]:
         """
         The leaf data items a container node holds.
 

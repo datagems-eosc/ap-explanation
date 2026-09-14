@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 import litellm
 from litellm import Message, completion
@@ -14,7 +13,7 @@ class ExplanationAgent(Explainer):
         self,
         api_base: str,
         model: str,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         *,
         ssl_verify: bool = True,
         timeout: float = DEFAULT_TIMEOUT,
@@ -26,7 +25,7 @@ class ExplanationAgent(Explainer):
         # Some LLM Api use self-signed certificates
         litellm.ssl_verify = ssl_verify
 
-    def _completion(self, messages: List[Message]) -> str:
+    def _completion(self, messages: list[Message]) -> str:
         response = completion(
             api_base=self.api_base,
             # Do not pass api_key if it's None, litellm will complain

@@ -1,5 +1,5 @@
 from re import compile
-from typing import List, TypedDict
+from typing import TypedDict
 
 from .mapping import ProvenanceMapping
 
@@ -63,7 +63,7 @@ class KeyMapping(ProvenanceMapping[RowReference]):
             "reference": value,
         }
 
-    def decode_equation(self, values: str) -> List[RowReference]:
+    def decode_equation(self, values: str) -> list[RowReference]:
         """
         Decode a provenance equation string into a list of RowReference dicts.
 

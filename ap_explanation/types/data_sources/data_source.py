@@ -1,6 +1,6 @@
 from abc import abstractmethod
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional
 
 from fastapi.concurrency import asynccontextmanager
 from psycopg import AsyncConnection
@@ -23,11 +23,11 @@ class DataSource(BaseModel):
 
     @property
     @abstractmethod
-    def table_names(self) -> List[str]: ...
+    def table_names(self) -> list[str]: ...
 
     @property
     @abstractmethod
-    def probability_columns(self) -> Dict[str, Optional[str]]:
+    def probability_columns(self) -> dict[str, str | None]:
         """
         Map each table name to the column holding its tuples' probabilities, as
         declared by the data node's ``probabilityColumn`` property, or ``None``
@@ -35,7 +35,7 @@ class DataSource(BaseModel):
         """
         ...
 
-    def _probability_columns_of(self, nodes: List[Node]) -> Dict[str, Optional[str]]:
+    def _probability_columns_of(self, nodes: list[Node]) -> dict[str, str | None]:
         """Pair *nodes* with ``table_names``, which is derived from them in the same order."""
         PROBABILITY_COLUMN_PROPERTY = "probabilityColumn"
         return {
@@ -46,6 +46,6 @@ class DataSource(BaseModel):
 
     @abstractmethod
     @asynccontextmanager
-    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None, None]:
+    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None]:
         """Perform any necessary setup for the data source, such as creating tables or loading data."""
         ...

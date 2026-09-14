@@ -3,7 +3,6 @@ Integration tests for result probabilities: tuple probabilities are set from a
 table column with ``set_probabilities``, then evaluated per result row by
 ``compute_provenance(..., compute_probability=True)``.
 """
-from typing import List
 
 import pytest
 import pytest_asyncio
@@ -62,7 +61,7 @@ async def test_ok_probability_overwritten_by_later_calls(
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
     query = f"SELECT id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
 
-    async def probabilities(column: str | None) -> List[float | None]:
+    async def probabilities(column: str | None) -> list[float | None]:
         await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: column})
         derivations = await provenance_service.compute_provenance(
             test_schema.schema, query, [why_semiring], compute_probability=True)

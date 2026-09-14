@@ -1,5 +1,4 @@
 from logging import getLogger
-from typing import Dict, List, Optional
 
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
@@ -26,7 +25,7 @@ class ProvenanceService:
         self._provenance_repo = provenance_repo
         self._explainer = explainer
 
-    async def annotate_dataset(self, table_name: str, schema_name: str, semirings: List[DbSemiring]) -> bool:
+    async def annotate_dataset(self, table_name: str, schema_name: str, semirings: list[DbSemiring]) -> bool:
         """
         Annotate a table with provenance information.
 
@@ -69,7 +68,7 @@ class ProvenanceService:
 
         return True
 
-    async def set_probabilities(self, schema_name: str, probability_columns: Dict[str, Optional[str]]) -> None:
+    async def set_probabilities(self, schema_name: str, probability_columns: dict[str, str | None]) -> None:
         """
         Set the tuple probabilities of annotated tables.
 
@@ -81,7 +80,7 @@ class ProvenanceService:
         for table_name, column in probability_columns.items():
             await self._provenance_repo.set_probabilities(schema_name, table_name, column)
 
-    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: List[DbSemiring], compute_probability: bool = False) -> List[Derivation]:
+    async def compute_provenance(self, schema_name: str, sql_query: str, semirings: list[DbSemiring], compute_probability: bool = False) -> list[Derivation]:
         """
         Execute a SQL query with provenance tracking for each semiring, merge the
         results by ``provsql`` UUID, and return a JSON string.
@@ -124,7 +123,7 @@ class ProvenanceService:
 
         return list(derivations.values())
 
-    async def explain(self, schema_name: str, sql_query: str, provenance_results: List[Derivation]) -> str:
+    async def explain(self, schema_name: str, sql_query: str, provenance_results: list[Derivation]) -> str:
         """
         Generate a human-readable explanation from provenance results.
         """

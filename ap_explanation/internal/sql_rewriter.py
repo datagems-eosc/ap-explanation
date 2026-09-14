@@ -208,12 +208,12 @@ class SqlRewriter:
             str: Rewritten SQL query
 
         Raises:
-            ValueError: If the query is not a SELECT query
+            TypeError: If the query is not a SELECT query
         """
         ast = parse_one(query, dialect=self.db_dialect)
 
         if not isinstance(ast, Select):
-            raise ValueError("Expected SELECT query")
+            raise TypeError("Expected SELECT query")
 
         if ast.args.get("distinct"):
             return self._rewrite_distinct(ast, semiring)

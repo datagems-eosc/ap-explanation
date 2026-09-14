@@ -8,7 +8,6 @@ safe regardless of whether the caller already has a running loop (e.g. pytest-as
 import asyncio
 import concurrent.futures
 import logging
-from typing import Optional
 
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import (
@@ -39,7 +38,7 @@ def _run_in_thread(coro):
 
 async def _do_explain(
     ap_dict: dict,
-    semiring_name: Optional[str] = None,
+    semiring_name: str | None = None,
     compute_probability: bool = False,
 ) -> list:
     """
@@ -102,7 +101,7 @@ async def _do_explain(
 def explain_task(
     self,
     ap_dict: dict,
-    semiring_name: Optional[str] = None,
+    semiring_name: str | None = None,
     compute_probability: bool = False,
 ) -> list:
     """Celery task: annotate + compute provenance + remove annotation.

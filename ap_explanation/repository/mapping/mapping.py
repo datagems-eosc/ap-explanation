@@ -1,4 +1,4 @@
-from typing import List, Protocol
+from typing import Protocol
 
 
 class ProvenanceMapping[T](Protocol):
@@ -42,7 +42,7 @@ class ProvenanceMapping[T](Protocol):
         """
         ...
 
-    def decode_equation(self, values: str) -> List[T]:
+    def decode_equation(self, values: str) -> list[T]:
         """
         Decode a provenance equation string into a list of decoded references.
 

@@ -39,7 +39,7 @@ class ProvenanceRepository:
     @classmethod
     async def create(
         cls, conn: AsyncConnection, sql_rewriter: SqlRewriter
-    ) -> "ProvenanceRepository":
+    ) -> ProvenanceRepository:
         repo = cls(conn, sql_rewriter)
         # Enabled per connection, never server-wide: the server default stays
         # provsql.active = 0 (set in the image's postgresql.conf) so that other
@@ -127,7 +127,7 @@ class ProvenanceRepository:
             raise ProvSqlInternalError(
                 f"ProvSQL internal error occurred. The table may have lost its provenance annotations. "
                 f"Please re-annotate the table with the '{semiring.name}' semiring and try again. "
-                f"Error details: {str(e)}"
+                f"Error details: {e!s}"
             ) from e
 
     async def query_probability(self, schema_name: str, query: str) -> dict[str, float]:
@@ -154,7 +154,7 @@ class ProvenanceRepository:
             logger.error(f"ProvSQL internal error while evaluating probabilities: {e}")
             raise ProvSqlInternalError(
                 f"ProvSQL internal error occurred while evaluating probabilities. "
-                f"Error details: {str(e)}"
+                f"Error details: {e!s}"
             ) from e
 
         return {
@@ -233,7 +233,7 @@ class ProvenanceRepository:
             )
             raise ProvSqlInternalError(
                 f"ProvSQL internal error occurred while setting probabilities on '{table_name}'. "
-                f"Error details: {str(e)}"
+                f"Error details: {e!s}"
             ) from e
 
     async def enable_provenance(self, schema_name: str, table_name: str) -> bool:
@@ -295,7 +295,7 @@ class ProvenanceRepository:
                 f"ProvSQL extension is not installed on the postgres server: {e}"
             )
             raise ProvSqlMissingError(
-                f"ProvSQL extension is not installed or not available: {str(e)}"
+                f"ProvSQL extension is not installed or not available: {e!s}"
             ) from e
         except errors.UndefinedTable as e:
             logger.warning(

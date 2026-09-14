@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Optional, Self, Union
+from typing import ClassVar, Self
 from uuid import UUID
 
 from moma_management.domain.pg_json_graph import MomaEntity
@@ -7,7 +7,7 @@ from pydantic import model_validator
 
 from .moma_graph import Edge, Node
 
-NodeId = Union[str, UUID]
+NodeId = str | UUID
 
 
 class AnalyticalPattern(MomaEntity):
@@ -58,17 +58,17 @@ class AnalyticalPattern(MomaEntity):
     # Lookup helpers. Node ids are UUIDs in the MoMa schema, so each one matches
     # on the string form and callers may pass either a UUID or its text form.
 
-    def get_node_by_id(self, node_id: NodeId) -> Optional[Node]:
+    def get_node_by_id(self, node_id: NodeId) -> Node | None:
         target = str(node_id)
         return next((n for n in self.nodes if str(n.id) == target), None)
 
-    def get_edges_from(self, node_id: NodeId) -> List[Edge]:
+    def get_edges_from(self, node_id: NodeId) -> list[Edge]:
         target = str(node_id)
         return [e for e in (self.edges or []) if str(e.from_) == target]
 
-    def get_edges_to(self, node_id: NodeId) -> List[Edge]:
+    def get_edges_to(self, node_id: NodeId) -> list[Edge]:
         target = str(node_id)
         return [e for e in (self.edges or []) if str(e.to) == target]
 
-    def get_nodes_by_label(self, label: str) -> List[Node]:
+    def get_nodes_by_label(self, label: str) -> list[Node]:
         return [n for n in self.nodes if label in (n.labels or [])]

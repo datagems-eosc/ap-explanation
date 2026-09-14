@@ -2,7 +2,6 @@ from pathlib import Path
 from uuid import NAMESPACE_OID, uuid5
 
 import pytest
-import pytest_asyncio
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier
 

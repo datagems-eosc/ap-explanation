@@ -1,4 +1,5 @@
 import redis.asyncio as aioredis
+from redis.exceptions import RedisError
 
 
 async def _check_redis(uri: str) -> dict:
@@ -7,7 +8,7 @@ async def _check_redis(uri: str) -> dict:
     try:
         await client.ping()
         return {"status": "reachable"}
-    except Exception as e:
+    except RedisError as e:
         return {"status": "unreachable", "detail": str(e)}
     finally:
         await client.aclose()

@@ -1,10 +1,10 @@
 import logging
 import os
 import threading
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import AsyncGenerator, Callable, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -51,7 +51,7 @@ def get_s3_mount_path() -> Path:
 
 def _start_celery_worker() -> threading.Thread:
     """Start an embedded Celery worker in a daemon thread."""
-    from ap_explanation.celery_app import celery_app  # noqa: ensure tasks registered
+    from ap_explanation.celery_app import celery_app  # ensure tasks registered
 
     worker = celery_app.Worker(
         loglevel="INFO",
@@ -129,7 +129,7 @@ async def container_lifespan(_: FastAPI):
 
 
 @asynccontextmanager
-async def create_connection_pool(connection_string: str) -> AsyncGenerator[AsyncConnection, None]:
+async def create_connection_pool(connection_string: str) -> AsyncGenerator[AsyncConnection]:
     """
     Validates the connection string by opening a direct connection first, then creates a
     temporary database connection pool, yields a connection, and closes the pool afterwards.
@@ -166,7 +166,7 @@ async def get_semirings() -> list[DbSemiring]:
 
 
 @lru_cache(maxsize=1)
-def get_authentication_service() -> Optional[Authentication]:
+def get_authentication_service() -> Authentication | None:
     """Return a JwtValidator configured from environment variables."""
     if not os.getenv("OIDC_ISSUER"):
         logger.warning("OIDC_ISSUER not set, authentication disabled")
@@ -181,7 +181,7 @@ def get_authentication_service() -> Optional[Authentication]:
     )
 
 
-def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], AsyncGenerator[ProvenanceService, None]]:
+def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], AsyncGenerator[ProvenanceService]]:
     """
     Factory function to create a provenance service dependency with dynamic database connection.
     The connection pool is created when the AP is processed and closed when processing completes.
@@ -230,7 +230,7 @@ def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], Async
 
         raise DatabaseNotFoundError(db_name)
 
-    async def _provide_service() -> AsyncGenerator[ProvenanceService, None]:
+    async def _provide_service() -> AsyncGenerator[ProvenanceService]:
         qs = await check_db_location(data_source.db_name)
         async with create_connection_pool(qs) as pool:
             # NOTE: Some data sources require set up
