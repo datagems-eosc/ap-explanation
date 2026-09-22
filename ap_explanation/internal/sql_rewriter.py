@@ -66,7 +66,7 @@ class SqlRewriter:
         # Detect if the outer select contains top-level aggregates (not in subqueries)
         # AND has a GROUP BY clause (required for provsql aggregate provenance tracking)
         if not self._has_top_level_aggregates(outer_select) or not outer_select.args.get('group'):
-            return self._rewrite_non_aggregate(query, semiring)
+            return self._rewrite_non_aggregate(query, self._semiring_call(semiring))
 
         return self._rewrite_aggregate(query, semiring)
 
@@ -74,22 +74,14 @@ class SqlRewriter:
         """
         Rewrite a SQL query to return the probability of each result row.
 
-        The query is always wrapped as a subquery, and only the probability is
-        selected: the answer columns come from the semiring passes, merged by
-        the ``provsql`` token ProvSQL appends. For a GROUP BY query, the
-        probability is that of the group existing.
-
         Example:
             Original query:
-            SELECT DISTINCT col1
+            SELECT col1
             FROM table;
 
             Rewritten query:
-            SELECT probability_evaluate(provenance())
-            FROM (
-                SELECT DISTINCT col1
-                FROM table
-            ) AS x;
+            SELECT col1, probability_evaluate(provenance())
+            FROM table;
 
         Args:
             query (str): Original SQL query
@@ -101,21 +93,23 @@ class SqlRewriter:
             ValueError: If the query is not a SELECT query
             NotImplementedError: If the query uses HAVING
         """
-        outer_select = self._parse_outer_select(query)
 
-        # Evaluated outside the query, on each result row's token. Appended to
-        # the query itself, provenance() would be computed per input tuple,
-        # before DISTINCT merges rows, and the probability value would become
-        # part of the DISTINCT key. The root is wrapped, so a set operation
-        # (UNION, ...) is wrapped whole.
-        wrapper = Select(
-            expressions=[
-                Anonymous(
-                    this=self.PROBABILITY_FUNCTION,
-                    expressions=[Anonymous(this="provenance")],
-                )
-            ]
-        ).from_(Subquery(this=outer_select.root(), alias="x"))
+        # Prepare the proba call "probability_evaluate(provenance())"
+        call = Anonymous(
+            this=self.PROBABILITY_FUNCTION,
+            expressions=[Anonymous(this="provenance")],
+        )
+
+        outer_select = self._parse_outer_select(query)
+        root = outer_select.root()
+        if isinstance(root, Select) and not (
+            self._has_top_level_aggregates(root) and root.args.get("group")
+        ):
+            return self._rewrite_non_aggregate(query, call)
+
+        # Wrap in a subquery
+        wrapper = Select(expressions=[call]).from_(
+            Subquery(this=root, alias="x"))
 
         return wrapper.sql(dialect=self.db_dialect)
 
@@ -185,9 +179,9 @@ class SqlRewriter:
 
         return False
 
-    def _rewrite_non_aggregate(self, query: str, semiring: DbSemiring) -> str:
+    def _rewrite_non_aggregate(self, query: str, call: Expression) -> str:
         """
-        Rewrite a non-aggregate SELECT query by adding whyPROV_now to the select list.
+        Rewrite a non-aggregate SELECT query by adding *call* to the select list.
 
         Example:
             Original query:
@@ -202,7 +196,8 @@ class SqlRewriter:
 
         Args:
             query (str): Original SQL query
-            semiring (DbSemiring): Semiring configuration for provenance tracking
+            call (Expression): Provenance call to append, e.g. the semiring
+                retrieval function or probability_evaluate(provenance())
 
         Returns:
             str: Rewritten SQL query
@@ -216,18 +211,18 @@ class SqlRewriter:
             raise TypeError("Expected SELECT query")
 
         if ast.args.get("distinct"):
-            return self._rewrite_distinct(ast, semiring)
+            return self._rewrite_distinct(ast, call)
 
-        ast.expressions.append(self._semiring_call(semiring))
+        ast.expressions.append(call)
 
         return ast.sql(dialect=self.db_dialect)
 
-    def _rewrite_distinct(self, select: Select, semiring: DbSemiring) -> str:
+    def _rewrite_distinct(self, select: Select, call: Expression) -> str:
         """
         Rewrite a DISTINCT SELECT query by wrapping it as a subquery and adding
-        the semiring function on the outer select.
+        *call* on the outer select.
 
-        Appended to the query itself, the semiring value would be computed per
+        Appended to the query itself, the provenance value would be computed per
         input tuple and become part of the DISTINCT key, so a result row merged
         from several tuples would come back once per tuple. Evaluated outside,
         it applies to each result row's token, which combines all of them.
@@ -246,7 +241,8 @@ class SqlRewriter:
 
         Args:
             select (Select): Parsed DISTINCT SELECT query
-            semiring (DbSemiring): Semiring configuration for provenance tracking
+            call (Expression): Provenance call to append, e.g. the semiring
+                retrieval function or probability_evaluate(provenance())
 
         Returns:
             str: Rewritten SQL query
@@ -262,9 +258,10 @@ class SqlRewriter:
                 # An unnamed expression (e.g. upper(name)) needs a name to be selected from the subquery
                 e = alias_(e, f"col_{i}")
                 select.expressions[i] = e
-            outer_columns.append(Column(this=e.alias_or_name, table=subquery_alias))
+            outer_columns.append(
+                Column(this=e.alias_or_name, table=subquery_alias))
 
-        outer_columns.append(self._semiring_call(semiring))
+        outer_columns.append(call)
 
         wrapper = Select(expressions=outer_columns).from_(
             Subquery(this=select, alias=subquery_alias)

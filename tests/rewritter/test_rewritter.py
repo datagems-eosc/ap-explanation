@@ -63,7 +63,8 @@ def test_rewrite_sql(case: dict, expectation: str, sql_rewriter: SqlRewriter, al
 
 def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
     """Unnamed expressions get an alias, and stars are selected as x.*, so the wrapper can select them."""
-    rewritten = sql_rewriter.rewrite("SELECT DISTINCT upper(name), * FROM t", why_semiring)
+    rewritten = sql_rewriter.rewrite(
+        "SELECT DISTINCT upper(name), * FROM t", why_semiring)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
         "SELECT x.col_0, x.*, sr_why(provenance(), 'why_mapping') "
@@ -72,7 +73,8 @@ def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, 
 
 
 def test_rewrite_sql_probability_wraps_set_operations_whole(sql_rewriter: SqlRewriter):
-    rewritten = sql_rewriter.rewrite_probability("SELECT a FROM t1 UNION SELECT a FROM t2")
+    rewritten = sql_rewriter.rewrite_probability(
+        "SELECT a FROM t1 UNION SELECT a FROM t2")
     assert parse_one(rewritten) == parse_one(
         "SELECT probability_evaluate(provenance()) FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x"
     )
@@ -82,3 +84,23 @@ def test_rewrite_sql_probability_rejects_having(sql_rewriter: SqlRewriter):
     with pytest.raises(NotImplementedError):
         sql_rewriter.rewrite_probability(
             "SELECT a, count(*) FROM t GROUP BY a HAVING count(*) > 1")
+
+
+@pytest.mark.parametrize("case", test_cases, ids=[case["reason"] for case in test_cases])
+def test_merge_provenance_and_probability(
+    case: dict, sql_rewriter: SqlRewriter, why_semiring: DbSemiring
+):
+    """
+    Proba and provenance must be able to be merged by provsql id
+    """
+    if case["reason"] == "aggregate":
+        pytest.skip("aggregates legitimately differ: value gate vs group token")
+
+    semiring = parse_one(sql_rewriter.rewrite(case["query"], why_semiring))
+    probability = parse_one(sql_rewriter.rewrite_probability(case["query"]))
+
+    # Drop the appended call from each, leaving the shape ProvSQL sees
+    for ast in (semiring, probability):
+        ast.set("expressions", ast.expressions[:-1])
+
+    assert semiring == probability

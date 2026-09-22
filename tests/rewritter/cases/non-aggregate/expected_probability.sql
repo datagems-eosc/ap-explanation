@@ -1,5 +1,6 @@
 -- Wrapped: the probability is evaluated on each result row's token, after DISTINCT merged rows
-SELECT probability_evaluate(provenance())
+-- Same shape as the semiring pass, answer column included: the two are merged by provsql token
+SELECT x.name, probability_evaluate(provenance())
 FROM (
     SELECT DISTINCT t.name
     FROM assessment a
