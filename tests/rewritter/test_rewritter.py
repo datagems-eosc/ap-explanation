@@ -64,11 +64,29 @@ def test_rewrite_sql(case: dict, expectation: str, sql_rewriter: SqlRewriter, al
 def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
     """Unnamed expressions get an alias, and stars are selected as x.*, so the wrapper can select them."""
     rewritten = sql_rewriter.rewrite(
-        "SELECT DISTINCT upper(name), * FROM t", why_semiring)
+        "SELECT DISTINCT upper(name), EXTRACT(MONTH FROM d), * FROM t", why_semiring)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, x.*, sr_why(provenance(), 'why_mapping') "
-        "FROM (SELECT DISTINCT upper(name) AS col_0, * FROM t) AS x"
+        "SELECT x.col_0, x.col_1, x.*, sr_why(provenance(), 'why_mapping') "
+        "FROM (SELECT DISTINCT upper(name) AS col_0, EXTRACT(MONTH FROM d) AS col_1, * FROM t) AS x"
+    )
+
+
+def test_rewrite_sql_aggregate_names_every_group_key(sql_rewriter: SqlRewriter, formula_semiring: DbSemiring):
+    """
+    Unnamed group keys get an alias, so the wrapper can select them. Selected
+    as x.MONTH, EXTRACT failed, and upper(t.a) became a bare x, the whole row.
+    """
+    rewritten = sql_rewriter.rewrite(
+        "SELECT EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT), count(*) AS n "
+        "FROM t GROUP BY EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT)",
+        formula_semiring,
+    )
+    print("Rewritten SQL:", rewritten)
+    assert parse_one(rewritten) == parse_one(
+        "SELECT x.col_0, x.col_1, x.b, sr_formula(x.n, 'formula_mapping') "
+        "FROM (SELECT EXTRACT(MONTH FROM t.d) AS col_0, upper(t.a) AS col_1, CAST(t.b AS INT), count(*) AS n "
+        "FROM t GROUP BY EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT)) AS x"
     )
 
 

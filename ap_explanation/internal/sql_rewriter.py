@@ -248,26 +248,43 @@ class SqlRewriter:
             str: Rewritten SQL query
         """
         subquery_alias = "x"
-        outer_columns = []
-
-        for i, e in enumerate(select.expressions):
-            if e.is_star:
-                outer_columns.append(Column(this=Star(), table=subquery_alias))
-                continue
-            if not e.alias_or_name:
-                # An unnamed expression (e.g. upper(name)) needs a name to be selected from the subquery
-                e = alias_(e, f"col_{i}")
-                select.expressions[i] = e
-            outer_columns.append(
-                Column(this=e.alias_or_name, table=subquery_alias))
-
-        outer_columns.append(call)
+        outer_columns = [
+            *(self._get_selected_column_reference(select, i, subquery_alias)
+              for i in range(len(select.expressions))),
+            call,
+        ]
 
         wrapper = Select(expressions=outer_columns).from_(
             Subquery(this=select, alias=subquery_alias)
         )
 
         return wrapper.sql(dialect=self.db_dialect)
+
+    def _get_selected_column_reference(self, select: Select, i: int, subquery_alias: str) -> Column:
+        """
+        An aggregate projection is always selected as x.<alias>, but a non-aggregate projection may be a star, or an expression with no alias. 
+        In any case, we need some sort of alias to be able to reference it in the outer query, as we are wrapping the original query in a subquery.
+
+        Args:
+            select (Select): The SELECT being wrapped, aliased in place if needed
+            i (int): Index of the projection in select.expressions
+            subquery_alias (str): Alias of the subquery in the wrapper
+
+        Returns:
+            Column: x.<name>, or x.* for a star
+        """
+        e = select.expressions[i]
+        # Special case for stars: they are selected as x.*, so the wrapper can select them. We don't alias them, because they are already aliased as x.*
+        if e.is_star:
+            return Column(this=Star(), table=subquery_alias)
+
+        # This happens when the projection is an expression with no alias, e.g. upper(name) or EXTRACT(MONTH FROM d)
+        if not e.output_name:
+            e = alias_(e, f"col_{i}")
+            select.expressions[i] = e
+
+        # Return a reference to the aliased column in the wrapper select
+        return Column(this=e.output_name, table=subquery_alias)
 
     def _semiring_call(self, semiring: DbSemiring, token: Expression | None = None) -> Anonymous:
         """Build the semiring function call on *token*, by default the current row's provenance()."""
@@ -312,9 +329,11 @@ class SqlRewriter:
         if initial_select is None:
             raise ValueError("Expected query to be a SELECT query")
 
+        subquery_alias = "x"
+
         # Process projections to separate aggregate and non-aggregate projections
         proj_agg = []
-        proj_non_agg = []
+        outer_columns = []
         alias_counter = random.randint(1000, 9999)
 
         for i, e in enumerate(initial_select.expressions):
@@ -330,7 +349,9 @@ class SqlRewriter:
                 else:
                     proj_agg.append(e)
             else:
-                proj_non_agg.append(e)
+                # Non-aggregate projections are copied to the wrapper select
+                outer_columns.append(self._get_selected_column_reference(
+                    initial_select, i, subquery_alias))
 
         # Find the first aggregate projection, this is the one that will be used in the aggregate semiring function
         if len(proj_agg) == 0:
@@ -338,15 +359,7 @@ class SqlRewriter:
         agg = proj_agg[0]
 
         # Wrap the original query in a subquery (the modifications to expressions should be included)
-        subquery_alias = "x"
         subquery = Subquery(this=initial_select, alias=subquery_alias)
-
-        # Copy all non-aggregate projections attributes from the initial select to the wrapper select
-        outer_columns = []
-        for attr in proj_non_agg:
-            outer_columns.append(
-                Column(this=attr.alias_or_name, table=subquery_alias)
-            )
 
         outer_columns.append(self._semiring_call(
             semiring, Column(this=agg.alias_or_name, table=subquery_alias)))
