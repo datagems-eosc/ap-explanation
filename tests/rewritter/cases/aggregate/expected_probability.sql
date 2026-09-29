@@ -1,5 +1,5 @@
--- Wrapped: the probability is evaluated on each group's token
-SELECT probability_evaluate(provenance())
+-- Wrapped: the probability is evaluated on each group's token, in the same shape as the formula
+SELECT x.name, x.nb_questions, probability_evaluate(provenance())
 FROM (
     SELECT t.name, count(distinct a.question_id) AS nb_questions
     FROM assessment a JOIN platform__topic t ON (a.topic=t.id)

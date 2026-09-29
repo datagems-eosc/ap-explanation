@@ -24,6 +24,10 @@ class DbSemiring(BaseModel):
     # (e.g. sr_boolexpr which has an optional mapping in newer provsql versions).
     mapping_table: str | None = None
 
+    # Whether ProvSQL can evaluate an aggregate result (COUNT, AVG...) in this
+    # semiring; the others fail on it with "does not support value gates"
+    supports_aggregates: bool = False
+
     # Provenance mapping strategy instance
     # This determines how database rows are mapped to provenance values
     # Using Any since ProvenanceMapping is a Protocol and cannot be used with isinstance

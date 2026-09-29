@@ -17,6 +17,8 @@ Given a query, the service returns one or more provenance annotations:
 
 Each annotation is provided by ProvSQL's built-in `sr_*` semiring functions.
 
+Aggregate results (`COUNT`, `AVG`, `MAX`...) can only be explained with `formula`, which lists the tuples each aggregate was computed from: ProvSQL cannot evaluate them in the other semirings. With all semirings requested, the derivations of an aggregate query carry `formula` only; requesting only other semirings on one is an error. A query whose aggregates ProvSQL cannot explain (`percentile_cont`, `stddev`...) is rejected, unless a supported one sits in a column of its own next to them (`COUNT(*)` lists the rows aggregated); see [Limitations](docs/docs/architecture.md#aggregates).
+
 - **Natural-language explanation** (optional, LLM-powered) — a human-readable summary of the provenance
 - **Result probability** (optional) — the probability of each result row, computed by ProvSQL from per-tuple probabilities (see [Result probabilities](#result-probabilities))
 

@@ -20,19 +20,6 @@ class SemiringProvenance(BaseModel):
     data: list[Any]
 
 
-class ProvSQLRow(BaseModel):
-    """
-    Repository-level row returned by ``ProvenanceRepository.query()``.
-
-    Captures the raw output of a single semiring pass before rows are merged
-    by the service layer.
-    """
-
-    answer: dict[str, Any]
-    provsql: str
-    provenance: SemiringProvenance
-
-
 class Derivation(BaseModel):
     """
     A derivation is a single row of the query result along with its provenance information.

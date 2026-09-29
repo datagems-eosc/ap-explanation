@@ -1,27 +1,35 @@
-import random
-
 from sqlglot import parse_one
 from sqlglot.expressions import (
     AggFunc,
-    Alias,
     Anonymous,
+    ArrayAgg,
+    Avg,
     Column,
+    Count,
+    Except,
     Expression,
     Having,
+    Intersect,
     Literal,
+    LogicalAnd,
+    LogicalOr,
+    Max,
+    Min,
     Select,
+    SetOperation,
     Star,
     Subquery,
+    Sum,
+    Union,
+    Window,
     alias_,
 )
 
+from ap_explanation.errors import AggregateSemiringError
 from ap_explanation.types.semiring import DbSemiring
 
 
 class SqlRewriter:
-
-    # SQL flavor to use for parsing and generating SQL queries
-    db_dialect = "postgres"
     """
     Rewrites SQL queries to include provenance tracking functions.
 
@@ -29,159 +37,157 @@ class SqlRewriter:
     annotations without interacting with the database.
     """
 
+    # SQL flavor to use for parsing and generating SQL queries
+    db_dialect = "postgres"
+
     # ProvSQL function evaluating the probability of a provenance token.
     # Unaliased, so it is also the name of the column it adds to the result.
     PROBABILITY_FUNCTION = "probability_evaluate"
 
-    def rewrite(self, query: str, semiring: DbSemiring) -> str:
+    # The aggregates ProvSQL can explain (its src/Aggregation.cpp). It fails
+    # evaluating a semiring on any other (percentile_cont, regr_slope...): an
+    # aggregate query needs one column using only these to be explained.
+    PROVSQL_AGGREGATES = (Count, Sum, Min, Max, Avg,
+                          ArrayAgg, LogicalAnd, LogicalOr)
+
+    # Alias of the original query when it is wrapped as a subquery
+    SUBQUERY_ALIAS = "x"
+
+    def rewrite(self, query: str, semirings: list[DbSemiring], probability: bool = False) -> str:
         """
-        Rewrite a SQL query to return the provenance explanation.
+        Rewrite a SQL query to return, in one query, each result row's value in
+        every semiring of *semirings* and, if *probability*, its probability.
 
         The rewriting rules are as follows:
-        - Only SELECT queries are supported
-        - HAVING operators are not supported yet
-        - Non-aggregate query: add sr_why(provenance(), 'why_mapping')
-        - DISTINCT query: wrap the original query as a subquery, and add
-          sr_why(provenance(), 'why_mapping') in outer SELECT
-        - Aggregate query: wrap the original query as a subquery, and add 
-          sr_formula(inner_aggregate_alias, 'formula_mapping') in outer SELECT
-
-        FOR THIS TO WORK, THE why_mapping and formula_mapping 
-        MUST BE DEFINED IN THE DATABASE /!\
+        - Only read queries (SELECT and UNION/UNION ALL of select) are supported. 
+        - Write queries (INSERT, UPDATE, DELETE) are not supported
+        - In read queries, HAVING, EXCEPT and INTERSECT are not supported
+        - Aggregate queries are supported, but limited to the aggregates ProvSQL can explain (COUNT, SUM, MIN, MAX, AVG, ARRAY_AGG, BOOL_AND and BOOL_OR). If none of the selected columns uses only these aggregates, the query cannot be explained.
+        - DISTINCT queries and UNIONs are wrapped as a subquery, the calls evaluated outside
 
         Args:
             query (str): Original SQL query
-            semiring (DbSemiring): Semiring configuration for provenance tracking
+            semirings (list[DbSemiring]): Semirings to evaluate each row in
+            probability (bool): Also evaluate each row's probability
 
         Returns:
             str: Rewritten SQL query
 
         Raises:
             ValueError: If the query is not a SELECT query
-            NotImplementedError: If the query uses HAVING or the semiring doesn't
-                                support aggregate queries
+            NotImplementedError: If the query uses HAVING, EXCEPT or INTERSECT
+            AggregateSemiringError: If the query aggregates and none of the
+                semirings supports aggregates
         """
-        outer_select = self._parse_outer_select(query)
+        root = parse_one(query, dialect=self.db_dialect)
 
-        # Detect if the outer select contains top-level aggregates (not in subqueries)
-        # AND has a GROUP BY clause (required for provsql aggregate provenance tracking)
-        if not self._has_top_level_aggregates(outer_select) or not outer_select.args.get('group'):
-            return self._rewrite_non_aggregate(query, self._semiring_call(semiring))
+        # Supported operations are SELECT and UNION / UNION ALL.
+        if not isinstance(root, (Select, SetOperation)):
+            raise ValueError("Expected SELECT query")  # noqa: TRY004, the query is invalid, not its type
 
-        return self._rewrite_aggregate(query, semiring)
-
-    def rewrite_probability(self, query: str) -> str:
-        """
-        Rewrite a SQL query to return the probability of each result row.
-
-        Example:
-            Original query:
-            SELECT col1
-            FROM table;
-
-            Rewritten query:
-            SELECT col1, probability_evaluate(provenance())
-            FROM table;
-
-        Args:
-            query (str): Original SQL query
-
-        Returns:
-            str: Rewritten SQL query
-
-        Raises:
-            ValueError: If the query is not a SELECT query
-            NotImplementedError: If the query uses HAVING
-        """
-
-        # Prepare the proba call "probability_evaluate(provenance())"
-        call = Anonymous(
-            this=self.PROBABILITY_FUNCTION,
-            expressions=[Anonymous(this="provenance")],
-        )
-
-        outer_select = self._parse_outer_select(query)
-        root = outer_select.root()
-        if isinstance(root, Select) and not (
-            self._has_top_level_aggregates(root) and root.args.get("group")
-        ):
-            return self._rewrite_non_aggregate(query, call)
-
-        # Wrap in a subquery
-        wrapper = Select(expressions=[call]).from_(
-            Subquery(this=root, alias="x"))
-
-        return wrapper.sql(dialect=self.db_dialect)
-
-    def _parse_outer_select(self, query: str) -> Select:
-        """
-        Parse a query and return its outer SELECT, rejecting what the rewriting
-        does not support.
-
-        Raises:
-            ValueError: If the query is not a SELECT query
-            NotImplementedError: If the query uses HAVING
-        """
-        ast = parse_one(query, dialect=self.db_dialect)
-
-        outer_select = ast.find(Select)
-        if outer_select is None:
-            raise ValueError("Expected SELECT query")
-
-        # Note : HAVING detection is done on the outer select only
+        # Note : HAVING detection is done on the whole query, subqueries included
         # I honestly don't know if having can appear in subqueries without breaking the provenance logic
         # TODO: Circle back on this
-        if any(outer_select.find_all(Having)):
+        if root.find(Having):
             raise NotImplementedError(
                 "HAVING queries are not supported yet, rewrite your SQL with nested SELECTs."
             )
 
-        return outer_select
+        # ProvSQL refuses INTERSECT, and EXCEPT
+        if root.find(Except, Intersect):
+            raise NotImplementedError(
+                "EXCEPT and INTERSECT queries are not supported, rewrite INTERSECT as a JOIN with DISTINCT."
+            )
 
-    def _has_top_level_aggregates(self, select: Select) -> bool:
+        # Prepare the function calls to add to the SELECT
+        # It can be either plain semiring retrieval or with probability_evaluate
+        calls = [self._semiring_call(s) for s in semirings]
+        if probability:
+            calls.append(self._probability_call())
+
+        # A very simple case, union can simply be wrapped in a subuery.
+        if isinstance(root, Union):
+            return self._wrap_in_subquery(root, [Column(this=Star(), table=self.SUBQUERY_ALIAS), *calls])
+
+        # Any top-level aggregate (not in subqueries) makes it an aggregate query
+        if any(self._top_level_aggregates(e) for e in root.expressions):
+            return self._rewrite_aggregate(root, semirings, probability)
+
+        return self._rewrite_non_aggregate(root, calls)
+
+    def _rewrite_aggregate(self, select: Select, semirings: list[DbSemiring], probability: bool) -> str:
         """
-        Check if a SELECT statement contains aggregate functions at the top level,
-        excluding aggregates that are inside subqueries.
+        Rewrite an aggregate SELECT query, with or without GROUP BY, by wrapping
+        it as a subquery and adding the semiring calls on the outer select.
+        ProvSQL has limited support for aggregates, so the query must have at least one 
+        column using only aggregates ProvSQL can explain.
+
+        Example:
+            Original query:
+            SELECT col1, SUM(col2) AS total
+            FROM table
+            GROUP BY col1;
+
+            Rewritten query:
+            SELECT x.col1, x.total, sr_formula(x.total, 'formula_mapping')
+            FROM (
+                SELECT col1, SUM(col2) AS total
+                FROM table
+                GROUP BY col1
+            ) AS x;
 
         Args:
-            select (Select): The SELECT statement to check
+            select (Select): Parsed SELECT query, wrapped in place
+            semirings (list[DbSemiring]): Semirings requested
+            probability (bool): If true, also evaluate each row's probability
 
         Returns:
-            bool: True if top-level aggregates are found, False otherwise
+            str: Rewritten SQL query
+
+        Raises:
+            NotImplementedError: If no column aggregates with aggregates ProvSQL
+                can explain only
+            AggregateSemiringError: If semirings are requested but none supports
+                aggregates
         """
-        for expr in select.expressions:
-            if self._contains_aggregate_not_in_subquery(expr):
-                return True
-        return False
+        # Without it, the plain rewriting explains why each row exists, not its
+        # value: nothing without GROUP BY, and the group in some semirings only
+        explained = next((
+            i for i, e in enumerate(select.expressions)
+            if (aggregates := self._top_level_aggregates(e))
+            and all(isinstance(a, self.PROVSQL_AGGREGATES) for a in aggregates)
+        ), None)
+        if explained is None:
+            unsupported = sorted({
+                a.sql_name() for e in select.expressions for a in self._top_level_aggregates(e)
+                if not isinstance(a, self.PROVSQL_AGGREGATES)
+            })
+            raise NotImplementedError(
+                f"Aggregates ProvSQL cannot explain: {', '.join(unsupported)}. Add a column with "
+                "COUNT, SUM, MIN, MAX, AVG, ARRAY_AGG, BOOL_AND or BOOL_OR to explain the rows aggregated."
+            )
 
-    def _contains_aggregate_not_in_subquery(self, node) -> bool:
+        # NOTE : Only some semiring supports aggregates.
+        aggregate_semirings = [s for s in semirings if s.supports_aggregates]
+        if semirings and not aggregate_semirings:
+            raise AggregateSemiringError([s.name for s in semirings])
+
+        # Build the outer SELECT columns. Some attributes may refer to the inner SELECT
+        # so we need to alias them in the inner SELECT if they are expressions with no alias.
+        outer_columns = self._all_selected_columns_of(select)
+        # Once all the original attributes are selected back, add the semiring retrieval functions and probability_evaluate(provenance()) on the outer SELECT.
+        outer_columns += [
+            self._semiring_call(s, outer_columns[explained].copy())
+            for s in aggregate_semirings
+        ]
+        if probability:
+            outer_columns.append(self._probability_call())
+
+        return self._wrap_in_subquery(select, outer_columns)
+
+    def _rewrite_non_aggregate(self, select: Select, calls: list[Expression]) -> str:
         """
-        Recursively check if a node contains an aggregate function,
-        but stop traversing when encountering a subquery.
-
-        Args:
-            node: The expression node to check
-
-        Returns:
-            bool: True if aggregate is found (not in a subquery), False otherwise
-        """
-        if isinstance(node, AggFunc):
-            return True
-
-        # Don't traverse into subqueries or nested SELECT statements
-        if isinstance(node, (Subquery, Select)):
-            return False
-
-        # Recursively check children
-        for child in node.iter_expressions():
-            if self._contains_aggregate_not_in_subquery(child):
-                return True
-
-        return False
-
-    def _rewrite_non_aggregate(self, query: str, call: Expression) -> str:
-        """
-        Rewrite a non-aggregate SELECT query by adding *call* to the select list.
+        Rewrite a non-aggregate SELECT query by adding *calls* to the select list.
 
         Example:
             Original query:
@@ -195,98 +201,72 @@ class SqlRewriter:
             WHERE condition;
 
         Args:
-            query (str): Original SQL query
-            call (Expression): Provenance call to append, e.g. the semiring
-                retrieval function or probability_evaluate(provenance())
+            select (Select): Parsed SELECT query, extended in place
+            calls (list[Expression]): Provenance calls to append, e.g. the
+                semiring retrieval functions and probability_evaluate(provenance())
 
         Returns:
             str: Rewritten SQL query
-
-        Raises:
-            TypeError: If the query is not a SELECT query
         """
-        ast = parse_one(query, dialect=self.db_dialect)
+        # NOTE : We wrap distinct queries because if we just add the provenance calls, the DISTINCT
+        # will also be applied to the provenance calls, which is not the expected result
+        # from a user standpoint
+        if select.args.get("distinct"):
+            return self._wrap_in_subquery(select, [*self._all_selected_columns_of(select), *calls])
 
-        if not isinstance(ast, Select):
-            raise TypeError("Expected SELECT query")
+        select.expressions.extend(calls)
 
-        if ast.args.get("distinct"):
-            return self._rewrite_distinct(ast, call)
+        return select.sql(dialect=self.db_dialect)
 
-        ast.expressions.append(call)
-
-        return ast.sql(dialect=self.db_dialect)
-
-    def _rewrite_distinct(self, select: Select, call: Expression) -> str:
+    def _top_level_aggregates(self, node: Expression) -> list[AggFunc]:
         """
-        Rewrite a DISTINCT SELECT query by wrapping it as a subquery and adding
-        *call* on the outer select.
+        The aggregate functions of *node*, without looking into subqueries, into
+        an aggregate or into a window function (sum(...) OVER (...) does not group).
+        """
+        stop = (AggFunc, Subquery, Select, Window)
+        return [n for n in node.walk(prune=lambda n: isinstance(n, stop)) if isinstance(n, AggFunc)]
 
-        Appended to the query itself, the provenance value would be computed per
-        input tuple and become part of the DISTINCT key, so a result row merged
-        from several tuples would come back once per tuple. Evaluated outside,
-        it applies to each result row's token, which combines all of them.
+    def _wrap_in_subquery(self, query: Expression, outer_columns: list[Expression]) -> str:
+        """
+        Wrap *query* as the subquery SUBQUERY_ALIAS and select *outer_columns* from it.
 
         Example:
-            Original query:
-            SELECT DISTINCT t.col1
-            FROM table t;
-
-            Rewritten query:
-            SELECT x.col1, sr_why(provenance(), 'why_mapping')
-            FROM (
-                SELECT DISTINCT t.col1
-                FROM table t
-            ) AS x;
+            _wrap_in_subquery(<SELECT DISTINCT a FROM t>, [x.a, sr_why(provenance(), 'why_mapping')])
+            SELECT x.a, sr_why(provenance(), 'why_mapping') FROM (SELECT DISTINCT a FROM t) AS x
 
         Args:
-            select (Select): Parsed DISTINCT SELECT query
-            call (Expression): Provenance call to append, e.g. the semiring
-                retrieval function or probability_evaluate(provenance())
+            query (Expression): Parsed query to wrap
+            outer_columns (list[Expression]): Columns of the outer select, referencing
+                the subquery's as SUBQUERY_ALIAS.<name>
 
         Returns:
             str: Rewritten SQL query
         """
-        subquery_alias = "x"
-        outer_columns = [
-            *(self._get_selected_column_reference(select, i, subquery_alias)
-              for i in range(len(select.expressions))),
-            call,
-        ]
-
         wrapper = Select(expressions=outer_columns).from_(
-            Subquery(this=select, alias=subquery_alias)
-        )
-
+            Subquery(this=query, alias=self.SUBQUERY_ALIAS))
         return wrapper.sql(dialect=self.db_dialect)
 
-    def _get_selected_column_reference(self, select: Select, i: int, subquery_alias: str) -> Column:
+    def _all_selected_columns_of(self, select: Select) -> list[Column]:
         """
-        An aggregate projection is always selected as x.<alias>, but a non-aggregate projection may be a star, or an expression with no alias. 
-        In any case, we need some sort of alias to be able to reference it in the outer query, as we are wrapping the original query in a subquery.
-
-        Args:
-            select (Select): The SELECT being wrapped, aliased in place if needed
-            i (int): Index of the projection in select.expressions
-            subquery_alias (str): Alias of the subquery in the wrapper
-
-        Returns:
-            Column: x.<name>, or x.* for a star
+        References to every column of *select*, for the outer select once it is
+        wrapped: x.<name>, or x.* for a star. An expression with no name, e.g.
+        upper(name) or EXTRACT(MONTH FROM d), is aliased col_<i> in place so the
+        outer select can reference it.
         """
-        e = select.expressions[i]
-        # Special case for stars: they are selected as x.*, so the wrapper can select them. We don't alias them, because they are already aliased as x.*
-        if e.is_star:
-            return Column(this=Star(), table=subquery_alias)
+        references = []
+        for i, e in enumerate(select.expressions):
+            if e.is_star:
+                references.append(
+                    Column(this=Star(), table=self.SUBQUERY_ALIAS))
+                continue
+            if not e.output_name:
+                e = select.expressions[i] = alias_(e, f"col_{i}")
+            references.append(
+                Column(this=e.output_name, table=self.SUBQUERY_ALIAS))
+        return references
 
-        # This happens when the projection is an expression with no alias, e.g. upper(name) or EXTRACT(MONTH FROM d)
-        if not e.output_name:
-            e = alias_(e, f"col_{i}")
-            select.expressions[i] = e
-
-        # Return a reference to the aliased column in the wrapper select
-        return Column(this=e.output_name, table=subquery_alias)
-
-    def _semiring_call(self, semiring: DbSemiring, token: Expression | None = None) -> Anonymous:
+    @staticmethod
+    def _semiring_call(semiring: DbSemiring, token: Expression | None = None) -> Anonymous:
         """Build the semiring function call on *token*, by default the current row's provenance()."""
         args = [token if token is not None else Anonymous(this="provenance")]
         if semiring.mapping_table is not None:
@@ -294,76 +274,7 @@ class SqlRewriter:
 
         return Anonymous(this=semiring.retrieval_function, expressions=args)
 
-    def _rewrite_aggregate(self, query: str, semiring: DbSemiring) -> str:
-        """
-        Rewrite an aggregate SELECT query by wrapping it as a subquery and adding
-        sr_formula on the outer select.
-
-        Example:
-            Original query:
-            SELECT col1, SUM(col2) AS total
-            FROM table
-            GROUP BY col1;
-
-            Rewritten query:
-            SELECT col1, sr_formula(total, 'formula_mapping')
-            FROM (
-                SELECT col1, SUM(col2) AS total
-                FROM table
-                GROUP BY col1
-            ) AS x;
-
-        Args:
-            query (str): Original SQL query
-            semiring (DbSemiring): Semiring configuration for provenance tracking
-
-        Returns:
-            str: Rewritten SQL query
-
-        Raises:
-            ValueError: If the query is not a SELECT query or has no aggregates
-        """
-        ast = parse_one(query, dialect=self.db_dialect)
-
-        initial_select = ast.find(Select)
-        if initial_select is None:
-            raise ValueError("Expected query to be a SELECT query")
-
-        subquery_alias = "x"
-
-        # Process projections to separate aggregate and non-aggregate projections
-        proj_agg = []
-        outer_columns = []
-        alias_counter = random.randint(1000, 9999)
-
-        for i, e in enumerate(initial_select.expressions):
-            if self._contains_aggregate_not_in_subquery(e):
-                # Ensure aggregate expressions have an alias
-                if not isinstance(e, Alias):
-                    alias_name = f"agg_result_{alias_counter}"
-                    alias_counter += 1
-                    # Replace the expression with an aliased version
-                    aliased_expr = alias_(e, alias_name)
-                    initial_select.expressions[i] = aliased_expr
-                    proj_agg.append(aliased_expr)
-                else:
-                    proj_agg.append(e)
-            else:
-                # Non-aggregate projections are copied to the wrapper select
-                outer_columns.append(self._get_selected_column_reference(
-                    initial_select, i, subquery_alias))
-
-        # Find the first aggregate projection, this is the one that will be used in the aggregate semiring function
-        if len(proj_agg) == 0:
-            raise ValueError("No aggregate found in query")
-        agg = proj_agg[0]
-
-        # Wrap the original query in a subquery (the modifications to expressions should be included)
-        subquery = Subquery(this=initial_select, alias=subquery_alias)
-
-        outer_columns.append(self._semiring_call(
-            semiring, Column(this=agg.alias_or_name, table=subquery_alias)))
-
-        wrapper = Select(expressions=outer_columns).from_(subquery)
-
-        return wrapper.sql(dialect=self.db_dialect)
+    @classmethod
+    def _probability_call(cls) -> Anonymous:
+        """Build probability_evaluate(provenance()), the current row's probability."""
+        return Anonymous(this=cls.PROBABILITY_FUNCTION, expressions=[Anonymous(this="provenance")])

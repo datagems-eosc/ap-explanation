@@ -1,5 +1,3 @@
-from logging import getLogger
-
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings as all_semirings
@@ -7,8 +5,6 @@ from ap_explanation.types.provenance import (
     Derivation,
 )
 from ap_explanation.types.semiring import DbSemiring
-
-logger = getLogger(__name__)
 
 
 class ProvenanceService:
@@ -82,12 +78,13 @@ class ProvenanceService:
 
     async def compute_provenance(self, schema_name: str, sql_query: str, semirings: list[DbSemiring], compute_probability: bool = False) -> list[Derivation]:
         """
-        Execute a SQL query with provenance tracking for each semiring, merge the
-        results by ``provsql`` UUID, and return a JSON string.
+        Execute a SQL query with provenance tracking in every semiring, and the
+        probability if requested, all in one query.
 
-        Each returned :class:`~ap_explanation.types.provenance.ProvenanceResult`
+        Each returned :class:`~ap_explanation.types.provenance.Derivation`
         contains the original query columns in ``answer`` and a per-semiring
-        mapping in ``provenance``.
+        mapping in ``provenance``. On an aggregate query, that mapping holds
+        only the semirings that support aggregates (formula).
 
         Args:
             schema_name: Schema where the query should be executed
@@ -97,31 +94,14 @@ class ProvenanceService:
                 probabilities must have been set with :meth:`set_probabilities`
 
         Returns:
-            List of :class:`~ap_explanation.types.provenance.ProvenanceResult` instances,
+            List of :class:`~ap_explanation.types.provenance.Derivation` instances,
             one per result row, ordered as returned by the database.
+
+        Raises:
+            AggregateSemiringError: If the query aggregates and none of the
+                semirings supports aggregates
         """
-
-        # Keyed by ProvSQL UUID; dict preserves insertion order so result ordering is maintained.
-        derivations: dict[str, Derivation] = {}
-
-        for semiring in semirings:
-            rows = await self._provenance_repo.query(schema_name, sql_query, semiring)
-            for row in rows:
-                if row.provsql not in derivations:
-                    derivations[row.provsql] = Derivation(
-                        answer=row.answer, provenance={})
-                derivations[row.provsql].provenance[semiring.name] = row.provenance
-
-        if compute_probability:
-            probabilities = await self._provenance_repo.query_probability(schema_name, sql_query)
-            for provsql, probability in probabilities.items():
-                if provsql not in derivations:
-                    logger.warning(
-                        f"Probability computed for row '{provsql}', which no semiring returned")
-                    continue
-                derivations[provsql].probability = probability
-
-        return list(derivations.values())
+        return await self._provenance_repo.query(schema_name, sql_query, semirings, compute_probability)
 
     async def explain(self, schema_name: str, sql_query: str, provenance_results: list[Derivation]) -> str:
         """

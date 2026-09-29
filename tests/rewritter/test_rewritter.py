@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from sqlglot import parse_one
 
+from ap_explanation.errors import AggregateSemiringError
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.types.semiring import DbSemiring
 
@@ -53,10 +54,10 @@ def test_rewrite_sql(case: dict, expectation: str, sql_rewriter: SqlRewriter, al
         pytest.skip(f"No expected_{expectation}.sql file for {case['reason']}")
 
     if expectation == "probability":
-        rewritten = sql_rewriter.rewrite_probability(case["query"])
+        rewritten = sql_rewriter.rewrite(case["query"], [], probability=True)
     else:
         semiring = next(s for s in all_semirings if s.name == expectation)
-        rewritten = sql_rewriter.rewrite(case["query"], semiring)
+        rewritten = sql_rewriter.rewrite(case["query"], [semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(case[expectation])
 
@@ -64,7 +65,7 @@ def test_rewrite_sql(case: dict, expectation: str, sql_rewriter: SqlRewriter, al
 def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
     """Unnamed expressions get an alias, and stars are selected as x.*, so the wrapper can select them."""
     rewritten = sql_rewriter.rewrite(
-        "SELECT DISTINCT upper(name), EXTRACT(MONTH FROM d), * FROM t", why_semiring)
+        "SELECT DISTINCT upper(name), EXTRACT(MONTH FROM d), * FROM t", [why_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
         "SELECT x.col_0, x.col_1, x.*, sr_why(provenance(), 'why_mapping') "
@@ -80,45 +81,140 @@ def test_rewrite_sql_aggregate_names_every_group_key(sql_rewriter: SqlRewriter, 
     rewritten = sql_rewriter.rewrite(
         "SELECT EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT), count(*) AS n "
         "FROM t GROUP BY EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT)",
-        formula_semiring,
+        [formula_semiring],
     )
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, x.col_1, x.b, sr_formula(x.n, 'formula_mapping') "
+        "SELECT x.col_0, x.col_1, x.b, x.n, sr_formula(x.n, 'formula_mapping') "
         "FROM (SELECT EXTRACT(MONTH FROM t.d) AS col_0, upper(t.a) AS col_1, CAST(t.b AS INT), count(*) AS n "
         "FROM t GROUP BY EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT)) AS x"
     )
 
 
-def test_rewrite_sql_probability_wraps_set_operations_whole(sql_rewriter: SqlRewriter):
-    rewritten = sql_rewriter.rewrite_probability(
-        "SELECT a FROM t1 UNION SELECT a FROM t2")
+@pytest.mark.parametrize("operation", ["UNION", "UNION ALL"])
+def test_rewrite_sql_wraps_set_operations_whole(
+    operation: str, sql_rewriter: SqlRewriter, why_semiring: DbSemiring
+):
+    """A set operation is evaluated on each of its result rows, not per branch."""
+    rewritten = sql_rewriter.rewrite(
+        f"SELECT a FROM t1 {operation} SELECT a FROM t2", [why_semiring], probability=True)
+    print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT probability_evaluate(provenance()) FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x"
+        "SELECT x.*, sr_why(provenance(), 'why_mapping'), probability_evaluate(provenance())"
+        f" FROM (SELECT a FROM t1 {operation} SELECT a FROM t2) AS x"
     )
+
+
+@pytest.mark.parametrize("query", [
+    "SELECT a FROM t1 EXCEPT SELECT a FROM t2",
+    "SELECT a FROM t1 INTERSECT SELECT a FROM t2",
+    "WITH c AS (SELECT a FROM t1 EXCEPT SELECT a FROM t2) SELECT a FROM c",
+])
+def test_rewrite_sql_rejects_except_and_intersect(query: str, sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
+    """ProvSQL refuses INTERSECT, and returns the rows EXCEPT removes."""
+    with pytest.raises(NotImplementedError):
+        sql_rewriter.rewrite(query, [why_semiring])
+
+
+@pytest.mark.parametrize("query", [
+    "INSERT INTO t SELECT a FROM t2",
+    "DELETE FROM t WHERE id IN (SELECT id FROM t2)",
+    "UPDATE t SET a = 1",
+])
+def test_rewrite_sql_rejects_non_select(query: str, sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
+    """A statement containing a SELECT is not a SELECT, nor wrapped like a UNION."""
+    with pytest.raises(ValueError):
+        sql_rewriter.rewrite(query, [why_semiring])
+
+
+def test_rewrite_sql_rejects_having_in_any_branch(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
+    with pytest.raises(NotImplementedError):
+        sql_rewriter.rewrite(
+            "SELECT a FROM t1 UNION SELECT a FROM t GROUP BY a HAVING count(*) > 1", [why_semiring])
 
 
 def test_rewrite_sql_probability_rejects_having(sql_rewriter: SqlRewriter):
     with pytest.raises(NotImplementedError):
-        sql_rewriter.rewrite_probability(
-            "SELECT a, count(*) FROM t GROUP BY a HAVING count(*) > 1")
+        sql_rewriter.rewrite(
+            "SELECT a, count(*) FROM t GROUP BY a HAVING count(*) > 1", [], probability=True)
 
 
-@pytest.mark.parametrize("case", test_cases, ids=[case["reason"] for case in test_cases])
-def test_merge_provenance_and_probability(
-    case: dict, sql_rewriter: SqlRewriter, why_semiring: DbSemiring
+def test_rewrite_sql_every_semiring_and_probability_in_one_query(
+    sql_rewriter: SqlRewriter, all_semirings: list[DbSemiring]
+):
+    """One query for all: ProvSQL's row tokens are not stable across separate runs."""
+    rewritten = sql_rewriter.rewrite("SELECT a.id FROM assessment a", all_semirings, probability=True)
+    print("Rewritten SQL:", rewritten)
+    assert parse_one(rewritten) == parse_one(
+        "SELECT a.id, sr_formula(provenance(), 'formula_mapping'), sr_why(provenance(), 'why_mapping'),"
+        " sr_boolexpr(provenance(), 'boolexpr_mapping'), sr_how(provenance(), 'how_mapping'),"
+        " sr_which(provenance(), 'which_mapping'), probability_evaluate(provenance())"
+        " FROM assessment a"
+    )
+
+
+def test_rewrite_sql_aggregate_keeps_semirings_supporting_it(
+    sql_rewriter: SqlRewriter, all_semirings: list[DbSemiring]
+):
+    """ProvSQL evaluates an aggregate in the formula semiring only, the others fail on it."""
+    rewritten = sql_rewriter.rewrite("SELECT a, count(*) AS n FROM t GROUP BY a", all_semirings, probability=True)
+    print("Rewritten SQL:", rewritten)
+    assert parse_one(rewritten) == parse_one(
+        "SELECT x.a, x.n, sr_formula(x.n, 'formula_mapping'), probability_evaluate(provenance())"
+        " FROM (SELECT a, count(*) AS n FROM t GROUP BY a) AS x"
+    )
+
+
+def test_rewrite_sql_aggregate_rejects_semirings_not_supporting_it(
+    sql_rewriter: SqlRewriter, why_semiring: DbSemiring
+):
+    with pytest.raises(AggregateSemiringError):
+        sql_rewriter.rewrite("SELECT a, count(*) AS n FROM t GROUP BY a", [why_semiring])
+
+
+def test_rewrite_sql_aggregate_without_group_by(sql_rewriter: SqlRewriter, formula_semiring: DbSemiring):
+    """Without GROUP BY too: appended to the query, the provenance of an aggregate is empty."""
+    rewritten = sql_rewriter.rewrite("SELECT count(*) FROM t WHERE t.a = 1", [formula_semiring])
+    print("Rewritten SQL:", rewritten)
+    assert parse_one(rewritten) == parse_one(
+        "SELECT x.col_0, sr_formula(x.col_0, 'formula_mapping')"
+        " FROM (SELECT count(*) AS col_0 FROM t WHERE t.a = 1) AS x"
+    )
+
+
+@pytest.mark.parametrize("query", [
+    "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY t.a) FROM t",
+    "SELECT t.b, stddev(t.a) FROM t GROUP BY t.b",
+    # Mixed in one column, ProvSQL cannot evaluate the semirings on it either
+    "SELECT sum(t.a) / stddev(t.a) FROM t",
+])
+def test_rewrite_sql_aggregate_provsql_cannot_explain(
+    query: str, sql_rewriter: SqlRewriter, formula_semiring: DbSemiring
 ):
     """
-    Proba and provenance must be able to be merged by provsql id
+    ProvSQL fails evaluating a semiring on percentile_cont, stddev... Rewritten
+    plainly, the provenance would be why the row exists, not its value: empty
+    without GROUP BY, the group in some semirings only.
     """
-    if case["reason"] == "aggregate":
-        pytest.skip("aggregates legitimately differ: value gate vs group token")
+    with pytest.raises(NotImplementedError, match="cannot explain"):
+        sql_rewriter.rewrite(query, [formula_semiring])
 
-    semiring = parse_one(sql_rewriter.rewrite(case["query"], why_semiring))
-    probability = parse_one(sql_rewriter.rewrite_probability(case["query"]))
 
-    # Drop the appended call from each, leaving the shape ProvSQL sees
-    for ast in (semiring, probability):
-        ast.set("expressions", ast.expressions[:-1])
+def test_rewrite_sql_aggregate_explained_by_a_supported_one(
+    sql_rewriter: SqlRewriter, all_semirings: list[DbSemiring]
+):
+    """Next to one ProvSQL cannot explain, a supported aggregate lists the rows aggregated, for both."""
+    rewritten = sql_rewriter.rewrite("SELECT a, stddev(b) AS sd, count(*) AS n FROM t GROUP BY a", all_semirings)
+    print("Rewritten SQL:", rewritten)
+    assert parse_one(rewritten) == parse_one(
+        "SELECT x.a, x.sd, x.n, sr_formula(x.n, 'formula_mapping')"
+        " FROM (SELECT a, stddev(b) AS sd, count(*) AS n FROM t GROUP BY a) AS x"
+    )
 
-    assert semiring == probability
+
+def test_rewrite_sql_window_function_is_not_an_aggregate(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
+    rewritten = sql_rewriter.rewrite("SELECT a, sum(b) OVER (PARTITION BY a) FROM t", [why_semiring])
+    print("Rewritten SQL:", rewritten)
+    assert parse_one(rewritten) == parse_one(
+        "SELECT a, sum(b) OVER (PARTITION BY a), sr_why(provenance(), 'why_mapping') FROM t"
+    )

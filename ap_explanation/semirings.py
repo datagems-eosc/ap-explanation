@@ -6,6 +6,7 @@ semirings = [
         name="formula",
         retrieval_function="sr_formula",
         mapping_table="formula_mapping",
+        supports_aggregates=True,
         mappingStrategy=KeyMapping(),
     ),
     DbSemiring(

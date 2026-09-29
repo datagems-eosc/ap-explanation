@@ -15,7 +15,7 @@ from ap_explanation.errors import (
 )
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
-from ap_explanation.types.provenance import ProvSQLRow, SemiringProvenance
+from ap_explanation.types.provenance import Derivation, SemiringProvenance
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
@@ -49,23 +49,40 @@ class ProvenanceRepository:
         return repo
 
     async def query(
-        self, schema_name: str, query: str, semiring: DbSemiring
-    ) -> list[ProvSQLRow]:
+        self,
+        schema_name: str,
+        query: str,
+        semirings: list[DbSemiring],
+        compute_probability: bool = False,
+    ) -> list[Derivation]:
         """
         Execute a SQL query with provenance tracking and return structured results.
 
+        Every semiring, and the probability, is evaluated in the same query:
+        ProvSQL's token for a result row is not stable across runs, so the rows
+        of separate runs could not be matched up.
+
         Each returned row separates the original query output (``answer``) from
-        provenance metadata so that results from different semirings can be
-        merged cleanly by the service layer.
+        its provenance in each semiring. On an aggregate query, only the
+        semirings that support aggregates are evaluated.
+
+        Args:
+            schema_name: Schema where the query should be executed
+            query: The SQL query to execute with provenance
+            semirings: Semirings to evaluate each result row in
+            compute_probability: Also evaluate each result row's probability.
+                Tuple probabilities must have been set with :meth:`set_probabilities`
 
         Returns:
-            A list of dicts, each with keys:
-            - ``answer``     – dict of the original query columns
-            - ``provsql``    – the provenance UUID for this row
-            - ``expression`` – the raw semiring expression string
-            - ``data``       – resolved provenance references (list of dicts)
+            One :class:`Derivation` per result row, in the database's order.
         """
-        edited_query = self._sql_rewriter.rewrite(query, semiring)
+        edited_query = self._sql_rewriter.rewrite(query, semirings, compute_probability)
+        internal_columns = {
+            "provsql",
+            REFERENCE_COLUMN,
+            SqlRewriter.PROBABILITY_FUNCTION,
+            *(s.retrieval_function for s in semirings),
+        }
 
         try:
             async with self._conn.transaction():
@@ -84,29 +101,24 @@ class ProvenanceRepository:
                 # the connection goes back to active for the next query.
                 await self._conn.execute("SET LOCAL provsql.active = 0")
 
-                results: list[ProvSQLRow] = []
+                results: list[Derivation] = []
                 for row in rows:
-                    expression = row.get(semiring.retrieval_function, "")
-                    data = await self._fetch_related_data(expression, semiring)
-
-                    # Build the answer dict: everything except provenance-internal columns
-                    provenance_keys = {
-                        "provsql",
-                        REFERENCE_COLUMN,
-                        semiring.retrieval_function,
-                        semiring.name,
-                    }
-
-                    answer = {k: v for k, v in row.items() if k not in provenance_keys}
+                    provenance = {}
+                    # A semiring the rewriting left out (aggregate) has no column
+                    for semiring in semirings:
+                        if semiring.retrieval_function in row:
+                            # NULL for an aggregate over no row
+                            expression = row[semiring.retrieval_function] or ""
+                            provenance[semiring.name] = SemiringProvenance(
+                                expression=expression,
+                                data=await self._fetch_related_data(expression, semiring),
+                            )
 
                     results.append(
-                        ProvSQLRow(
-                            answer=answer,
-                            provsql=str(row.get("provsql", "")),
-                            provenance=SemiringProvenance(
-                                expression=expression,
-                                data=data,
-                            ),
+                        Derivation(
+                            answer={k: v for k, v in row.items() if k not in internal_columns},
+                            provenance=provenance,
+                            probability=row.get(SqlRewriter.PROBABILITY_FUNCTION),
                         )
                     )
 
@@ -115,51 +127,19 @@ class ProvenanceRepository:
             # The mapping table doesn't exist, meaning the table hasn't been annotated
             from ap_explanation.errors import TableNotAnnotatedError
 
-            logger.warning(f"Table not annotated with semiring '{semiring.name}': {e}")
+            names = ", ".join(s.name for s in semirings)
+            logger.warning(f"Table not annotated with semiring '{names}': {e}")
             raise TableNotAnnotatedError(
-                schema_name=schema_name, semiring_name=semiring.name
+                schema_name=schema_name, semiring_name=names
             ) from e
         except errors.InternalError_ as e:
             # ProvSQL internal error, typically when provenance functions are called on non-annotated data
-            logger.error(
-                f"ProvSQL internal error while querying with semiring '{semiring.name}': {e}"
-            )
+            logger.error(f"ProvSQL internal error while querying with provenance: {e}")
             raise ProvSqlInternalError(
                 f"ProvSQL internal error occurred. The table may have lost its provenance annotations. "
-                f"Please re-annotate the table with the '{semiring.name}' semiring and try again. "
+                f"Please re-annotate the table and try again. "
                 f"Error details: {e!s}"
             ) from e
-
-    async def query_probability(self, schema_name: str, query: str) -> dict[str, float]:
-        """
-        Execute a SQL query and evaluate the probability of each result row.
-
-        Tuple probabilities must have been set beforehand with
-        :meth:`set_probabilities`.
-
-        Returns:
-            The probability of each result row, keyed by its ProvSQL UUID.
-        """
-        edited_query = self._sql_rewriter.rewrite_probability(query)
-
-        try:
-            async with self._conn.transaction():
-                await self._set_search_path(schema_name)
-
-                cursor = await self._conn.cursor(row_factory=dict_row).execute(
-                    SQL(cast(LiteralString, edited_query))
-                )
-                rows = await cursor.fetchall()
-        except errors.InternalError_ as e:
-            logger.error(f"ProvSQL internal error while evaluating probabilities: {e}")
-            raise ProvSqlInternalError(
-                f"ProvSQL internal error occurred while evaluating probabilities. "
-                f"Error details: {e!s}"
-            ) from e
-
-        return {
-            str(row["provsql"]): row[SqlRewriter.PROBABILITY_FUNCTION] for row in rows
-        }
 
     async def set_probabilities(
         self, schema_name: str, table_name: str, column: str | None

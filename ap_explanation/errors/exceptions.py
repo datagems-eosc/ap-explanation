@@ -68,6 +68,23 @@ class ProvSqlInternalError(Exception):
         super().__init__(self.message)
 
 
+class AggregateSemiringError(Exception):
+    """
+    Exception raised when an aggregate query is explained only with semirings
+    that cannot evaluate aggregates.
+
+    ProvSQL evaluates an aggregate result (COUNT, AVG, MAX...) with the formula
+    semiring only; the others fail on it ("does not support value gates").
+    """
+
+    def __init__(self, semiring_names: list[str]):
+        self.message = (
+            "Aggregate results can only be explained with the formula semiring; "
+            f"requested: {', '.join(semiring_names)}"
+        )
+        super().__init__(self.message)
+
+
 class InvalidProbabilityColumnError(Exception):
     """
     Exception raised when a table's probability column cannot be used as tuple probabilities.
