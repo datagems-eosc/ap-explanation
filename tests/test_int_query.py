@@ -2,6 +2,7 @@
 import pytest
 
 from ap_explanation.errors import (
+    AggregateSemiringError,
     TableNotAnnotatedError,
 )
 from ap_explanation.services.provenance import ProvenanceService
@@ -188,6 +189,29 @@ async def test_ok_compute_provenance_distinct_merges_rows(
 
 
 @pytest.mark.asyncio
+async def test_ok_compute_provenance_union_merges_rows(
+    provenance_service: ProvenanceService,
+    all_semirings: list[DbSemiring],
+    test_schema: TestSchema,
+    two_rows_of_one_student: str,
+):
+    """A row found in both branches of a UNION comes back once, with both tuples."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, all_semirings)
+
+    first, second = two_rows_of_one_student.split(", ")
+    query = (
+        f"SELECT student_id FROM {test_schema.table} WHERE id = {first}"
+        f" UNION SELECT student_id FROM {test_schema.table} WHERE id = {second}"
+    )
+    results = await provenance_service.compute_provenance(test_schema.schema, query, all_semirings)
+
+    assert len(results) == 1
+    assert "student_id" in results[0].answer
+    assert set(results[0].provenance) == {s.name for s in all_semirings}
+    assert len(results[0].provenance["why"].data) == 2
+
+
+@pytest.mark.asyncio
 async def test_ok_compute_provenance_without_annotation(
     provenance_service: ProvenanceService,
     why_semiring: DbSemiring,
@@ -266,3 +290,93 @@ async def test_ok_explain_formula(
     assert explanation is not None
     assert isinstance(explanation, str)
     assert len(explanation) > 0
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_aggregation_with_all_semirings(
+    provenance_service: ProvenanceService,
+    all_semirings: list[DbSemiring],
+    test_schema: TestSchema,
+    two_rows_of_one_student: str,
+):
+    """
+    An aggregate is explained in the semirings that support it only (formula),
+    rather than failing on the others ("does not support value gates").
+    """
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, all_semirings)
+
+    query = f"SELECT student_id, COUNT(*) AS cnt FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student}) GROUP BY student_id"
+    results = await provenance_service.compute_provenance(test_schema.schema, query, all_semirings)
+
+    assert len(results) == 1
+    assert set(results[0].provenance) == {"formula"}
+    assert len(results[0].provenance["formula"].data) == 2
+    # The aggregate's value stays in the answer
+    assert "cnt" in results[0].answer
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_aggregation_without_group_by(
+    provenance_service: ProvenanceService,
+    formula_semiring: DbSemiring,
+    test_schema: TestSchema,
+    two_rows_of_one_student: str,
+):
+    """Without GROUP BY too, the formula lists the tuples counted, rather than being empty."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    query = f"SELECT COUNT(*) FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
+    results = await provenance_service.compute_provenance(test_schema.schema, query, [formula_semiring])
+
+    assert len(results) == 1
+    assert len(results[0].provenance["formula"].data) == 2
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_aggregation_next_to_unsupported_one(
+    provenance_service: ProvenanceService,
+    formula_semiring: DbSemiring,
+    test_schema: TestSchema,
+    two_rows_of_one_student: str,
+):
+    """COUNT's formula lists the tuples stddev read too; stddev keeps its value in the answer."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    query = (
+        f"SELECT stddev(question_level) AS sd, COUNT(*) AS n"
+        f" FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
+    )
+    results = await provenance_service.compute_provenance(test_schema.schema, query, [formula_semiring])
+
+    assert len(results) == 1
+    assert "sd" in results[0].answer
+    assert len(results[0].provenance["formula"].data) == 2
+
+
+@pytest.mark.asyncio
+async def test_ko_compute_provenance_aggregation_without_aggregate_semiring(
+    provenance_service: ProvenanceService,
+    why_semiring: DbSemiring,
+    test_schema: TestSchema,
+):
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+
+    query = f"SELECT topic, COUNT(*) FROM {test_schema.table} GROUP BY topic"
+    with pytest.raises(AggregateSemiringError):
+        await provenance_service.compute_provenance(test_schema.schema, query, [why_semiring])
+
+
+@pytest.mark.asyncio
+async def test_ok_compute_provenance_aggregation_over_no_row(
+    provenance_service: ProvenanceService,
+    formula_semiring: DbSemiring,
+    test_schema: TestSchema,
+):
+    """An aggregate over no row has no formula (NULL), hence no provenance."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    query = f"SELECT AVG(question_level) FROM {test_schema.table} WHERE id = -1"
+    results = await provenance_service.compute_provenance(test_schema.schema, query, [formula_semiring])
+
+    assert len(results) == 1
+    assert results[0].provenance["formula"].data == []

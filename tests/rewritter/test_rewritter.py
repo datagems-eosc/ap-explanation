@@ -212,6 +212,14 @@ def test_rewrite_sql_aggregate_explained_by_a_supported_one(
     )
 
 
+def test_rewrite_sql_keeps_lateral_ordinality_column(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
+    """sqlglot drops idx from LATERAL UNNEST ... AS r(v, idx), and its parser too: compare the text."""
+    rewritten = sql_rewriter.rewrite(
+        "SELECT r.idx FROM t, LATERAL unnest(t.a) WITH ORDINALITY AS r(v, idx)", [why_semiring])
+    print("Rewritten SQL:", rewritten)
+    assert "WITH ORDINALITY AS r(v, idx)" in rewritten
+
+
 def test_rewrite_sql_window_function_is_not_an_aggregate(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
     rewritten = sql_rewriter.rewrite("SELECT a, sum(b) OVER (PARTITION BY a) FROM t", [why_semiring])
     print("Rewritten SQL:", rewritten)

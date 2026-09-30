@@ -1,3 +1,4 @@
+from ap_explanation.errors import AggregateSemiringError, ProvSqlInternalError
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.semirings import semirings as all_semirings
@@ -83,7 +84,8 @@ class ProvenanceService:
 
         Each returned :class:`~ap_explanation.types.provenance.Derivation`
         contains the original query columns in ``answer`` and a per-semiring
-        mapping in ``provenance``. On an aggregate query, that mapping holds
+        mapping in ``provenance``. On an aggregate query, or one whose rows'
+        provenance involves an aggregate below the top level, that mapping holds
         only the semirings that support aggregates (formula).
 
         Args:
@@ -101,7 +103,20 @@ class ProvenanceService:
             AggregateSemiringError: If the query aggregates and none of the
                 semirings supports aggregates
         """
-        return await self._provenance_repo.query(schema_name, sql_query, semirings, compute_probability)
+        try:
+            return await self._provenance_repo.query(schema_name, sql_query, semirings, compute_probability)
+        except ProvSqlInternalError as e:
+            # A comparison on an aggregate below the top level (a CTE's SUM in WHERE)
+            # can reach a row's provenance, which the rewriting does not see: only
+            # the semirings supporting aggregates evaluate it
+            if "does not support value gates" not in str(e):
+                raise
+            aggregate_semirings = [s for s in semirings if s.supports_aggregates]
+            if not aggregate_semirings:
+                raise AggregateSemiringError([s.name for s in semirings]) from e
+            if aggregate_semirings == semirings:
+                raise
+            return await self._provenance_repo.query(schema_name, sql_query, aggregate_semirings, compute_probability)
 
     async def explain(self, schema_name: str, sql_query: str, provenance_results: list[Derivation]) -> str:
         """

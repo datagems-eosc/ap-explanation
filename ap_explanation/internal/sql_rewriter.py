@@ -9,7 +9,9 @@ from sqlglot.expressions import (
     Except,
     Expression,
     Having,
+    Identifier,
     Intersect,
+    Lateral,
     Literal,
     LogicalAnd,
     LogicalOr,
@@ -21,6 +23,7 @@ from sqlglot.expressions import (
     Subquery,
     Sum,
     Union,
+    Unnest,
     Window,
     alias_,
 )
@@ -99,6 +102,10 @@ class SqlRewriter:
                 "EXCEPT and INTERSECT queries are not supported, rewrite INTERSECT as a JOIN with DISTINCT."
             )
 
+        # NOTE : Workaround for tobymao/sqlglot#8462
+        # TODO: Remove this workaround when sqlglot is fixed, and add a test for it
+        self._apply_lateral_workaround(root)
+
         # Prepare the function calls to add to the SELECT
         # It can be either plain semiring retrieval or with probability_evaluate
         calls = [self._semiring_call(s) for s in semirings]
@@ -107,15 +114,23 @@ class SqlRewriter:
 
         # A very simple case, union can simply be wrapped in a subuery.
         if isinstance(root, Union):
-            return self._wrap_in_subquery(root, [Column(this=Star(), table=self.SUBQUERY_ALIAS), *calls])
-
+            rewritten = self._wrap_in_subquery(
+                root, [Column(this=Star(), table=self.SUBQUERY_ALIAS), *calls])
         # Any top-level aggregate (not in subqueries) makes it an aggregate query
-        if any(self._top_level_aggregates(e) for e in root.expressions):
-            return self._rewrite_aggregate(root, semirings, probability)
+        elif any(self._top_level_aggregates(e) for e in root.expressions):
+            rewritten = self._rewrite_aggregate(root, semirings, probability)
+        # NOTE : We wrap distinct queries because if we just add the provenance calls, the DISTINCT
+        # will also be applied to the provenance calls, which is not the expected result
+        # from a user standpoint
+        elif root.args.get("distinct"):
+            rewritten = self._wrap_in_subquery(root, [*self._all_selected_columns_of(root), *calls])
+        else:
+            root.expressions.extend(calls)
+            rewritten = root
 
-        return self._rewrite_non_aggregate(root, calls)
+        return rewritten.sql(dialect=self.db_dialect)
 
-    def _rewrite_aggregate(self, select: Select, semirings: list[DbSemiring], probability: bool) -> str:
+    def _rewrite_aggregate(self, select: Select, semirings: list[DbSemiring], probability: bool) -> Select:
         """
         Rewrite an aggregate SELECT query, with or without GROUP BY, by wrapping
         it as a subquery and adding the semiring calls on the outer select.
@@ -142,7 +157,7 @@ class SqlRewriter:
             probability (bool): If true, also evaluate each row's probability
 
         Returns:
-            str: Rewritten SQL query
+            Select: Rewritten query
 
         Raises:
             NotImplementedError: If no column aggregates with aggregates ProvSQL
@@ -185,39 +200,6 @@ class SqlRewriter:
 
         return self._wrap_in_subquery(select, outer_columns)
 
-    def _rewrite_non_aggregate(self, select: Select, calls: list[Expression]) -> str:
-        """
-        Rewrite a non-aggregate SELECT query by adding *calls* to the select list.
-
-        Example:
-            Original query:
-            SELECT col1, col2
-            FROM table
-            WHERE condition;
-
-            Rewritten query:
-            SELECT col1, col2, sr_why(provenance(), 'why_mapping')
-            FROM table
-            WHERE condition;
-
-        Args:
-            select (Select): Parsed SELECT query, extended in place
-            calls (list[Expression]): Provenance calls to append, e.g. the
-                semiring retrieval functions and probability_evaluate(provenance())
-
-        Returns:
-            str: Rewritten SQL query
-        """
-        # NOTE : We wrap distinct queries because if we just add the provenance calls, the DISTINCT
-        # will also be applied to the provenance calls, which is not the expected result
-        # from a user standpoint
-        if select.args.get("distinct"):
-            return self._wrap_in_subquery(select, [*self._all_selected_columns_of(select), *calls])
-
-        select.expressions.extend(calls)
-
-        return select.sql(dialect=self.db_dialect)
-
     def _top_level_aggregates(self, node: Expression) -> list[AggFunc]:
         """
         The aggregate functions of *node*, without looking into subqueries, into
@@ -226,25 +208,29 @@ class SqlRewriter:
         stop = (AggFunc, Subquery, Select, Window)
         return [n for n in node.walk(prune=lambda n: isinstance(n, stop)) if isinstance(n, AggFunc)]
 
-    def _wrap_in_subquery(self, query: Expression, outer_columns: list[Expression]) -> str:
+    def _wrap_in_subquery(self, query: Expression, outer_columns: list[Expression]) -> Select:
         """
         Wrap *query* as the subquery SUBQUERY_ALIAS and select *outer_columns* from it.
 
         Example:
             _wrap_in_subquery(<SELECT DISTINCT a FROM t>, [x.a, sr_why(provenance(), 'why_mapping')])
             SELECT x.a, sr_why(provenance(), 'why_mapping') FROM (SELECT DISTINCT a FROM t) AS x
-
-        Args:
-            query (Expression): Parsed query to wrap
-            outer_columns (list[Expression]): Columns of the outer select, referencing
-                the subquery's as SUBQUERY_ALIAS.<name>
-
-        Returns:
-            str: Rewritten SQL query
         """
-        wrapper = Select(expressions=outer_columns).from_(
+        return Select(expressions=outer_columns).from_(
             Subquery(this=query, alias=self.SUBQUERY_ALIAS))
-        return wrapper.sql(dialect=self.db_dialect)
+
+    @staticmethod
+    def _apply_lateral_workaround(root: Expression) -> None:
+        """
+        Put back the ordinality column sqlglot drops from LATERAL UNNEST(...) WITH
+        ORDINALITY AS r(v, i): it parses i into Unnest.offset, then only writes it
+        back when the alias is on the Unnest, not on the Lateral (sqlglot 30.20).
+        """
+        for lateral in root.find_all(Lateral):
+            unnest = lateral.this
+            if isinstance(unnest, Unnest) and isinstance(unnest.args.get("offset"), Identifier):
+                lateral.args["alias"].append("columns", unnest.args["offset"])
+                unnest.set("offset", True)
 
     def _all_selected_columns_of(self, select: Select) -> list[Column]:
         """
@@ -255,14 +241,9 @@ class SqlRewriter:
         """
         references = []
         for i, e in enumerate(select.expressions):
-            if e.is_star:
-                references.append(
-                    Column(this=Star(), table=self.SUBQUERY_ALIAS))
-                continue
-            if not e.output_name:
+            if not e.is_star and not e.output_name:
                 e = select.expressions[i] = alias_(e, f"col_{i}")
-            references.append(
-                Column(this=e.output_name, table=self.SUBQUERY_ALIAS))
+            references.append(Column(this=Star() if e.is_star else e.output_name, table=self.SUBQUERY_ALIAS))
         return references
 
     @staticmethod

@@ -48,6 +48,29 @@ async def test_ok_probability_merges_distinct_rows(
 
 
 @pytest.mark.asyncio
+async def test_ok_probability_merges_union_rows(
+    provenance_service: ProvenanceService,
+    why_semiring: DbSemiring,
+    test_schema: TestSchema,
+    two_rows_of_one_student: str,
+):
+    """A UNION row found in both branches, each a 0.5 tuple: 1 - 0.5 * 0.5."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
+
+    first, second = two_rows_of_one_student.split(", ")
+    query = (
+        f"SELECT student_id FROM {test_schema.table} WHERE id = {first}"
+        f" UNION SELECT student_id FROM {test_schema.table} WHERE id = {second}"
+    )
+    derivations = await provenance_service.compute_provenance(
+        test_schema.schema, query, [why_semiring], compute_probability=True)
+
+    assert len(derivations) == 1
+    assert derivations[0].probability == pytest.approx(0.75)
+
+
+@pytest.mark.asyncio
 async def test_ok_probability_overwritten_by_later_calls(
     provenance_service: ProvenanceService,
     why_semiring: DbSemiring,
@@ -96,10 +119,6 @@ async def test_ok_probability_on_aggregate(
     two_rows_of_one_student: str,
 ):
     """
-    The formula pass and the probability pass wrap the aggregate query
-    differently, but must still yield the same provsql token per group, or the
-    probability would not be attached to any derivation.
-
     Only formula: the other semirings do not support aggregates ("value gates").
     """
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
@@ -134,3 +153,26 @@ async def test_ok_no_probability_unless_requested(
 
     assert len(derivations) == 2
     assert all(d.probability is None for d in derivations)
+
+
+@pytest.mark.asyncio
+async def test_ok_probability_on_every_group(
+    provenance_service: ProvenanceService,
+    formula_semiring: DbSemiring,
+    test_schema: TestSchema,
+):
+    """
+    Every group of a multi-group aggregate gets its probability. Computed in a
+    separate run, it was keyed by a token ProvSQL does not keep across runs
+    for groups, and was lost.
+    """
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
+
+    query = f"SELECT student_id, COUNT(*) AS cnt FROM {test_schema.table} WHERE student_id < 50 GROUP BY student_id"
+    derivations = await provenance_service.compute_provenance(
+        test_schema.schema, query, [formula_semiring], compute_probability=True)
+
+    assert len(derivations) > 1
+    # A group of k independent 0.5 tuples exists with probability 1 - 0.5^k
+    assert all(d.probability is not None and 0.5 <= d.probability <= 1 for d in derivations)
