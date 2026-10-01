@@ -24,15 +24,23 @@ class TableOrSchemaNotFoundError(Exception):
     """
 
     def __init__(self, table_name: str | None = None, schema_name: str | None = None):
-        if table_name and schema_name:
-            self.message = f"Table '{table_name}' does not exist in schema '{schema_name}'"
-        elif table_name:
-            self.message = f"Table '{table_name}' does not exist"
-        elif schema_name:
-            self.message = f"Schema '{schema_name}' does not exist"
+        self.table_name = table_name
+        self.schema_name = schema_name
+        super().__init__(table_name, schema_name)
+
+    @property
+    def message(self) -> str:
+        if self.table_name and self.schema_name:
+            return f"Table '{self.table_name}' does not exist in schema '{self.schema_name}'"
+        elif self.table_name:
+            return f"Table '{self.table_name}' does not exist"
+        elif self.schema_name:
+            return f"Schema '{self.schema_name}' does not exist"
         else:
-            self.message = "Table or schema does not exist"
-        super().__init__(self.message)
+            return "Table or schema does not exist"
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class TableNotAnnotatedError(Exception):
@@ -45,13 +53,25 @@ class TableNotAnnotatedError(Exception):
     """
 
     def __init__(self, table_name: str | None = None, schema_name: str | None = None, semiring_name: str | None = None):
-        if table_name and schema_name and semiring_name:
-            self.message = f"Table '{table_name}' in schema '{schema_name}' is not annotated with semiring '{semiring_name}'. Please annotate the table first."
-        elif semiring_name:
-            self.message = f"Table is not annotated with semiring '{semiring_name}'. Please annotate the table first."
+        self.table_name = table_name
+        self.schema_name = schema_name
+        self.semiring_name = semiring_name
+        super().__init__(table_name, schema_name, semiring_name)
+
+    @property
+    def message(self) -> str:
+        if self.table_name and self.schema_name and self.semiring_name:
+            return (
+                f"Table '{self.table_name}' in schema '{self.schema_name}' is not annotated "
+                f"with semiring '{self.semiring_name}'. Please annotate the table first."
+            )
+        elif self.semiring_name:
+            return f"Table is not annotated with semiring '{self.semiring_name}'. Please annotate the table first."
         else:
-            self.message = "Table is not annotated for provenance tracking. Please annotate the table first."
-        super().__init__(self.message)
+            return "Table is not annotated for provenance tracking. Please annotate the table first."
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class ProvSqlInternalError(Exception):
@@ -78,11 +98,18 @@ class AggregateSemiringError(Exception):
     """
 
     def __init__(self, semiring_names: list[str]):
-        self.message = (
+        self.semiring_names = semiring_names
+        super().__init__(semiring_names)
+
+    @property
+    def message(self) -> str:
+        return (
             "Aggregate results can only be explained with the formula semiring; "
-            f"requested: {', '.join(semiring_names)}"
+            f"requested: {', '.join(self.semiring_names)}"
         )
-        super().__init__(self.message)
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class InvalidProbabilityColumnError(Exception):
@@ -94,8 +121,17 @@ class InvalidProbabilityColumnError(Exception):
     """
 
     def __init__(self, table_name: str, column: str, reason: str):
-        self.message = f"Invalid probability column '{column}' on table '{table_name}': {reason}"
-        super().__init__(self.message)
+        self.table_name = table_name
+        self.column = column
+        self.reason = reason
+        super().__init__(table_name, column, reason)
+
+    @property
+    def message(self) -> str:
+        return f"Invalid probability column '{self.column}' on table '{self.table_name}': {self.reason}"
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class DatabaseNotFoundError(Exception):
@@ -107,5 +143,12 @@ class DatabaseNotFoundError(Exception):
     """
 
     def __init__(self, db_name: str):
-        self.message = f"Database '{db_name}' not found on either Postgres or Timescale instance"
-        super().__init__(self.message)
+        self.db_name = db_name
+        super().__init__(db_name)
+
+    @property
+    def message(self) -> str:
+        return f"Database '{self.db_name}' not found on either Postgres or Timescale instance"
+
+    def __str__(self) -> str:
+        return self.message
