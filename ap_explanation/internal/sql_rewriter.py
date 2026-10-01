@@ -9,9 +9,7 @@ from sqlglot.expressions import (
     Except,
     Expression,
     Having,
-    Identifier,
     Intersect,
-    Lateral,
     Literal,
     LogicalAnd,
     LogicalOr,
@@ -23,7 +21,6 @@ from sqlglot.expressions import (
     Subquery,
     Sum,
     Union,
-    Unnest,
     Window,
     alias_,
 )
@@ -101,10 +98,6 @@ class SqlRewriter:
             raise NotImplementedError(
                 "EXCEPT and INTERSECT queries are not supported, rewrite INTERSECT as a JOIN with DISTINCT."
             )
-
-        # NOTE : Workaround for tobymao/sqlglot#8462
-        # TODO: Remove this workaround when sqlglot is fixed, and add a test for it
-        self._apply_lateral_workaround(root)
 
         # Prepare the function calls to add to the SELECT
         # It can be either plain semiring retrieval or with probability_evaluate
@@ -218,19 +211,6 @@ class SqlRewriter:
         """
         return Select(expressions=outer_columns).from_(
             Subquery(this=query, alias=self.SUBQUERY_ALIAS))
-
-    @staticmethod
-    def _apply_lateral_workaround(root: Expression) -> None:
-        """
-        Put back the ordinality column sqlglot drops from LATERAL UNNEST(...) WITH
-        ORDINALITY AS r(v, i): it parses i into Unnest.offset, then only writes it
-        back when the alias is on the Unnest, not on the Lateral (sqlglot 30.20).
-        """
-        for lateral in root.find_all(Lateral):
-            unnest = lateral.this
-            if isinstance(unnest, Unnest) and isinstance(unnest.args.get("offset"), Identifier):
-                lateral.args["alias"].append("columns", unnest.args["offset"])
-                unnest.set("offset", True)
 
     def _all_selected_columns_of(self, select: Select) -> list[Column]:
         """
