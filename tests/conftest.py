@@ -62,7 +62,8 @@ def postgres_container():
                 # Pin explicitly: an unset arg used to fall through to the
                 # Dockerfile default, so the suite validated against a different
                 # ProvSQL than docker-compose runs.
-                "PROVSQL_VERSION": "v1.12.0",
+                # 1.13 is not released yet: master is 1.13.0-dev, needed for plain().
+                "PROVSQL_VERSION": "master",
             },
         ) as image,
         PostgresContainer(

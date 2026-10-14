@@ -8,10 +8,10 @@ from sqlglot.expressions import (
     Count,
     Except,
     Expression,
-    Having,
     Identifier,
     Intersect,
     Lateral,
+    Limit,
     Literal,
     LogicalAnd,
     LogicalOr,
@@ -64,7 +64,11 @@ class SqlRewriter:
         The rewriting rules are as follows:
         - Only read queries (SELECT and UNION/UNION ALL of select) are supported. 
         - Write queries (INSERT, UPDATE, DELETE) are not supported
-        - In read queries, HAVING, EXCEPT and INTERSECT are not supported
+        - In read queries, EXCEPT and INTERSECT are not supported
+        - The query keeps the rows of its SQL answer: ProvSQL reads a query in every possible
+          world, so every LIMIT k is written LIMIT plain(k), the truncation of the actual result,
+          and the query is wrapped as a subquery, the rows filtered by present(provenance()),
+          as ProvSQL also returns the rows absent from the actual result that may be in other worlds
         - Aggregate queries are supported, but limited to the aggregates ProvSQL can explain (COUNT, SUM, MIN, MAX, AVG, ARRAY_AGG, BOOL_AND and BOOL_OR). If none of the selected columns uses only these aggregates, the query cannot be explained.
         - DISTINCT queries and UNIONs are wrapped as a subquery, the calls evaluated outside
 
@@ -78,7 +82,7 @@ class SqlRewriter:
 
         Raises:
             ValueError: If the query is not a SELECT query
-            NotImplementedError: If the query uses HAVING, EXCEPT or INTERSECT
+            NotImplementedError: If the query uses EXCEPT or INTERSECT
             AggregateSemiringError: If the query aggregates and none of the
                 semirings supports aggregates
         """
@@ -87,14 +91,6 @@ class SqlRewriter:
         # Supported operations are SELECT and UNION / UNION ALL.
         if not isinstance(root, (Select, SetOperation)):
             raise ValueError("Expected SELECT query")  # noqa: TRY004, the query is invalid, not its type
-
-        # Note : HAVING detection is done on the whole query, subqueries included
-        # I honestly don't know if having can appear in subqueries without breaking the provenance logic
-        # TODO: Circle back on this
-        if root.find(Having):
-            raise NotImplementedError(
-                "HAVING queries are not supported yet, rewrite your SQL with nested SELECTs."
-            )
 
         # ProvSQL refuses INTERSECT, and EXCEPT
         if root.find(Except, Intersect):
@@ -106,27 +102,29 @@ class SqlRewriter:
         # TODO: Remove this workaround when sqlglot is fixed, and add a test for it
         self._apply_lateral_workaround(root)
 
+        self._limit_actual_result(root)
+
         # Prepare the function calls to add to the SELECT
         # It can be either plain semiring retrieval or with probability_evaluate
         calls = [self._semiring_call(s) for s in semirings]
         if probability:
             calls.append(self._probability_call())
 
-        # A very simple case, union can simply be wrapped in a subuery.
-        if isinstance(root, Union):
-            rewritten = self._wrap_in_subquery(
-                root, [Column(this=Star(), table=self.SUBQUERY_ALIAS), *calls])
         # Any top-level aggregate (not in subqueries) makes it an aggregate query
-        elif any(self._top_level_aggregates(e) for e in root.expressions):
+        if not isinstance(root, Union) and any(self._top_level_aggregates(e) for e in root.expressions):
             rewritten = self._rewrite_aggregate(root, semirings, probability)
         # NOTE : We wrap distinct queries because if we just add the provenance calls, the DISTINCT
         # will also be applied to the provenance calls, which is not the expected result
         # from a user standpoint
-        elif root.args.get("distinct"):
+        elif not isinstance(root, Union) and root.args.get("distinct"):
             rewritten = self._wrap_in_subquery(root, [*self._all_selected_columns_of(root), *calls])
+        # NOTE : Filtering on present(provenance()) needs the row's provenance in an outer
+        # query, so any other query (unions included) is wrapped as a subquery. HAVING keeps
+        # the groups that fail it in other worlds, removed by this filter
         else:
-            root.expressions.extend(calls)
-            rewritten = root
+            rewritten = self._wrap_in_subquery(root, [Column(this=Star(), table=self.SUBQUERY_ALIAS), *calls])
+
+        rewritten = rewritten.where(Anonymous(this="present", expressions=[Anonymous(this="provenance")]))
 
         return rewritten.sql(dialect=self.db_dialect)
 
@@ -218,6 +216,19 @@ class SqlRewriter:
         """
         return Select(expressions=outer_columns).from_(
             Subquery(this=query, alias=self.SUBQUERY_ALIAS))
+
+    @staticmethod
+    def _limit_actual_result(root: Expression) -> None:
+        """
+        Write every LIMIT k as LIMIT plain(k), the truncation of the actual result:
+        ProvSQL's ORDER BY ... LIMIT k otherwise returns every row that may be among
+        the first k in some world, each with a condition involving all the others, a
+        formula that grows with the rows ranked (over 1 GB for 10 of 31 readings).
+        """
+        for limit in root.find_all(Limit):
+            count = limit.args.get("expression")
+            if count is not None and not (isinstance(count, Anonymous) and count.name.lower() == "plain"):
+                limit.set("expression", Anonymous(this="plain", expressions=[count]))
 
     @staticmethod
     def _apply_lateral_workaround(root: Expression) -> None:
