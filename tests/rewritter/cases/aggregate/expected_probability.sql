@@ -5,4 +5,5 @@ FROM (
     FROM assessment a JOIN platform__topic t ON (a.topic=t.id)
     WHERE student_id=80 AND answer=-1 AND question_level>2
     GROUP BY t.name
-) AS x;
+) AS x
+WHERE present(provenance());
