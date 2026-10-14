@@ -80,19 +80,24 @@ async def test_ok_probability_overwritten_by_later_calls(
     """
     Probabilities outlive the request that set them: a later call must replace
     them, whether with another column or with certainty when none is declared.
+    ProvSQL writes a probability once, so a changed one is a new input gate:
+    the rows' mapping values must follow it, the why-provenance unchanged.
     """
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
     query = f"SELECT id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
+    explanations = []
 
     async def probabilities(column: str | None) -> list[float | None]:
         await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: column})
         derivations = await provenance_service.compute_provenance(
             test_schema.schema, query, [why_semiring], compute_probability=True)
+        explanations.append(sorted(str(d.provenance[why_semiring.name]) for d in derivations))
         return [d.probability for d in derivations]
 
     assert await probabilities("reliability") == [pytest.approx(0.5)] * 2
     assert await probabilities("reliability_alt") == [pytest.approx(0.2)] * 2
     assert await probabilities(None) == [pytest.approx(1.0)] * 2
+    assert explanations[0] == explanations[1] == explanations[2]
 
 
 @pytest.mark.asyncio

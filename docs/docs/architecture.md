@@ -99,7 +99,8 @@ All `sr_*` functions are `ANYELEMENT` polymorphic — the same function name is 
 
 ### SQL Support
 - **Query types**: Only `SELECT` queries are supported
-- **HAVING clause**: Not currently supported in query rewriting
+- **ProvSQL version**: 1.13 or later is required (`plain()` for `LIMIT`, `HAVING` support)
+- **EXCEPT / INTERSECT**: Not supported in query rewriting
 
 ### Mapping Strategy
 - Currently uses PostgreSQL `ctid` (row identifier)

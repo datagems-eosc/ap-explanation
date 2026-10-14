@@ -151,8 +151,14 @@ class ProvenanceRepository:
         they outlive the request that set them. Every tuple is therefore set on
         each call: to its value in *column*, or to 1 (certain) when *column* is
         ``None`` or the value is NULL, so that nothing an earlier request set
-        lingers. ``set_prob`` overwrites the stored value but does not check
-        its range (ProvSQL 1.12), hence the validation beforehand.
+        lingers. ``set_prob`` does not check its range, hence the validation
+        beforehand.
+
+        ProvSQL writes a probability once: ``set_prob`` refuses to change one
+        already set. A tuple whose probability changes is given a fresh input
+        gate by ``replace_input`` instead, and ProvSQL's provenance_guard
+        carries the tuple's mapping values over to it. Only these tuples are
+        replaced, as the mappings keep the values of the tokens replaced.
 
         Args:
             schema_name: The schema where the table is located.
@@ -195,8 +201,15 @@ class ProvenanceRepository:
                 # void value per tuple.
                 await self._conn.execute(
                     SQL(
-                        "SELECT count(*) FROM (SELECT set_prob(provsql, {}) FROM {}) AS s"
+                        "SELECT count(*) FROM (SELECT set_prob(provsql, {}) FROM {}"
+                        " WHERE NOT probability_is_set(provsql)) AS s"
                     ).format(probability, table)
+                )
+                await self._conn.execute(
+                    SQL(
+                        "UPDATE {} SET provsql = replace_input(provsql, {})"
+                        " WHERE get_prob(provsql) IS DISTINCT FROM {}"
+                    ).format(table, probability, probability)
                 )
         except (
             errors.UndefinedColumn,
