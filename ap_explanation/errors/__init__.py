@@ -2,6 +2,7 @@
 
 from ap_explanation.errors.exceptions import (
     AggregateSemiringError,
+    DatabaseInUseError,
     DatabaseNotFoundError,
     InvalidProbabilityColumnError,
     ProvSqlInternalError,
@@ -13,6 +14,7 @@ from ap_explanation.errors.exceptions import (
 
 __all__ = [
     "AggregateSemiringError",
+    "DatabaseInUseError",
     "DatabaseNotFoundError",
     "InvalidProbabilityColumnError",
     "ProvSqlInternalError",

@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from psycopg import AsyncConnection, OperationalError
+from psycopg.conninfo import make_conninfo
 from psycopg_pool import AsyncConnectionPool
 
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
@@ -201,6 +202,46 @@ def get_authentication_service() -> Authentication | None:
     )
 
 
+async def find_database(db_name: str) -> str:
+    """
+    Connection string of *db_name*, on Postgres or else on Timescale.
+
+    Raises:
+        DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
+    """
+    user = os.getenv("POSTGRES_USER")
+    password = os.getenv("POSTGRES_PASSWORD")
+    postgres_host = os.getenv("POSTGRES_HOST")
+    postgres_port = os.getenv("POSTGRES_PORT", "5432")
+    timescale_host = os.getenv("POSTGRES_TIMESCALE_HOST")
+    timescale_port = os.getenv("POSTGRES_TIMESCALE_PORT", "5433")
+
+    if not all([user, password, postgres_host]):
+        raise ValueError(
+            "Missing required environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST"
+        )
+
+    # Postgres first, then Timescale if configured. make_conninfo quotes
+    # db_name, which comes from the request: pasted into a URI, a name such
+    # as 'db?host=elsewhere' would send the credentials to another server.
+    candidates = [(postgres_host, postgres_port)]
+    if timescale_host:
+        candidates.append((timescale_host, timescale_port))
+
+    for host, port in candidates:
+        connection_string = make_conninfo(
+            host=host, port=port, user=user, password=password, dbname=db_name
+        )
+        try:
+            check_conn = await AsyncConnection.connect(connection_string)
+            await check_conn.close()
+            return connection_string
+        except OperationalError:
+            pass
+
+    raise DatabaseNotFoundError(db_name)
+
+
 def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], AsyncGenerator[ProvenanceService]]:
     """
     Factory function to create a provenance service dependency with dynamic database connection.
@@ -216,42 +257,8 @@ def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], Async
         DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
 
-    async def check_db_location(db_name: str) -> str:
-        user = os.getenv("POSTGRES_USER")
-        password = os.getenv("POSTGRES_PASSWORD")
-        postgres_host = os.getenv("POSTGRES_HOST")
-        postgres_port = os.getenv("POSTGRES_PORT", "5432")
-        timescale_host = os.getenv("POSTGRES_TIMESCALE_HOST")
-        timescale_port = os.getenv("POSTGRES_TIMESCALE_PORT", "5433")
-
-        if not all([user, password, postgres_host]):
-            raise ValueError(
-                "Missing required environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST"
-            )
-
-        postgres_connection_string = f"postgresql://{user}:{password}@{postgres_host}:{postgres_port}/{db_name}"
-        timescale_connection_string = f"postgresql://{user}:{password}@{timescale_host}:{timescale_port}/{db_name}"
-
-        # Try Postgres first
-        try:
-            check_conn = await AsyncConnection.connect(postgres_connection_string)
-            await check_conn.close()
-            return postgres_connection_string
-        except OperationalError:
-            pass
-
-        # Then try Timescale
-        try:
-            check_conn = await AsyncConnection.connect(timescale_connection_string)
-            await check_conn.close()
-            return timescale_connection_string
-        except OperationalError:
-            pass
-
-        raise DatabaseNotFoundError(db_name)
-
     async def _provide_service() -> AsyncGenerator[ProvenanceService]:
-        qs = await check_db_location(data_source.db_name)
+        qs = await find_database(data_source.db_name)
         async with create_connection_pool(qs) as pool:
             # NOTE: Some data sources require set up
             async with data_source.seed_database(pool, get_s3_mount_path()):

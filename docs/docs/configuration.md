@@ -37,6 +37,12 @@ Set on the transaction running each provenance query only (`SET LOCAL`): annotat
 | `PROVENANCE_TEMP_FILE_LIMIT` | No | `5GB` | `temp_file_limit`. PostgreSQL's default is no limit, so a query can fill the disk. Needs a superuser (or `GRANT SET ON PARAMETER temp_file_limit`); skipped with a warning otherwise |
 | `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather`. Parallel workers grow outside `provsql.max_memory`'s budget |
 
+### Maintenance
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `CIRCUIT_CLEANUP_WAIT` | No | `60` | Seconds a circuit cleanup retries while other sessions are connected to the database, before failing |
+
 ### LLM — Natural-language explanations (optional)
 
 When `LLM_API_BASE` is not set, natural-language explanations are silently disabled and the service falls back to returning only the raw semiring result.

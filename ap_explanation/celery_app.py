@@ -19,7 +19,7 @@ celery_app = Celery(
     "ap_explanation",
     broker=REDIS_BROKER_URI,
     backend=REDIS_BROKER_URI,
-    include=["ap_explanation.tasks.explain"],
+    include=["ap_explanation.tasks.explain", "ap_explanation.tasks.maintenance"],
 )
 
 celery_app.conf.update(

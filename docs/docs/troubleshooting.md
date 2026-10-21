@@ -63,7 +63,7 @@ WHERE table_schema = 'public';
 
 **Cause:** The query is too costly to explain within the limits set on it (see [Configuration](configuration.md#provenance-query-limits)). Its circuit stays in ProvSQL's store.
 
-**Solution:** Narrow the query (fewer rows, a filter before the join or aggregate), or raise the limit, keeping the database's memory and disk in mind.
+**Solution:** Narrow the query (fewer rows, a filter before the join or aggregate), or raise the limit, keeping the database's memory and disk in mind. Reclaim the store with a [circuit cleanup](usage.md#reclaiming-the-circuit-store).
 
 ---
 
