@@ -34,6 +34,8 @@ class KeyMapping(ProvenanceMapping[RowReference]):
     from a primary key, and lets tables without one work the same way.
     """
 
+    name = "key"
+
     # The mapping attribute handed to create_provenance_mapping is this
     # column's name, which is what makes maintained mappings possible:
     # provenance_guard interpolates the attribute as ($1).%I, so it has to

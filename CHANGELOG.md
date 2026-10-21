@@ -6,6 +6,8 @@
 
 - **DISTINCT queries return one derivation per result row** — semirings are now evaluated outside the `DISTINCT`, as they already were for `GROUP BY`. Previously the semiring value was part of the `DISTINCT` key, so a result row merged from several tuples came back once per tuple, each with that tuple's provenance only; it now comes back once, with provenance combining all of them.
 
+- **One mapping table per table** — annotating a table creates `<table>_provkey`, shared by every semiring, instead of five identical `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows). Tables annotated by earlier versions keep working, and are migrated the next time they are annotated: one per-semiring table is renamed, the others dropped.
+
 ### New Features
 
 - **Provenance query limits** — each provenance query runs with `statement_timeout` (`10min`), `provsql.max_memory` (`1GB`), `temp_file_limit` (`5GB`) and no parallel workers, configurable with `PROVENANCE_*` variables. A query past them fails with an error naming the limit, rather than running until the database dies.

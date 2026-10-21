@@ -62,7 +62,7 @@ Tuple probabilities come from a column of each queried table, named by the `prob
 
 ## Semiring Types
 
-All semirings use ProvSQL's built-in `sr_*` functions with a `CtidMapping` strategy (row identity via PostgreSQL `ctid`).
+All semirings use ProvSQL's built-in `sr_*` functions with the `KeyMapping` strategy (row identity via the `provsql_ref` column), and share each table's mapping table.
 
 | Name | ProvSQL function | Description |
 |---|---|---|

@@ -17,6 +17,7 @@ from ap_explanation.errors import (
 )
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
+from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.provenance import Derivation, SemiringProvenance
 from ap_explanation.types.semiring import DbSemiring
 
@@ -403,30 +404,39 @@ class ProvenanceRepository:
         """
         Add a semiring's provenance annotations to an existing table that have provenance enabled.
 
+        The mapping table is shared by every semiring using the same mapping
+        strategy, as its contents only depend on the strategy: enabling a
+        second semiring on a table only adds the table to that semiring's
+        union view. A table annotated by an earlier version, which kept one
+        identical mapping table per semiring, is migrated: one of its current
+        per-semiring tables is renamed to the shared name and the others are
+        dropped. Tables of the schema not annotated again keep their
+        per-semiring tables, which the union views still read.
+
         Args:
             schema_name: The schema where the base table is located.
             table_name: The name of the base table.
         Returns:
-            True if the semiring's mapping was newly created (or rebuilt from an
+            True if the mapping table was newly created (or rebuilt from an
             outdated format), False if it was already in place.
         """
         prov_table = semiring.get_provenance_table_name_for(table_name)
         strategy = semiring.mappingStrategy
+        legacy_tables = [
+            s.get_legacy_provenance_table_name_for(table_name)
+            for s in all_semirings
+            if s.mappingStrategy.name == strategy.name
+        ]
 
         await self._set_search_path(schema_name)
 
         # ProvSQL's create_provenance_mapping is idempotent (1.9.0+), but its
         # NOTICE-and-no-op path is indistinguishable from a real creation, so
         # the existence check is what computes this method's return value.
-        async with self._conn.transaction():
-            cursor = await self._conn.execute(
-                "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s)",
-                (schema_name, prov_table),
-            )
-            result = await cursor.fetchone()
-            table_already_exists = result[0] if result else False
+        existing = await self._existing_tables(schema_name, [prov_table, *legacy_tables])
+        legacy_tables = [t for t in legacy_tables if t in existing]
 
-        if table_already_exists and await self._mapping_is_current(
+        if prov_table in existing and not legacy_tables and await self._mapping_is_current(
             schema_name, table_name, prov_table, strategy
         ):
             logger.info(
@@ -436,7 +446,13 @@ class ProvenanceRepository:
                 await self._rebuild_union_mapping(schema_name, semiring)
             return False
 
-        if table_already_exists:
+        # Dropping a mapping table drops (CASCADE) the union views over it, of
+        # every semiring sharing it: note them now to rebuild them all.
+        enabled = await self._enabled_semirings(schema_name)
+
+        if prov_table in existing and not await self._mapping_is_current(
+            schema_name, table_name, prov_table, strategy
+        ):
             # Built by a different mapping strategy (a pre-KeyMapping ctid
             # mapping, or one predating maintained registration): its stored
             # values cannot be converted, so rebuild from the tokens the source
@@ -448,6 +464,38 @@ class ProvenanceRepository:
                 await self._conn.execute(
                     SQL("DROP TABLE {} CASCADE").format(Identifier(prov_table))
                 )
+            existing.discard(prov_table)
+
+        if prov_table not in existing:
+            for legacy_table in legacy_tables:
+                if await self._mapping_is_current(
+                    schema_name, table_name, legacy_table, strategy
+                ):
+                    # The registry keys on the mapping's oid, which a rename
+                    # keeps: the mapping stays maintained.
+                    logger.info(f"Migrating provenance table '{legacy_table}' to '{prov_table}'")
+                    async with self._conn.transaction():
+                        await self._conn.execute(
+                            SQL("ALTER TABLE {} RENAME TO {}").format(
+                                Identifier(legacy_table), Identifier(prov_table)
+                            )
+                        )
+                    legacy_tables.remove(legacy_table)
+                    existing.add(prov_table)
+                    break
+
+        # Identical copies of the shared table, or outdated ones
+        async with self._conn.transaction():
+            for legacy_table in legacy_tables:
+                logger.info(f"Dropping per-semiring provenance table '{legacy_table}'")
+                await self._conn.execute(
+                    SQL("DROP TABLE {} CASCADE").format(Identifier(legacy_table))
+                )
+
+        if prov_table in existing:
+            async with self._conn.transaction():
+                await self._rebuild_union_mappings(schema_name, [semiring, *enabled])
+            return False
 
         await self._ensure_reference_column(schema_name, table_name, strategy)
 
@@ -470,11 +518,42 @@ class ProvenanceRepository:
             logger.error(f"Unexpected error in create_provenance_mapping: {e}")
             raise
 
-        # Rebuild the union mapping view for this semiring
+        # Rebuild the union mapping view for this semiring, and the ones the
+        # drops above took with them
         async with self._conn.transaction():
-            await self._rebuild_union_mapping(schema_name, semiring)
+            await self._rebuild_union_mappings(schema_name, [semiring, *enabled])
 
         return True
+
+    async def _existing_tables(self, schema_name: str, names: list[str]) -> set[str]:
+        """The tables of *names* that exist in the schema."""
+        async with self._conn.transaction():
+            cursor = await self._conn.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = %s AND tablename = ANY(%s)",
+                (schema_name, names),
+            )
+            return {row[0] for row in await cursor.fetchall()}
+
+    async def _enabled_semirings(self, schema_name: str) -> list[DbSemiring]:
+        """The semirings whose union mapping exists in the schema."""
+        async with self._conn.transaction():
+            cursor = await self._conn.execute(
+                "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                " WHERE n.nspname = %s AND c.relname = ANY(%s)",
+                (schema_name, [s.union_table_name for s in all_semirings]),
+            )
+            names = {row[0] for row in await cursor.fetchall()}
+        return [s for s in all_semirings if s.union_table_name in names]
+
+    async def _rebuild_union_mappings(
+        self, schema_name: str, semirings: list[DbSemiring]
+    ) -> None:
+        """Rebuild the union mapping of each semiring, once."""
+        rebuilt = set()
+        for semiring in semirings:
+            if semiring.name not in rebuilt:
+                rebuilt.add(semiring.name)
+                await self._rebuild_union_mapping(schema_name, semiring)
 
     async def _mapping_is_current(
         self, schema_name: str, table_name: str, prov_table: str, strategy
@@ -549,6 +628,9 @@ class ProvenanceRepository:
         """
         Remove a semiring's provenance annotations from an existing table that have provenance enabled.
 
+        The mapping table is shared by every semiring using the same mapping
+        strategy, so this removes the table from all of them.
+
         Args:
             schema_name: The schema where the base table is located.
             table_name: The name of the base table.
@@ -556,29 +638,28 @@ class ProvenanceRepository:
             True if the semiring's provenance table existed and was dropped, False otherwise.
 
         """
-        prov_table = semiring.get_provenance_table_name_for(table_name)
+        prov_tables = [
+            semiring.get_provenance_table_name_for(table_name),
+            semiring.get_legacy_provenance_table_name_for(table_name),
+        ]
 
         await self._set_search_path(schema_name)
 
-        # Check if the provenance table exists before attempting to drop it
+        # Check if the provenance tables exist before attempting to drop them
+        existing = await self._existing_tables(schema_name, prov_tables)
+        if not existing:
+            return False
+
+        # The drops take the union views over the tables with them
+        enabled = await self._enabled_semirings(schema_name)
         async with self._conn.transaction():
-            cursor = await self._conn.execute(
-                "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s)",
-                (schema_name, prov_table),
-            )
-            result = await cursor.fetchone()
-            table_existed = result[0] if result else False
+            for prov_table in existing:
+                await self._conn.execute(
+                    SQL("DROP TABLE {} CASCADE").format(Identifier(prov_table))
+                )
+            await self._rebuild_union_mappings(schema_name, [semiring, *enabled])
 
-        # Remove the semiring's provenance mapping table if it exists
-        if table_existed:
-            async with self._conn.transaction():
-                drop_query = SQL("DROP TABLE {} CASCADE").format(Identifier(prov_table))
-                await self._conn.execute(drop_query)
-
-            async with self._conn.transaction():
-                await self._rebuild_union_mapping(schema_name, semiring)
-
-        return table_existed
+        return True
 
     async def remove_provenance(self, schema_name: str, table_name: str) -> None:
         """
@@ -623,16 +704,37 @@ class ProvenanceRepository:
         It is a view rather than the materialised snapshot this used to build,
         so that the rows ``provenance_guard`` appends to a maintained mapping
         are visible to queries without re-annotating.
+
+        It reads the mapping tables shared by the semiring's mapping strategy,
+        and the semiring's own tables that earlier versions created, for the
+        tables not migrated yet.
         """
         await self._set_search_path(schema_name)
 
-        cursor = await self._conn.cursor(row_factory=dict_row).execute(
-            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = %s AND tablename LIKE %s",
-            (schema_name, f"%{semiring.table_suffix}"),
-        )
-        provwhy_tables = await cursor.fetchall()
+        def ending_with(suffix: str) -> str:
+            # LIKE pattern; _ is a LIKE wildcard
+            return "%" + suffix.replace("_", "\\_")
 
-        if not provwhy_tables:
+        cursor = await self._conn.execute(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = %s"
+            " AND (tablename LIKE %s OR tablename LIKE %s)",
+            (
+                schema_name,
+                ending_with(semiring.table_suffix),
+                ending_with(semiring.legacy_table_suffix),
+            ),
+        )
+        names = {row[0] for row in await cursor.fetchall()}
+        shared = {n for n in names if n.endswith(semiring.table_suffix)}
+        legacy = {
+            n
+            for n in names - shared
+            # A table with both would have each of its tokens twice
+            if n.removesuffix(semiring.legacy_table_suffix) + semiring.table_suffix not in shared
+        }
+        mapping_tables = sorted(shared | legacy)
+
+        if not mapping_tables:
             logger.warning(
                 f"No tables ending with {semiring.table_suffix} found in schema {schema_name}"
             )
@@ -668,8 +770,8 @@ class ProvenanceRepository:
         # evaluator's token join down into each mapping table's index.
         union_query = " UNION ALL ".join(
             [
-                f"SELECT value, provenance FROM {schema_name}.{row['tablename']}"
-                for row in provwhy_tables
+                f"SELECT value, provenance FROM {schema_name}.{table}"
+                for table in mapping_tables
             ]
         )
         composed_rq = SQL("CREATE VIEW {} AS {}").format(
@@ -678,7 +780,7 @@ class ProvenanceRepository:
         await self._conn.execute(composed_rq)
 
         logger.info(
-            f"Created {schema_name}.{name} view from {len(provwhy_tables)} {semiring.table_suffix} tables"
+            f"Created {schema_name}.{name} view from {len(mapping_tables)} mapping tables"
         )
         return True
 

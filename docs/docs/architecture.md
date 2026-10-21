@@ -62,8 +62,8 @@ The service supports the following ProvSQL built-in semirings, all defined in `a
 
 Each semiring has:
 - A **retrieval function** — one of ProvSQL's compiled `sr_*` functions, typed as `ANYELEMENT` so it works for both plain and aggregate provenance tokens without a separate aggregate function.
-- A **mapping table name** — the table that maps provenance tokens to source row labels, rebuilt as a UNION of all per-table provenance tables before each query.
-- A **mapping strategy** — `CtidMapping` by default, which labels each row as `table@ctid` using the PostgreSQL physical row identifier.
+- A **mapping table name** — a view (`why_mapping`...) mapping provenance tokens to source row labels, the `UNION ALL` of the per-table mapping tables.
+- A **mapping strategy** — `KeyMapping`, which labels each row with the reference stored in its `provsql_ref` column. A mapping table only depends on the strategy, so each annotated table has one, `<table>_provkey`, shared by every semiring. Tables annotated by earlier versions have one identical `<table>_prov<semiring>` per semiring: the views still read them, and annotating the table again renames one to `<table>_provkey` and drops the others.
 
 ### SQL Rewriting
 

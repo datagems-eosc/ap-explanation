@@ -9,6 +9,10 @@ class ProvenanceMapping[T](Protocol):
     This abstract class defines the interface that all mapping strategies must implement.
     """
 
+    #: Short name of the strategy. It names the mapping tables, which every
+    #: semiring using the strategy shares: their contents only depend on it.
+    name: str
+
     #: Column on the source table holding the encoded reference. It is handed
     #: to ``create_provenance_mapping`` as the mapping attribute, which is what
     #: makes ProvSQL's maintained mappings possible: ``provenance_guard``

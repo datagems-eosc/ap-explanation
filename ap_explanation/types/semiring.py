@@ -36,7 +36,18 @@ class DbSemiring(BaseModel):
     @property
     def table_suffix(self) -> str:
         """
-        Get the suffix used for provenance tables in this semiring.
+        Get the suffix of the provenance tables this semiring reads.
+
+        A provenance table only depends on the mapping strategy, so it is named
+        after the strategy and shared by every semiring using it.
+        """
+        return f"_prov{self.mappingStrategy.name}"
+
+    @property
+    def legacy_table_suffix(self) -> str:
+        """
+        Get the suffix of the per-semiring provenance tables that earlier
+        versions created, one per semiring with identical contents.
         """
         return f"_prov{self.name}"
 
@@ -48,14 +59,27 @@ class DbSemiring(BaseModel):
             table_name: The base table name
 
         Returns:
-            Provenance table name with semiring suffix
+            Provenance table name with the mapping strategy's suffix
 
         Example:
-            >>> semiring = DbSemiring(name='why', ...)
+            >>> from ap_explanation.repository.mapping.key_mapping import KeyMapping
+            >>> semiring = DbSemiring(name='why', retrieval_function='sr_why', mappingStrategy=KeyMapping())
             >>> semiring.get_provenance_table_name_for('users')
-            'users_provwhy'
+            'users_provkey'
         """
         return f"{table_name}{self.table_suffix}"
+
+    def get_legacy_provenance_table_name_for(self, table_name: str) -> str:
+        """
+        Get the name earlier versions gave this semiring's provenance table.
+
+        Example:
+            >>> from ap_explanation.repository.mapping.key_mapping import KeyMapping
+            >>> semiring = DbSemiring(name='why', retrieval_function='sr_why', mappingStrategy=KeyMapping())
+            >>> semiring.get_legacy_provenance_table_name_for('users')
+            'users_provwhy'
+        """
+        return f"{table_name}{self.legacy_table_suffix}"
 
     @property
     def union_table_name(self) -> str:
