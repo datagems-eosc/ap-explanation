@@ -6,6 +6,7 @@ from ap_explanation.errors.exceptions import (
     InvalidProbabilityColumnError,
     ProvSqlInternalError,
     ProvSqlMissingError,
+    QueryLimitExceededError,
     TableNotAnnotatedError,
     TableOrSchemaNotFoundError,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "InvalidProbabilityColumnError",
     "ProvSqlInternalError",
     "ProvSqlMissingError",
+    "QueryLimitExceededError",
     "TableNotAnnotatedError",
     "TableOrSchemaNotFoundError",
 ]

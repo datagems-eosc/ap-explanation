@@ -8,6 +8,7 @@
 
 ### New Features
 
+- **Provenance query limits** — each provenance query runs with `statement_timeout` (`10min`), `provsql.max_memory` (`1GB`), `temp_file_limit` (`5GB`) and no parallel workers, configurable with `PROVENANCE_*` variables. A query past them fails with an error naming the limit, rather than running until the database dies.
 - **Result probabilities** — `POST /api/v1/aps/explanation[/{semiring_name}]?probability=true` evaluates each result row's probability with ProvSQL's `probability_evaluate`, returned as `probability` on each derivation. Tuple probabilities are read from the column named by each `Table`/`CSV` node's `probabilityColumn` property; tables without one are certain.
 
 ### Misc

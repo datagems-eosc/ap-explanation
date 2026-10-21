@@ -176,6 +176,17 @@ Copy `.env.example` to `.env` and fill in the values.
 | `S3_MOUNT_PATH` | No | `/mnt/s3` | Local path where CSV source files are mounted (used by the CSV data source) |
 | `ROOT_PATH` | No | `""` | API root path when behind a reverse proxy |
 
+### Provenance query limits
+
+Set on the provenance query's transaction only, in PostgreSQL's syntax; an empty value leaves the server's setting. See [Configuration](docs/docs/configuration.md#provenance-query-limits).
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PROVENANCE_STATEMENT_TIMEOUT` | No | `10min` | `statement_timeout` |
+| `PROVENANCE_MAX_MEMORY` | No | `1GB` | `provsql.max_memory` |
+| `PROVENANCE_TEMP_FILE_LIMIT` | No | `5GB` | `temp_file_limit` (superuser or `GRANT SET`, skipped otherwise) |
+| `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather` |
+
 ### LLM — Natural-language explanations (optional)
 
 When `LLM_API_BASE` is not set, natural-language explanations are silently disabled and the service falls back to returning only the raw semiring result.

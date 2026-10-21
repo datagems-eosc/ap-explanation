@@ -26,6 +26,17 @@ Copy `.env.example` to `.env` and fill in the values.
 | `S3_MOUNT_PATH` | No | `/mnt/s3` | Local path where CSV source files are mounted (used by the CSV data source) |
 | `ROOT_PATH` | No | `""` | API root path when behind a reverse proxy |
 
+### Provenance query limits
+
+Set on the transaction running each provenance query only (`SET LOCAL`): annotation and the other clients of the database keep the server's values. Values use PostgreSQL's syntax; an empty value leaves the server's setting. A query stopped by one of them fails its task with a message naming the limit.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PROVENANCE_STATEMENT_TIMEOUT` | No | `10min` | `statement_timeout`. The one bound that holds whatever process grows, ProvSQL's store worker included (ProvSQL >= 1.13 honours cancellation). It also bounds how long a query holds the per-database lock |
+| `PROVENANCE_MAX_MEMORY` | No | `1GB` | `provsql.max_memory`: the memory ProvSQL's evaluations may add to the query's backend. Does not cover ProvSQL's store worker |
+| `PROVENANCE_TEMP_FILE_LIMIT` | No | `5GB` | `temp_file_limit`. PostgreSQL's default is no limit, so a query can fill the disk. Needs a superuser (or `GRANT SET ON PARAMETER temp_file_limit`); skipped with a warning otherwise |
+| `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather`. Parallel workers grow outside `provsql.max_memory`'s budget |
+
 ### LLM — Natural-language explanations (optional)
 
 When `LLM_API_BASE` is not set, natural-language explanations are silently disabled and the service falls back to returning only the raw semiring result.

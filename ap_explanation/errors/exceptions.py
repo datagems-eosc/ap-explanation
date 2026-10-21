@@ -134,6 +134,35 @@ class InvalidProbabilityColumnError(Exception):
         return self.message
 
 
+class QueryLimitExceededError(Exception):
+    """
+    Exception raised when a provenance query is stopped by one of the limits
+    the service sets on it (``statement_timeout``, ``provsql.max_memory``,
+    ``temp_file_limit``).
+
+    This error indicates that the query is too costly to explain within the
+    configured limits, not that it is invalid: raising the limit, or narrowing
+    the query, may let it through.
+    """
+
+    def __init__(self, limit: str, value: str | None, details: str):
+        self.limit = limit
+        self.value = value
+        self.details = details
+        super().__init__(limit, value, details)
+
+    @property
+    def message(self) -> str:
+        bound = f"{self.limit} ({self.value})" if self.value else self.limit
+        return (
+            f"The provenance query was stopped because it exceeded {bound}. "
+            f"Narrow the query, or raise the limit. Error details: {self.details}"
+        )
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class DatabaseNotFoundError(Exception):
     """
     Exception raised when a database cannot be found on either the Postgres or Timescale instance.

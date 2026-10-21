@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import dataclass
 from logging import getLogger
 from typing import LiteralString, cast
 
@@ -12,6 +13,7 @@ from ap_explanation.errors import (
     InvalidProbabilityColumnError,
     ProvSqlInternalError,
     ProvSqlMissingError,
+    QueryLimitExceededError,
 )
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
@@ -20,6 +22,42 @@ from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
 set_json_dumps(dumps)
+
+
+@dataclass(frozen=True)
+class QueryLimits:
+    """
+    Settings bounding the resources of a provenance query, in PostgreSQL's
+    syntax ('10min', '1GB'). ``None`` leaves the server's value.
+
+    Without them a costly query runs until it finishes or the database dies,
+    holding the per-database lock all along.
+    """
+
+    #: The one guard that holds whatever process grows: ProvSQL >= 1.13
+    #: honours cancellation.
+    statement_timeout: str | None = "10min"
+    #: Memory ProvSQL's evaluations may add to the backend. It does not
+    #: cover ProvSQL's store worker, hence the timeout.
+    provsql_max_memory: str | None = "1GB"
+    #: PostgreSQL's default is no limit, so a query can fill the disk.
+    #: Superuser-only (or GRANT SET): skipped with a warning otherwise.
+    temp_file_limit: str | None = "5GB"
+    #: Parallel workers grow outside provsql.max_memory's budget.
+    max_parallel_workers_per_gather: str | None = "0"
+
+    def settings(self) -> dict[str, str]:
+        """The settings to apply, keyed by PostgreSQL parameter name."""
+        return {
+            name: value
+            for name, value in {
+                "statement_timeout": self.statement_timeout,
+                "provsql.max_memory": self.provsql_max_memory,
+                "temp_file_limit": self.temp_file_limit,
+                "max_parallel_workers_per_gather": self.max_parallel_workers_per_gather,
+            }.items()
+            if value
+        }
 
 
 class ProvenanceRepository:
@@ -31,16 +69,26 @@ class ProvenanceRepository:
 
     _conn: AsyncConnection
     _sql_rewriter: SqlRewriter
+    _limits: QueryLimits
 
-    def __init__(self, conn: AsyncConnection, sql_rewriter: SqlRewriter):
+    def __init__(
+        self,
+        conn: AsyncConnection,
+        sql_rewriter: SqlRewriter,
+        limits: QueryLimits | None = None,
+    ):
         self._conn = conn
         self._sql_rewriter = sql_rewriter
+        self._limits = limits or QueryLimits()
 
     @classmethod
     async def create(
-        cls, conn: AsyncConnection, sql_rewriter: SqlRewriter
+        cls,
+        conn: AsyncConnection,
+        sql_rewriter: SqlRewriter,
+        limits: QueryLimits | None = None,
     ) -> ProvenanceRepository:
-        repo = cls(conn, sql_rewriter)
+        repo = cls(conn, sql_rewriter, limits)
         # Enabled per connection, never server-wide: the server default stays
         # provsql.active = 0 (set in the image's postgresql.conf) so that other
         # services querying the same database are never subject to ProvSQL's
@@ -75,6 +123,10 @@ class ProvenanceRepository:
 
         Returns:
             One :class:`Derivation` per result row, in the database's order.
+
+        Raises:
+            QueryLimitExceededError: If the query ran past one of the
+                repository's :class:`QueryLimits`
         """
         edited_query = self._sql_rewriter.rewrite(query, semirings, compute_probability)
         internal_columns = {
@@ -87,6 +139,7 @@ class ProvenanceRepository:
         try:
             async with self._conn.transaction():
                 await self._set_search_path(schema_name)
+                await self._apply_limits()
 
                 # Fetch the provenance-annotated results
                 cursor = await self._conn.cursor(row_factory=dict_row).execute(
@@ -132,6 +185,27 @@ class ProvenanceRepository:
             raise TableNotAnnotatedError(
                 schema_name=schema_name, semiring_name=names
             ) from e
+        except errors.QueryCanceled as e:
+            # 57014: statement_timeout, or a pg_cancel_backend by an operator,
+            # which is no limit
+            if "statement timeout" not in str(e):
+                raise
+            raise QueryLimitExceededError(
+                "statement_timeout", self._limits.statement_timeout, str(e)
+            ) from e
+        except errors.ProgramLimitExceeded as e:
+            # 54000: provsql.max_memory (DETAIL: provsql-reason: memory-limit),
+            # or another of ProvSQL's bounds such as provsql.max_worlds
+            if "memory" in f"{e} {e.diag.message_detail}":
+                raise QueryLimitExceededError(
+                    "provsql.max_memory", self._limits.provsql_max_memory, str(e)
+                ) from e
+            raise QueryLimitExceededError("a ProvSQL limit", None, str(e)) from e
+        except errors.ConfigurationLimitExceeded as e:
+            # 53400: temp_file_limit
+            raise QueryLimitExceededError(
+                "temp_file_limit", self._limits.temp_file_limit, str(e)
+            ) from e
         except errors.InternalError_ as e:
             # ProvSQL internal error, typically when provenance functions are called on non-annotated data
             logger.error(f"ProvSQL internal error while querying with provenance: {e}")
@@ -140,6 +214,27 @@ class ProvenanceRepository:
                 f"Please re-annotate the table and try again. "
                 f"Error details: {e!s}"
             ) from e
+
+    async def _apply_limits(self) -> None:
+        """
+        Apply the repository's :class:`QueryLimits` to the current transaction.
+
+        ``set_config(..., true)`` is ``SET LOCAL`` with bound parameters: the
+        settings revert at commit, so annotation and the other services on the
+        database keep the server's values. Each one is set in its own
+        savepoint so that a parameter the user may not set (temp_file_limit
+        needs superuser or GRANT SET) is skipped rather than failing the query.
+        """
+        for name, value in self._limits.settings().items():
+            try:
+                async with self._conn.transaction():
+                    await self._conn.execute(
+                        "SELECT set_config(%s, %s, true)", (name, value)
+                    )
+            except errors.InsufficientPrivilege as e:
+                logger.warning(
+                    f"Cannot set {name} = {value}, leaving the server's value: {e}"
+                )
 
     async def set_probabilities(
         self, schema_name: str, table_name: str, column: str | None

@@ -16,7 +16,7 @@ from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider
 from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.repository.provenance import ProvenanceRepository, QueryLimits
 from ap_explanation.semirings import semirings
 from ap_explanation.services.authentication import Authentication
 from ap_explanation.services.provenance import ProvenanceService
@@ -35,6 +35,26 @@ USE_EMBEDDED_CELERY_WORKER = os.getenv(
 # Poor man singleton
 lock_provider = RedisLockProvider(redis_url=REDIS_BROKER_URI)
 cache_provider = RedisCacheProvider(redis_url=REDIS_BROKER_URI)
+
+
+def _limit(name: str, default: str | None) -> str | None:
+    """A query limit from the environment; an empty value leaves the server's."""
+    return os.getenv(name, default) or None
+
+
+# Bounds on the session running a provenance query, in PostgreSQL's syntax,
+# defaulting to QueryLimits'. Read once: they do not change while the process runs.
+_default_limits = QueryLimits()
+query_limits = QueryLimits(
+    statement_timeout=_limit(
+        "PROVENANCE_STATEMENT_TIMEOUT", _default_limits.statement_timeout),
+    provsql_max_memory=_limit(
+        "PROVENANCE_MAX_MEMORY", _default_limits.provsql_max_memory),
+    temp_file_limit=_limit(
+        "PROVENANCE_TEMP_FILE_LIMIT", _default_limits.temp_file_limit),
+    max_parallel_workers_per_gather=_limit(
+        "PROVENANCE_MAX_PARALLEL_WORKERS", _default_limits.max_parallel_workers_per_gather),
+)
 
 
 def get_lock_provider() -> LockProvider:
@@ -235,7 +255,7 @@ def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], Async
         async with create_connection_pool(qs) as pool:
             # NOTE: Some data sources require set up
             async with data_source.seed_database(pool, get_s3_mount_path()):
-                repo = await ProvenanceRepository.create(pool, SqlRewriter())
+                repo = await ProvenanceRepository.create(pool, SqlRewriter(), query_limits)
                 yield ProvenanceService(repo, get_explainer())
             return
 
