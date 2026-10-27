@@ -55,6 +55,11 @@ query_limits = QueryLimits(
         "PROVENANCE_TEMP_FILE_LIMIT", _default_limits.temp_file_limit),
     max_parallel_workers_per_gather=_limit(
         "PROVENANCE_MAX_PARALLEL_WORKERS", _default_limits.max_parallel_workers_per_gather),
+    # An empty value skips the check
+    max_aggregated_rows=(lambda v: int(v) if v else None)(
+        _limit("PROVENANCE_MAX_AGGREGATED_ROWS", str(_default_limits.max_aggregated_rows))),
+    precheck_timeout=_limit(
+        "PROVENANCE_PRECHECK_TIMEOUT", _default_limits.precheck_timeout) or _default_limits.precheck_timeout,
 )
 
 

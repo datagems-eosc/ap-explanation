@@ -4,7 +4,7 @@ from logging import getLogger
 from typing import LiteralString, cast
 
 from orjson import dumps
-from psycopg import AsyncConnection, errors
+from psycopg import AsyncConnection, Rollback, errors
 from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
@@ -46,6 +46,18 @@ class QueryLimits:
     temp_file_limit: str | None = "5GB"
     #: Parallel workers grow outside provsql.max_memory's budget.
     max_parallel_workers_per_gather: str | None = "0"
+    #: Most rows an aggregate of the query may receive. The circuit of an
+    #: aggregate holds a gate per row, built while the query runs, before
+    #: provsql.max_memory applies: past a few million rows on a 4 GB server,
+    #: ProvSQL's store worker is killed and the whole server restarts.
+    #: Counted by running the plain query first (see
+    #: ProvenanceRepository._check_aggregated_rows); None skips the check.
+    max_aggregated_rows: int | None = 8_000_000
+    #: statement_timeout of that plain run. A plain plan can be much slower
+    #: than ProvSQL's rewritten one: a question of the meteo use case whose
+    #: provenance query takes 0.3 s was refused at 60 s, and explained in
+    #: 157 s with 300 s.
+    precheck_timeout: str = "180s"
 
     def settings(self) -> dict[str, str]:
         """The settings to apply, keyed by PostgreSQL parameter name."""
@@ -141,6 +153,7 @@ class ProvenanceRepository:
             async with self._conn.transaction():
                 await self._set_search_path(schema_name)
                 await self._apply_limits()
+                await self._check_aggregated_rows(query)
 
                 # Fetch the provenance-annotated results
                 cursor = await self._conn.cursor(row_factory=dict_row).execute(
@@ -215,6 +228,56 @@ class ProvenanceRepository:
                 f"Please re-annotate the table and try again. "
                 f"Error details: {e!s}"
             ) from e
+
+    async def _check_aggregated_rows(self, query: str) -> None:
+        """
+        Refuse a query an aggregate of which receives more than
+        ``max_aggregated_rows`` rows, before its provenance is built.
+
+        PostgreSQL's estimates cannot tell: on joins on expressions
+        (``ROUND(CAST(latitude AS DECIMAL), 1)``) it estimates 1 row where an
+        aggregate gets 24 million. So the query runs once without provenance,
+        under ``EXPLAIN ANALYZE`` and ``precheck_timeout``, and the actual rows
+        going into each aggregate are read from the plan. Without provenance
+        this costs a fraction of the provenance query.
+
+        Raises:
+            QueryLimitExceededError: If an aggregate receives too many rows,
+                or the plain query runs past ``precheck_timeout``
+        """
+        limit = self._limits.max_aggregated_rows
+        if limit is None:
+            return
+        rows = 0
+        try:
+            # A savepoint rolled back on the way out, undoing the SET LOCALs
+            async with self._conn.transaction():
+                await self._conn.execute("SET LOCAL provsql.active = 0")
+                await self._conn.execute(
+                    "SELECT set_config('statement_timeout', %s, true)",
+                    (self._limits.precheck_timeout,),
+                )
+                cursor = await self._conn.execute(SQL(cast(LiteralString, f"EXPLAIN (FORMAT JSON) {query}")))
+                # Without an aggregate in its plan, the query has nothing to count: no need to run it
+                if _aggregated_rows((await cursor.fetchone())[0][0]["Plan"]):
+                    cursor = await self._conn.execute(
+                        SQL(cast(LiteralString, f"EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) {query}"))
+                    )
+                    rows = max(_aggregated_rows((await cursor.fetchone())[0][0]["Plan"]))
+                raise Rollback()
+        except errors.QueryCanceled as e:
+            if "statement timeout" not in str(e):
+                raise
+            raise QueryLimitExceededError(
+                "the plain query's statement_timeout", self._limits.precheck_timeout,
+                "the query takes too long even without provenance to explain it",
+            ) from e
+
+        if rows > limit:
+            raise QueryLimitExceededError(
+                "max_aggregated_rows", f"{limit:,}",
+                f"an aggregate of the query receives {rows:,} rows",
+            )
 
     async def _apply_limits(self) -> None:
         """
@@ -920,3 +983,18 @@ class ProvenanceRepository:
                     )
 
         return "\n".join(sb)
+
+
+def _aggregated_rows(node: dict) -> list[int]:
+    """The actual rows going into each aggregate of an ``EXPLAIN ANALYZE`` plan."""
+    found = []
+    if "Aggregate" in node["Node Type"]:
+        # Its input, not the subqueries of its expressions (InitPlan, SubPlan)
+        found.append(sum(
+            int(child.get("Actual Rows", 0) * child.get("Actual Loops", 1))
+            for child in node.get("Plans", [])
+            if child.get("Parent Relationship") == "Outer"
+        ))
+    for child in node.get("Plans", []):
+        found.extend(_aggregated_rows(child))
+    return found

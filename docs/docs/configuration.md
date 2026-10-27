@@ -36,6 +36,23 @@ Set on the transaction running each provenance query only (`SET LOCAL`): annotat
 | `PROVENANCE_MAX_MEMORY` | No | `1GB` | `provsql.max_memory`: the memory ProvSQL's evaluations may add to the query's backend. Does not cover ProvSQL's store worker |
 | `PROVENANCE_TEMP_FILE_LIMIT` | No | `5GB` | `temp_file_limit`. PostgreSQL's default is no limit, so a query can fill the disk. Needs a superuser (or `GRANT SET ON PARAMETER temp_file_limit`); skipped with a warning otherwise |
 | `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather`. Parallel workers grow outside `provsql.max_memory`'s budget |
+| `PROVENANCE_MAX_AGGREGATED_ROWS` | No | `8000000` | Most rows an aggregate of the query may receive. ProvSQL builds a gate per aggregated row while the query runs, before `provsql.max_memory` applies, and past about 16 million rows on a 3 or 4 GB server its store worker is killed (the server restarts) or hangs. The default is for ProvSQL 1.14; see below for 1.13. The query is first run without provenance, under `EXPLAIN ANALYZE`, to count them: PostgreSQL's estimates are far off on joins on expressions. Empty skips the check |
+| `PROVENANCE_PRECHECK_TIMEOUT` | No | `180s` | `statement_timeout` of that plain run. A query slower than this without provenance is refused. PostgreSQL may plan the plain query much worse than ProvSQL's rewritten one: a question of the meteo use case whose provenance query takes 0.3 s was refused at 60 s, and explained in 157 s with 300 s |
+
+#### Choosing `PROVENANCE_MAX_AGGREGATED_ROWS`
+
+It depends on the database server's RAM, which ap-explanation cannot see, and on the ProvSQL version. Measured with `provsql.max_memory = 1GB`, on a single query summing a two-table join, set to half of the largest aggregate the server survives, as a margin for other sessions:
+
+| Server RAM | ProvSQL 1.14 (master `3b8d3098`) | ProvSQL 1.13.0 |
+|---|---|---|
+| 3 GB | 16 million built, crash at 20 million: **8,000,000** | crash at 6 million: **2,000,000** |
+| 4 GiB | 16 million built, hang at 25 million: **8,000,000** | crash at 9 million: **4,500,000** |
+
+On 1.14 the limit protects the building of the aggregate only: past it, ProvSQL stops the evaluation at `provsql.max_memory` or `statement_timeout`. On 1.13.0 the evaluation itself crashes the server first, hence its lower limits.
+
+To measure it on a given server, run `scripts/calibrate_max_aggregated_rows.sh` against a copy of it, with the same RAM and settings: it crashes the server it runs on. A larger `PROVENANCE_MAX_MEMORY`, joins of more tables, or other applications on the server all lower the threshold.
+
+The limit holds for one provenance query at a time. ap-explanation runs one per database, but databases on the same server can run theirs at once: their memory adds up.
 
 ### Maintenance
 

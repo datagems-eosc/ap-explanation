@@ -69,3 +69,63 @@ async def test_limits_are_local_to_the_query(
 
     cursor = await db_connection.execute("SHOW statement_timeout")
     assert (await cursor.fetchone())[0] == before
+
+
+def test_aggregated_rows_reads_the_input_of_each_aggregate():
+    """The rows going into an aggregate, not those of a subquery in its expressions."""
+    plan = {
+        "Node Type": "Aggregate", "Plans": [
+            {"Node Type": "Seq Scan", "Parent Relationship": "Outer", "Actual Rows": 1000, "Actual Loops": 3},
+            {"Node Type": "Aggregate", "Parent Relationship": "InitPlan", "Plans": [
+                {"Node Type": "Seq Scan", "Parent Relationship": "Outer", "Actual Rows": 7, "Actual Loops": 1},
+            ]},
+        ],
+    }
+    from ap_explanation.repository.provenance import _aggregated_rows
+
+    assert _aggregated_rows(plan) == [3000, 7]
+
+
+@pytest.mark.asyncio
+async def test_ko_too_many_aggregated_rows(
+    db_connection: AsyncConnection, formula_semiring: DbSemiring, test_schema: TestSchema
+):
+    """An aggregate over more rows than max_aggregated_rows is refused before its provenance is built."""
+    service = await _service(db_connection, QueryLimits(max_aggregated_rows=3))
+    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    table = f"{test_schema.schema}.{test_schema.table}"
+    with pytest.raises(QueryLimitExceededError) as exc_info:
+        await service.compute_provenance(
+            test_schema.schema, f"SELECT COUNT(*) FROM {table}", [formula_semiring]
+        )
+    assert exc_info.value.limit == "max_aggregated_rows"
+    assert "rows" in exc_info.value.details
+
+    # Under the limit, the same aggregate is explained
+    service = await _service(db_connection, QueryLimits(max_aggregated_rows=1_000_000))
+    rows = await service.compute_provenance(
+        test_schema.schema, f"SELECT COUNT(*) FROM {table}", [formula_semiring]
+    )
+    assert len(rows) == 1
+    # The check's SET LOCALs were undone: ProvSQL was active for the query
+    assert rows[0].provenance[formula_semiring.name].expression
+
+
+@pytest.mark.asyncio
+async def test_ko_precheck_timeout(
+    db_connection: AsyncConnection, formula_semiring: DbSemiring, test_schema: TestSchema
+):
+    """A query too slow even without provenance is refused, and the settings revert."""
+    service = await _service(db_connection, QueryLimits(precheck_timeout="200ms"))
+    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    table = f"{test_schema.schema}.{test_schema.table}"
+    with pytest.raises(QueryLimitExceededError) as exc_info:
+        await service.compute_provenance(
+            test_schema.schema, f"SELECT COUNT(*) FROM {table} WHERE pg_sleep(1) IS NOT NULL", [formula_semiring]
+        )
+    assert exc_info.value.limit == "the plain query's statement_timeout"
+
+    cursor = await db_connection.execute("SHOW provsql.active")
+    assert (await cursor.fetchone())[0] == "on"
