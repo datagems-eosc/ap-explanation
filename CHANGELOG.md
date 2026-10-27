@@ -10,6 +10,8 @@
 
 ### New Features
 
+- **An aggregate's formula is returned as its first rows** — on ProvSQL 1.14, the formula of an aggregate is read with `sr_formula_rows`: the aggregate and its number of terms, then one term per line, up to `PROVENANCE_MAX_FORMULA_ROWS` (100) lines, and the tuples those terms name. `truncated` says that rows were left out. ProvSQL computes only the rows read, so an aggregate over millions of rows is explained in seconds instead of writing a formula of a term per row (and an evaluation that never stops, on some conditions on aggregates). A formula of one row is returned as before. On ProvSQL 1.13 nothing changes.
+
 - **Aggregates over too many rows are refused before they run** — ProvSQL builds a gate per aggregated row while the query runs, before `provsql.max_memory` applies: past a few million rows on a 4 GB server, its store worker is killed and the server restarts. The query now first runs without provenance, under `EXPLAIN ANALYZE` (PostgreSQL's estimates are far off on joins on expressions), and is refused with `QueryLimitExceededError` if an aggregate receives more than `PROVENANCE_MAX_AGGREGATED_ROWS` rows (8,000,000, for ProvSQL 1.14; 2,000,000 to 4,500,000 on 1.13.0, see the configuration docs) or the plain run exceeds `PROVENANCE_PRECHECK_TIMEOUT` (180s).
 
 - **Provenance query limits** — each provenance query runs with `statement_timeout` (`10min`), `provsql.max_memory` (`1GB`), `temp_file_limit` (`5GB`) and no parallel workers, configurable with `PROVENANCE_*` variables. A query past them fails with an error naming the limit, rather than running until the database dies.

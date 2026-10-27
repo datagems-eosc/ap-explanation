@@ -28,6 +28,12 @@ class DbSemiring(BaseModel):
     # semiring; the others fail on it with "does not support value gates"
     supports_aggregates: bool = False
 
+    # ProvSQL function writing an aggregate's formula as rows of bounded size
+    # (sr_formula_rows, ProvSQL 1.14), of which only the first are read: the
+    # whole formula of an aggregate holds a term per aggregated row. None, or
+    # an older ProvSQL, evaluates the aggregate with retrieval_function
+    rows_function: str | None = None
+
     # Provenance mapping strategy instance
     # This determines how database rows are mapped to provenance values
     # Using Any since ProvenanceMapping is a Protocol and cannot be used with isinstance

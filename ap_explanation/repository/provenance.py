@@ -58,6 +58,10 @@ class QueryLimits:
     #: provenance query takes 0.3 s was refused at 60 s, and explained in
     #: 157 s with 300 s.
     precheck_timeout: str = "180s"
+    #: Most rows of an aggregate's formula to read (sr_formula_rows, ProvSQL
+    #: 1.14): the first is the aggregate with its number of terms, each other
+    #: a term of a few dozen symbols.
+    max_formula_rows: int = 100
 
     def settings(self) -> dict[str, str]:
         """The settings to apply, keyed by PostgreSQL parameter name."""
@@ -83,6 +87,12 @@ class ProvenanceRepository:
     _conn: AsyncConnection
     _sql_rewriter: SqlRewriter
     _limits: QueryLimits
+    #: Whether ProvSQL writes formulas as rows (sr_formula_rows, ProvSQL 1.14)
+    _formula_rows: bool = False
+
+    #: Where an aggregate query's result is kept, for the rows of its formulas
+    #: to be read from its tokens, valid in this transaction only
+    RESULT_TABLE = "apx_result"
 
     def __init__(
         self,
@@ -107,6 +117,8 @@ class ProvenanceRepository:
         # services querying the same database are never subject to ProvSQL's
         # rewriter, which does not support every SQL construct.
         await conn.execute("SET provsql.active = 1")
+        cursor = await conn.execute("SELECT to_regproc('provsql.sr_formula_rows') IS NOT NULL")
+        repo._formula_rows = (await cursor.fetchone())[0]
         return repo
 
     async def query(
@@ -125,7 +137,9 @@ class ProvenanceRepository:
 
         Each returned row separates the original query output (``answer``) from
         its provenance in each semiring. On an aggregate query, only the
-        semirings that support aggregates are evaluated.
+        semirings that support aggregates are evaluated, and with ProvSQL 1.14
+        only the first rows of the aggregate's formula are read
+        (``max_formula_rows``): the whole formula holds a term per aggregated row.
 
         Args:
             schema_name: Schema where the query should be executed
@@ -141,12 +155,18 @@ class ProvenanceRepository:
             QueryLimitExceededError: If the query ran past one of the
                 repository's :class:`QueryLimits`
         """
-        edited_query = self._sql_rewriter.rewrite(query, semirings, compute_probability)
+        # The semirings whose aggregate formula is read as rows
+        rows_semirings = (
+            [s for s in semirings if s.rows_function and s.supports_aggregates]
+            if self._formula_rows and self._sql_rewriter.is_aggregate(query) else []
+        )
+        edited_query = self._sql_rewriter.rewrite(query, semirings, compute_probability, bool(rows_semirings))
         internal_columns = {
             "provsql",
             REFERENCE_COLUMN,
             SqlRewriter.PROBABILITY_FUNCTION,
             *(s.retrieval_function for s in semirings),
+            *(c for s in rows_semirings for c in (s.rows_function, f"{s.rows_function}_token")),
         }
 
         try:
@@ -155,10 +175,22 @@ class ProvenanceRepository:
                 await self._apply_limits()
                 await self._check_aggregated_rows(query)
 
-                # Fetch the provenance-annotated results
-                cursor = await self._conn.cursor(row_factory=dict_row).execute(
-                    SQL(cast(LiteralString, edited_query))
-                )
+                if rows_semirings:
+                    # An aggregate's token is only valid in the statement that built it, or
+                    # in a table that statement wrote: the rows of its formula are read
+                    # from there, one aggregate at a time
+                    await self._conn.execute(SQL(cast(LiteralString,
+                        f"CREATE TEMP TABLE {self.RESULT_TABLE} ON COMMIT DROP AS {edited_query}")))
+                    await self._conn.execute("SET LOCAL provsql.active = 0")
+                    tokens = ", ".join(f"{s.rows_function}::uuid AS {s.rows_function}_token" for s in rows_semirings)
+                    cursor = await self._conn.cursor(row_factory=dict_row).execute(
+                        SQL(cast(LiteralString, f"SELECT *, {tokens} FROM {self.RESULT_TABLE}"))
+                    )
+                else:
+                    # Fetch the provenance-annotated results
+                    cursor = await self._conn.cursor(row_factory=dict_row).execute(
+                        SQL(cast(LiteralString, edited_query))
+                    )
                 rows = await cursor.fetchall()
 
                 # Pause ProvSQL before resolving references. Those lookups run
@@ -173,7 +205,15 @@ class ProvenanceRepository:
                     provenance = {}
                     # A semiring the rewriting left out (aggregate) has no column
                     for semiring in semirings:
-                        if semiring.retrieval_function in row:
+                        if semiring in rows_semirings:
+                            expression, truncated = await self._formula_rows_of(
+                                row[f"{semiring.rows_function}_token"], semiring)
+                            provenance[semiring.name] = SemiringProvenance(
+                                expression=expression,
+                                data=await self._fetch_related_data(expression, semiring),
+                                truncated=truncated,
+                            )
+                        elif semiring.retrieval_function in row:
                             # NULL for an aggregate over no row
                             expression = row[semiring.retrieval_function] or ""
                             provenance[semiring.name] = SemiringProvenance(
@@ -228,6 +268,29 @@ class ProvenanceRepository:
                 f"Please re-annotate the table and try again. "
                 f"Error details: {e!s}"
             ) from e
+
+    async def _formula_rows_of(self, token: object, semiring: DbSemiring) -> tuple[str, bool]:
+        """
+        The first ``max_formula_rows`` rows of the formula of aggregate *token*,
+        one per line, and whether it has more.
+
+        ``sr_formula_rows`` writes the formula as rows of bounded size, ``#1``
+        first, and computes them one at a time: the LIMIT stops it. A formula
+        of a single row is returned as it is.
+        """
+        if token is None:  # an aggregate over no row
+            return "", False
+        limit = self._limits.max_formula_rows
+        cursor = await self._conn.execute(
+            SQL("SELECT (f.r).name, (f.r).formula FROM ("
+                "SELECT provsql.{}(%s::uuid, %s::regclass) AS r LIMIT %s) AS f").format(
+                Identifier(cast(str, semiring.rows_function))),
+            (token, semiring.mapping_table, limit + 1),
+        )
+        rows = await cursor.fetchall()
+        if len(rows) == 1:
+            return rows[0][1], False
+        return "\n".join(f"{name} = {formula}" for name, formula in rows[:limit]), len(rows) > limit
 
     async def _check_aggregated_rows(self, query: str) -> None:
         """

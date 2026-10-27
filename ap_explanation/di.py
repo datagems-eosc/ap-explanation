@@ -60,6 +60,7 @@ query_limits = QueryLimits(
         _limit("PROVENANCE_MAX_AGGREGATED_ROWS", str(_default_limits.max_aggregated_rows))),
     precheck_timeout=_limit(
         "PROVENANCE_PRECHECK_TIMEOUT", _default_limits.precheck_timeout) or _default_limits.precheck_timeout,
+    max_formula_rows=int(_limit("PROVENANCE_MAX_FORMULA_ROWS", "") or _default_limits.max_formula_rows),
 )
 
 

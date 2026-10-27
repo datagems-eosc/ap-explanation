@@ -3,6 +3,8 @@ FROM postgres:${PG_MAJOR}
 
 ARG PG_MAJOR=17
 ARG PROVSQL_VERSION=v1.12.0
+# A commit of PROVSQL_VERSION's branch to build instead of its head, as a release-less master
+ARG PROVSQL_COMMIT=
 
 # Install build dependencies, git, and other necessary tools
 RUN apt-get update && apt-get install -y \
@@ -22,7 +24,10 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/*
 
 # Compile and install ProvSQL
-RUN git clone --branch ${PROVSQL_VERSION} --depth 1 https://github.com/PierreSenellart/provsql.git /provsql
+RUN git clone --branch ${PROVSQL_VERSION} --depth 1 https://github.com/PierreSenellart/provsql.git /provsql && \
+    if [ -n "${PROVSQL_COMMIT}" ]; then \
+      git -C /provsql fetch --depth 1 origin ${PROVSQL_COMMIT} && git -C /provsql checkout -q FETCH_HEAD; \
+    fi
 
 WORKDIR /provsql
 

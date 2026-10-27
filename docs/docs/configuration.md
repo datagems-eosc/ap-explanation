@@ -38,6 +38,7 @@ Set on the transaction running each provenance query only (`SET LOCAL`): annotat
 | `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather`. Parallel workers grow outside `provsql.max_memory`'s budget |
 | `PROVENANCE_MAX_AGGREGATED_ROWS` | No | `8000000` | Most rows an aggregate of the query may receive. ProvSQL builds a gate per aggregated row while the query runs, before `provsql.max_memory` applies, and past about 16 million rows on a 3 or 4 GB server its store worker is killed (the server restarts) or hangs. The default is for ProvSQL 1.14; see below for 1.13. The query is first run without provenance, under `EXPLAIN ANALYZE`, to count them: PostgreSQL's estimates are far off on joins on expressions. Empty skips the check |
 | `PROVENANCE_PRECHECK_TIMEOUT` | No | `180s` | `statement_timeout` of that plain run. A query slower than this without provenance is refused. PostgreSQL may plan the plain query much worse than ProvSQL's rewritten one: a question of the meteo use case whose provenance query takes 0.3 s was refused at 60 s, and explained in 157 s with 300 s |
+| `PROVENANCE_MAX_FORMULA_ROWS` | No | `100` | On ProvSQL 1.14, most rows of an aggregate's formula returned (`sr_formula_rows`): the first is the aggregate and its number of terms (`#1 = #1.1+…+#1.n (n terms)`), each other a term of a few dozen symbols. The formula is `truncated` past it. On ProvSQL 1.13 the whole formula is returned, as one value |
 
 #### Choosing `PROVENANCE_MAX_AGGREGATED_ROWS`
 

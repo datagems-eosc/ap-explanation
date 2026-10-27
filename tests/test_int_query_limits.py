@@ -129,3 +129,41 @@ async def test_ko_precheck_timeout(
 
     cursor = await db_connection.execute("SHOW provsql.active")
     assert (await cursor.fetchone())[0] == "on"
+
+
+@pytest.mark.asyncio
+async def test_ok_aggregate_formula_as_rows(
+    db_connection: AsyncConnection, formula_semiring: DbSemiring, test_schema: TestSchema,
+    two_rows_of_one_student: str,
+):
+    """
+    An aggregate's formula is read as its first max_formula_rows rows: the
+    aggregate with its number of terms, then one term per row, and the tuples
+    of those terms only.
+    """
+    service = await _service(db_connection, QueryLimits(max_formula_rows=3))
+    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    table = f"{test_schema.schema}.{test_schema.table}"
+    async with db_connection.transaction():
+        await db_connection.execute("SET LOCAL provsql.active = 0")
+        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
+    rows = await service.compute_provenance(test_schema.schema, f"SELECT COUNT(*) AS n FROM {table}", [formula_semiring])
+
+    assert len(rows) == 1
+    formula = rows[0].provenance[formula_semiring.name]
+    lines = formula.expression.splitlines()
+    assert len(lines) == 3
+    assert lines[0].startswith("#1 = ") and f"({count} terms)" in lines[0]
+    assert formula.truncated
+    assert len(formula.data) == 2  # the tuples of the two terms read
+    assert str(count) in str(rows[0].answer["n"])
+
+    # A small aggregate is written in one row: its formula, as sr_formula gives it
+    rows = await service.compute_provenance(
+        test_schema.schema, f"SELECT COUNT(*) FROM {table} WHERE id IN ({two_rows_of_one_student})", [formula_semiring]
+    )
+    formula = rows[0].provenance[formula_semiring.name]
+    assert not formula.truncated
+    assert "#1" not in formula.expression
+    assert len(formula.data) == 2

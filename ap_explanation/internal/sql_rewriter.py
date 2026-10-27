@@ -53,7 +53,17 @@ class SqlRewriter:
     # Alias of the original query when it is wrapped as a subquery
     SUBQUERY_ALIAS = "x"
 
-    def rewrite(self, query: str, semirings: list[DbSemiring], probability: bool = False) -> str:
+    def is_aggregate(self, query: str) -> bool:
+        """Whether *query* aggregates, at its top level: :meth:`rewrite` explains its aggregate."""
+        root = parse_one(query, dialect=self.db_dialect)
+        return self._is_aggregate(root)
+
+    def _is_aggregate(self, root: Expression) -> bool:
+        return not isinstance(root, Union) and any(self._top_level_aggregates(e) for e in root.expressions)
+
+    def rewrite(
+        self, query: str, semirings: list[DbSemiring], probability: bool = False, formula_rows: bool = False
+    ) -> str:
         """
         Rewrite a SQL query to return, in one query, each result row's value in
         every semiring of *semirings* and, if *probability*, its probability.
@@ -73,6 +83,9 @@ class SqlRewriter:
             query (str): Original SQL query
             semirings (list[DbSemiring]): Semirings to evaluate each row in
             probability (bool): Also evaluate each row's probability
+            formula_rows (bool): On an aggregate query, select the explained aggregate itself
+                (its token) under the name of each semiring's rows_function, instead of its
+                formula: the caller reads the first rows of it
 
         Returns:
             str: Rewritten SQL query
@@ -104,8 +117,8 @@ class SqlRewriter:
             calls.append(self._probability_call())
 
         # Any top-level aggregate (not in subqueries) makes it an aggregate query
-        if not isinstance(root, Union) and any(self._top_level_aggregates(e) for e in root.expressions):
-            rewritten = self._rewrite_aggregate(root, semirings, probability)
+        if self._is_aggregate(root):
+            rewritten = self._rewrite_aggregate(root, semirings, probability, formula_rows)
         # NOTE : We wrap distinct queries because if we just add the provenance calls, the DISTINCT
         # will also be applied to the provenance calls, which is not the expected result
         # from a user standpoint
@@ -121,7 +134,9 @@ class SqlRewriter:
 
         return rewritten.sql(dialect=self.db_dialect)
 
-    def _rewrite_aggregate(self, select: Select, semirings: list[DbSemiring], probability: bool) -> Select:
+    def _rewrite_aggregate(
+        self, select: Select, semirings: list[DbSemiring], probability: bool, formula_rows: bool = False
+    ) -> Select:
         """
         Rewrite an aggregate SELECT query, with or without GROUP BY, by wrapping
         it as a subquery and adding the semiring calls on the outer select.
@@ -146,6 +161,8 @@ class SqlRewriter:
             select (Select): Parsed SELECT query, wrapped in place
             semirings (list[DbSemiring]): Semirings requested
             probability (bool): If true, also evaluate each row's probability
+            formula_rows (bool): Select the aggregate's token for the semirings with a
+                rows_function, instead of their call
 
         Returns:
             Select: Rewritten query
@@ -183,7 +200,8 @@ class SqlRewriter:
         outer_columns = self._all_selected_columns_of(select)
         # Once all the original attributes are selected back, add the semiring retrieval functions and probability_evaluate(provenance()) on the outer SELECT.
         outer_columns += [
-            self._semiring_call(s, outer_columns[explained].copy())
+            alias_(outer_columns[explained].copy(), s.rows_function)
+            if formula_rows and s.rows_function else self._semiring_call(s, outer_columns[explained].copy())
             for s in aggregate_semirings
         ]
         if probability:

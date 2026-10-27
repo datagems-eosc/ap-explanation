@@ -19,6 +19,11 @@ class SemiringProvenance(BaseModel):
     # the corresponding entry in `data` would be the full annotated row from "table1" with ProvSQL UUID "p10r1"
     data: list[Any]
 
+    # Whether the expression is the first rows only of an aggregate's formula
+    # (see QueryLimits.max_formula_rows): its other rows, and the tuples they
+    # name, are left out
+    truncated: bool = False
+
 
 class Derivation(BaseModel):
     """
