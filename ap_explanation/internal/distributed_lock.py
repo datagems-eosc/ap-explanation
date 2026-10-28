@@ -1,7 +1,10 @@
+import asyncio
 import logging
 import threading
-from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
+import time
+import uuid
+from collections.abc import AsyncIterator, Iterator
+from contextlib import AbstractContextManager, asynccontextmanager, contextmanager
 from typing import Protocol
 
 import redis
@@ -82,3 +85,82 @@ class RedisLockProvider:
                 # The work is done: failing the task now would report as
                 # failed something that succeeded.
                 logger.warning(f"Lock '{name}' had expired before its release")
+
+
+class RedisRowBudget:
+    """Rows of aggregates the provenance queries of one PostgreSQL server may build at once.
+
+    ProvSQL builds every aggregate of the server in a single store worker,
+    whatever the database: the queries of different databases add up, and
+    together crash the server where each alone would not. Each query reserves
+    its rows before it runs, and waits until the others leave it enough.
+
+    A reservation is kept alive by its holder and expires after ``ttl``
+    seconds without it (a worker that crashed). The first query that does not
+    fit becomes the next one: the others wait behind it, so that a large query
+    is not starved by a stream of small ones. It stays next for as long as it
+    keeps asking, every ``poll`` seconds.
+    """
+
+    # KEYS: the reservations ('<ticket>:<rows>', scored by expiry in ms), the next one
+    # ARGV: ticket, rows, budget, now (ms), ttl of a reservation (ms), ttl of the next one (ms)
+    _RESERVE = """
+    redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[4])
+    local next = redis.call('GET', KEYS[2])
+    if next and next ~= ARGV[1] then return 0 end
+    local used = 0
+    for _, held in ipairs(redis.call('ZRANGE', KEYS[1], 0, -1)) do
+      used = used + tonumber(string.match(held, ':(%d+)$'))
+    end
+    if used + tonumber(ARGV[2]) > tonumber(ARGV[3]) then
+      redis.call('SET', KEYS[2], ARGV[1], 'PX', ARGV[6])
+      return 0
+    end
+    redis.call('ZADD', KEYS[1], tonumber(ARGV[4]) + tonumber(ARGV[5]), ARGV[1] .. ':' .. ARGV[2])
+    if next then redis.call('DEL', KEYS[2]) end
+    return 1
+    """
+
+    def __init__(self, redis_url: str, ttl: float = 60, poll: float = 1):
+        self.redis_client = redis.from_url(redis_url)
+        self._reserve = self.redis_client.register_script(self._RESERVE)
+        self._ttl = ttl
+        self._poll = poll
+
+    @asynccontextmanager
+    async def reserve(self, server: str, rows: int, budget: int) -> AsyncIterator[None]:
+        """Hold *rows* of *server*'s *budget*, waiting until they are free.
+
+        *rows* must not exceed *budget*: such a query would wait forever.
+        """
+        keys = [f"row_budget:{server}", f"row_budget:{server}:next"]
+        ticket = uuid.uuid4().hex
+        reservation = f"{ticket}:{rows}"
+        ttl_ms = int(self._ttl * 1000)
+        waited = time.monotonic()
+        while not self._reserve(
+                keys, [ticket, rows, budget, int(time.time() * 1000), ttl_ms, int(self._poll * 5000)]):
+            await asyncio.sleep(self._poll)
+        waited = time.monotonic() - waited
+        if waited > self._poll:
+            logger.info(f"Waited {waited:.0f} s for {rows:,} rows of '{server}'")
+
+        async def heartbeat() -> None:
+            while True:
+                await asyncio.sleep(self._ttl / 3)
+                try:
+                    self.redis_client.zadd(keys[0], {reservation: int(time.time() * 1000) + ttl_ms}, xx=True)
+                except RedisError as e:
+                    # Retried at the next beat, well before the reservation expires
+                    logger.warning(f"Could not extend the reservation of '{server}': {e}")
+
+        task = asyncio.create_task(heartbeat())
+        try:
+            yield
+        finally:
+            task.cancel()
+            try:
+                self.redis_client.zrem(keys[0], reservation)
+            except RedisError as e:
+                # It expires after ttl
+                logger.warning(f"Could not release the reservation of '{server}': {e}")

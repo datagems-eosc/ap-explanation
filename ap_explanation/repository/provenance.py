@@ -1,4 +1,5 @@
 from collections import defaultdict
+from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import dataclass
 from logging import getLogger
 from typing import LiteralString, cast
@@ -15,6 +16,7 @@ from ap_explanation.errors import (
     ProvSqlMissingError,
     QueryLimitExceededError,
 )
+from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
 from ap_explanation.semirings import semirings as all_semirings
@@ -46,13 +48,19 @@ class QueryLimits:
     temp_file_limit: str | None = "5GB"
     #: Parallel workers grow outside provsql.max_memory's budget.
     max_parallel_workers_per_gather: str | None = "0"
-    #: Most rows an aggregate of the query may receive. The circuit of an
-    #: aggregate holds a gate per row, built while the query runs, before
-    #: provsql.max_memory applies: past a few million rows on a 4 GB server,
-    #: ProvSQL's store worker is killed and the whole server restarts.
+    #: Most rows the aggregates of the queries running at once on a server
+    #: may receive. The circuit of an aggregate holds a gate per row, built
+    #: while the query runs, before provsql.max_memory applies: past 16
+    #: million rows on a 3 GB server, ProvSQL's store worker is killed and the
+    #: whole server restarts, and the queries of all its databases add up.
     #: Counted by running the plain query first (see
     #: ProvenanceRepository._check_aggregated_rows); None skips the check.
     max_aggregated_rows: int | None = 8_000_000
+    #: Rows each query reserves at least, whatever its aggregates: the
+    #: evaluations of queries running at once add up in the store worker too.
+    #: None is an eighth of max_aggregated_rows: at most eight queries at once,
+    #: as many as were measured together on a 3 GB server.
+    min_reserved_rows: int | None = None
     #: statement_timeout of that plain run. A plain plan can be much slower
     #: than ProvSQL's rewritten one: a question of the meteo use case whose
     #: provenance query takes 0.3 s was refused at 60 s, and explained in
@@ -99,10 +107,12 @@ class ProvenanceRepository:
         conn: AsyncConnection,
         sql_rewriter: SqlRewriter,
         limits: QueryLimits | None = None,
+        budget: RedisRowBudget | None = None,
     ):
         self._conn = conn
         self._sql_rewriter = sql_rewriter
         self._limits = limits or QueryLimits()
+        self._budget = budget
 
     @classmethod
     async def create(
@@ -110,8 +120,9 @@ class ProvenanceRepository:
         conn: AsyncConnection,
         sql_rewriter: SqlRewriter,
         limits: QueryLimits | None = None,
+        budget: RedisRowBudget | None = None,
     ) -> ProvenanceRepository:
-        repo = cls(conn, sql_rewriter, limits)
+        repo = cls(conn, sql_rewriter, limits, budget)
         # Enabled per connection, never server-wide: the server default stays
         # provsql.active = 0 (set in the image's postgresql.conf) so that other
         # services querying the same database are never subject to ProvSQL's
@@ -170,10 +181,15 @@ class ProvenanceRepository:
         }
 
         try:
+            await self._set_search_path(schema_name)
             async with self._conn.transaction():
-                await self._set_search_path(schema_name)
                 await self._apply_limits()
-                await self._check_aggregated_rows(query)
+                aggregated_rows = await self._check_aggregated_rows(query)
+
+            # Waiting for the server's budget outside a transaction: an idle one
+            # would hold back VACUUM, or be ended by idle_in_transaction_session_timeout
+            async with self._reserve(aggregated_rows), self._conn.transaction():
+                await self._apply_limits()
 
                 if rows_semirings:
                     # An aggregate's token is only valid in the statement that built it, or
@@ -292,10 +308,10 @@ class ProvenanceRepository:
             return rows[0][1], False
         return "\n".join(f"{name} = {formula}" for name, formula in rows[:limit]), len(rows) > limit
 
-    async def _check_aggregated_rows(self, query: str) -> None:
+    async def _check_aggregated_rows(self, query: str) -> int:
         """
-        Refuse a query an aggregate of which receives more than
-        ``max_aggregated_rows`` rows, before its provenance is built.
+        The rows the aggregates of *query* receive, refusing it past
+        ``max_aggregated_rows``, before its provenance is built.
 
         PostgreSQL's estimates cannot tell: on joins on expressions
         (``ROUND(CAST(latitude AS DECIMAL), 1)``) it estimates 1 row where an
@@ -304,13 +320,17 @@ class ProvenanceRepository:
         going into each aggregate are read from the plan. Without provenance
         this costs a fraction of the provenance query.
 
+        Returns:
+            The rows of all its aggregates: each builds a gate per row.
+            0 without an aggregate, or with ``max_aggregated_rows`` unset
+
         Raises:
-            QueryLimitExceededError: If an aggregate receives too many rows,
+            QueryLimitExceededError: If its aggregates receive too many rows,
                 or the plain query runs past ``precheck_timeout``
         """
         limit = self._limits.max_aggregated_rows
         if limit is None:
-            return
+            return 0
         rows = 0
         try:
             # A savepoint rolled back on the way out, undoing the SET LOCALs
@@ -326,7 +346,7 @@ class ProvenanceRepository:
                     cursor = await self._conn.execute(
                         SQL(cast(LiteralString, f"EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) {query}"))
                     )
-                    rows = max(_aggregated_rows((await cursor.fetchone())[0][0]["Plan"]))
+                    rows = sum(_aggregated_rows((await cursor.fetchone())[0][0]["Plan"]))
                 raise Rollback()
         except errors.QueryCanceled as e:
             if "statement timeout" not in str(e):
@@ -339,8 +359,23 @@ class ProvenanceRepository:
         if rows > limit:
             raise QueryLimitExceededError(
                 "max_aggregated_rows", f"{limit:,}",
-                f"an aggregate of the query receives {rows:,} rows",
+                f"the aggregates of the query receive {rows:,} rows",
             )
+        return rows
+
+    def _reserve(self, aggregated_rows: int) -> AbstractAsyncContextManager[None]:
+        """
+        Hold the rows of the provenance query out of its server's
+        ``max_aggregated_rows``, shared with the queries of all its databases,
+        waiting until the others leave enough.
+        """
+        budget = self._limits.max_aggregated_rows
+        if self._budget is None or budget is None:
+            return nullcontext()
+        least = self._limits.min_reserved_rows
+        rows = max(aggregated_rows, budget // 8 if least is None else least)
+        info = self._conn.info
+        return self._budget.reserve(f"{info.host}:{info.port}", min(rows, budget), budget)
 
     async def _apply_limits(self) -> None:
         """

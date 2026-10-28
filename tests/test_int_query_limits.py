@@ -3,10 +3,15 @@ The limits set on the session running a provenance query (statement_timeout,
 provsql.max_memory, temp_file_limit, parallel workers).
 """
 
+import asyncio
+
 import pytest
 from psycopg import AsyncConnection
+from psycopg.pq import TransactionStatus
+from testcontainers.community.redis import RedisContainer
 
 from ap_explanation.errors import QueryLimitExceededError
+from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository, QueryLimits
@@ -15,8 +20,10 @@ from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 
-async def _service(conn: AsyncConnection, limits: QueryLimits) -> ProvenanceService:
-    repo = await ProvenanceRepository.create(conn, SqlRewriter(), limits)
+async def _service(
+    conn: AsyncConnection, limits: QueryLimits, budget: RedisRowBudget | None = None
+) -> ProvenanceService:
+    repo = await ProvenanceRepository.create(conn, SqlRewriter(), limits, budget)
     return ProvenanceService(repo, NoOpExplainer())
 
 
@@ -110,6 +117,52 @@ async def test_ko_too_many_aggregated_rows(
     assert len(rows) == 1
     # The check's SET LOCALs were undone: ProvSQL was active for the query
     assert rows[0].provenance[formula_semiring.name].expression
+
+
+@pytest.mark.asyncio
+async def test_ko_aggregated_rows_add_up(
+    db_connection: AsyncConnection, formula_semiring: DbSemiring, test_schema: TestSchema
+):
+    """The rows of all the aggregates of a query count: each builds a gate per row."""
+    table = f"{test_schema.schema}.{test_schema.table}"
+    async with db_connection.transaction():
+        await db_connection.execute("SET LOCAL provsql.active = 0")
+        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
+    service = await _service(db_connection, QueryLimits(max_aggregated_rows=2 * count - 1))
+    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+    with pytest.raises(QueryLimitExceededError) as exc_info:
+        await service.compute_provenance(
+            test_schema.schema,
+            f"SELECT (SELECT COUNT(*) FROM {table}) AS a, (SELECT COUNT(*) FROM {table}) AS b",
+            [formula_semiring],
+        )
+    assert f"{2 * count:,} rows" in exc_info.value.details
+
+
+@pytest.mark.asyncio
+async def test_ok_query_waits_for_the_server_budget(
+    db_connection: AsyncConnection, formula_semiring: DbSemiring, test_schema: TestSchema
+):
+    """A query waits until the queries of the other databases of its server leave it enough rows."""
+    with RedisContainer("redis:7-alpine") as redis:
+        budget = RedisRowBudget(
+            f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0", poll=0.05)
+        service = await _service(db_connection, QueryLimits(max_aggregated_rows=1_000_000), budget)
+        await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+
+        table = f"{test_schema.schema}.{test_schema.table}"
+        server = f"{db_connection.info.host}:{db_connection.info.port}"
+        # Another database's query holds the whole budget
+        async with budget.reserve(server, 1_000_000, 1_000_000):
+            query = asyncio.create_task(service.compute_provenance(
+                test_schema.schema, f"SELECT COUNT(*) FROM {table}", [formula_semiring]))
+            await asyncio.sleep(1)
+            assert not query.done()
+            # Waiting outside a transaction: an idle one would hold back VACUUM
+            assert db_connection.info.transaction_status == TransactionStatus.IDLE
+        rows = await asyncio.wait_for(query, 30)
+        assert len(rows) == 1
 
 
 @pytest.mark.asyncio

@@ -14,7 +14,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
-from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider
+from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider, RedisRowBudget
 from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.provenance import ProvenanceRepository, QueryLimits
@@ -35,12 +35,19 @@ USE_EMBEDDED_CELERY_WORKER = os.getenv(
     "USE_EMBEDDED_CELERY_WORKER", "true").lower() == "true"
 # Poor man singleton
 lock_provider = RedisLockProvider(redis_url=REDIS_BROKER_URI)
+row_budget = RedisRowBudget(redis_url=REDIS_BROKER_URI)
 cache_provider = RedisCacheProvider(redis_url=REDIS_BROKER_URI)
 
 
 def _limit(name: str, default: str | None) -> str | None:
     """A query limit from the environment; an empty value leaves the server's."""
     return os.getenv(name, default) or None
+
+
+def _int_limit(name: str, default: int | None) -> int | None:
+    """A count from the environment; an empty value is None."""
+    value = _limit(name, None if default is None else str(default))
+    return int(value) if value else None
 
 
 # Bounds on the session running a provenance query, in PostgreSQL's syntax,
@@ -56,8 +63,8 @@ query_limits = QueryLimits(
     max_parallel_workers_per_gather=_limit(
         "PROVENANCE_MAX_PARALLEL_WORKERS", _default_limits.max_parallel_workers_per_gather),
     # An empty value skips the check
-    max_aggregated_rows=(lambda v: int(v) if v else None)(
-        _limit("PROVENANCE_MAX_AGGREGATED_ROWS", str(_default_limits.max_aggregated_rows))),
+    max_aggregated_rows=_int_limit("PROVENANCE_MAX_AGGREGATED_ROWS", _default_limits.max_aggregated_rows),
+    min_reserved_rows=_int_limit("PROVENANCE_MIN_RESERVED_ROWS", None),
     precheck_timeout=_limit(
         "PROVENANCE_PRECHECK_TIMEOUT", _default_limits.precheck_timeout) or _default_limits.precheck_timeout,
     max_formula_rows=int(_limit("PROVENANCE_MAX_FORMULA_ROWS", "") or _default_limits.max_formula_rows),
@@ -268,7 +275,7 @@ def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], Async
         async with create_connection_pool(qs) as pool:
             # NOTE: Some data sources require set up
             async with data_source.seed_database(pool, get_s3_mount_path()):
-                repo = await ProvenanceRepository.create(pool, SqlRewriter(), query_limits)
+                repo = await ProvenanceRepository.create(pool, SqlRewriter(), query_limits, row_budget)
                 yield ProvenanceService(repo, get_explainer())
             return
 
