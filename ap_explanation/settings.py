@@ -26,9 +26,6 @@ class Settings(BaseSettings):
     # thread so no separate worker process is needed. Set to 'false' when running
     # dedicated standalone workers (e.g. via Docker) to avoid double-processing.
     use_embedded_celery_worker: bool = True
-    # How long (seconds) a circuit cleanup waits for the other sessions on the
-    # database to leave
-    circuit_cleanup_wait: float = 60
 
     postgres_user: str | None = None
     postgres_password: str | None = None

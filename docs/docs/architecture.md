@@ -147,7 +147,6 @@ Key points:
 - **Redis Cache** (`RedisCacheProvider`): Results are cached under a SHA-256 key derived from all input parameters. Cache hits skip the database entirely. Default TTL is 1 hour.
 - **Distributed Lock** (`RedisLockProvider`): A per-database Redis lock (`explain_lock:{db_name}`) ensures only one explain task runs against a given database at a time, preventing annotation conflicts. It expires 5 minutes after its holder stops extending it, and a heartbeat thread extends it while the work runs, however long that is: annotating tens of millions of rows takes an hour. The provenance query's `statement_timeout` bounds how long a query holds it.
 - **Query limits** (`QueryLimits`): `statement_timeout`, `provsql.max_memory`, `temp_file_limit` and `max_parallel_workers_per_gather` are set on the transaction of each provenance query (see [Configuration](configuration.md#provenance-query-limits)).
-- **Circuit cleanup** (`tasks/maintenance.py`): ProvSQL keeps the circuit of every query in its store, failed and stopped ones included. `POST /api/v1/aps/explanation/maintenance/circuit-cleanup/{db_name}` takes the database's lock and runs `provsql.circuit_cleanup()`, which keeps what stored tokens reference.
 
 ### Dependency Injection
 

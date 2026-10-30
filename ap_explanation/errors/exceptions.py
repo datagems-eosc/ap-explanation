@@ -156,29 +156,6 @@ class QueryLimitExceededError(Exception):
         return self.message
 
 
-class DatabaseInUseError(Exception):
-    """
-    Exception raised when a maintenance operation needs a database to itself
-    (``provsql.circuit_cleanup()``, like ``DROP DATABASE``) and other sessions
-    are still connected to it.
-    """
-
-    def __init__(self, db_name: str, sessions: list[str]):
-        self.db_name = db_name
-        self.sessions = sessions
-        super().__init__(db_name, sessions)
-
-    @property
-    def message(self) -> str:
-        return (
-            f"Database '{self.db_name}' is still used by {len(self.sessions)} other "
-            f"session(s): {', '.join(self.sessions)}. Disconnect them and try again."
-        )
-
-    def __str__(self) -> str:
-        return self.message
-
-
 class DatabaseNotFoundError(Exception):
     """
     Exception raised when a database cannot be found on either the Postgres or Timescale instance.

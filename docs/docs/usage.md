@@ -4,7 +4,7 @@ The API exposes a managed lifecycle for computing provenance explanations.
 
 ## Managed lifecycle
 
-The API handles annotation, computation, and cleanup asynchronously via Celery.
+The API handles annotation and computation asynchronously via Celery.
 
 ### 1. Dispatch an explanation task
 
@@ -62,17 +62,15 @@ Tuple probabilities come from a column of each queried table, named by the `prob
 
 ## Reclaiming the circuit store
 
-ProvSQL keeps the circuit of every provenance query in its store (`provsql_*.mmap` in the database directory), including failed and stopped ones, so the store only grows. One costly query can add gigabytes. To reclaim it:
+ProvSQL keeps the circuit of every provenance query in its store (`provsql_*.mmap` in the database directory), including failed and stopped ones, so the store only grows. One costly query can add gigabytes. The service does not reclaim it. To do so by hand, in a session on the database:
 
-```bash
-curl -X POST http://localhost:5000/api/v1/aps/explanation/maintenance/circuit-cleanup/mathe
-# {"task_id": "...", "status": "pending"}
+```sql
+SELECT * FROM provsql.circuit_cleanup();
 ```
 
-Poll the task like an explanation. On success its result holds ProvSQL's counts before and after (`gates_before`, `gates_after`, `wires_before`, ...).
+It keeps the gates a stored token references, and returns ProvSQL's counts before and after (`gates_before`, `gates_after`, `wires_before`, ...).
 
-- The task waits for the explain tasks running on the database (it takes their per-database lock), and none starts until it ends.
-- Like `DROP DATABASE`, `provsql.circuit_cleanup()` refuses to run while another session is connected to the database. The task retries for `CIRCUIT_CLEANUP_WAIT` seconds, then fails, listing who is connected. Other clients of the database must be disconnected first, so schedule it with operations, at a quiet time.
+- Like `DROP DATABASE`, `provsql.circuit_cleanup()` refuses to run while another session is connected to the database. Every other client must be disconnected first, this service's workers included, so schedule it with operations, at a quiet time.
 - Requires ProvSQL >= 1.13.
 
 ---

@@ -8,8 +8,6 @@ probability (:meth:`ProvSqlRepository.set_probabilities`), or with
 ``provsql.update_provenance`` on, which nothing here sets.
 """
 
-import asyncio
-import time
 from collections import defaultdict
 from logging import getLogger
 from re import compile
@@ -26,7 +24,6 @@ from ap_explanation.domains.provenance.derivation import Derivation, SemiringPro
 from ap_explanation.domains.provenance.semiring import MAPPING_VIEW, DbSemiring
 from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import (
-    DatabaseInUseError,
     InvalidProbabilityColumnError,
     ProvSqlInternalError,
     ProvSqlMissingError,
@@ -66,8 +63,8 @@ def token_of(reference: str) -> UUID:
 
 class ProvSqlRepository:
     """
-    What this service does with ProvSQL on one database: prepare tables, compute
-    the provenance of queries, and reclaim the circuit store.
+    What this service does with ProvSQL on one database: prepare tables and
+    compute the provenance of queries.
 
     It owns the connection's session, as search_path and provsql.active are per
     session.
@@ -82,9 +79,6 @@ class ProvSqlRepository:
     #: Where an aggregate query's result is kept, for the rows of its formulas
     #: to be read from its tokens, valid in this transaction only
     RESULT_TABLE = "apx_result"
-
-    #: Seconds between two attempts at reclaiming the circuit store
-    _CLEANUP_RETRY_INTERVAL = 2
 
     def __init__(
         self,
@@ -443,53 +437,6 @@ class ProvSqlRepository:
                 f"Please re-annotate the table and try again. "
                 f"Error details: {e!s}"
             ) from e
-
-    async def cleanup_circuits(self, wait: float) -> dict:
-        """
-        Reclaim ProvSQL's circuit store: ``provsql.circuit_cleanup()`` keeps the
-        gates a token stored in the database still references and rewrites its
-        files.
-
-        Like ``DROP DATABASE``, it refuses to run while another session is
-        connected to the database.
-
-        Args:
-            wait: Seconds to keep retrying while other sessions are connected.
-                The connection has to be in autocommit.
-
-        Returns:
-            ProvSQL's counts before and after.
-
-        Raises:
-            DatabaseInUseError: If other sessions are still connected after *wait*
-            ProvSqlMissingError: If ProvSQL has no ``circuit_cleanup()``
-        """
-        db_name = self._conn.info.dbname
-        deadline = time.monotonic() + wait
-        while True:
-            try:
-                # Must be the first statement of its transaction: autocommit
-                cursor = await self._conn.cursor(row_factory=dict_row).execute(
-                    "SELECT * FROM provsql.circuit_cleanup()"
-                )
-                return await cursor.fetchone() or {}
-            except errors.ObjectInUse:
-                if time.monotonic() >= deadline:
-                    break
-                await asyncio.sleep(self._CLEANUP_RETRY_INTERVAL)
-            except (errors.UndefinedFunction, errors.InvalidSchemaName) as e:
-                raise ProvSqlMissingError(
-                    f"provsql.circuit_cleanup() is not available on '{db_name}' "
-                    f"(ProvSQL >= 1.13 required): {e!s}"
-                ) from e
-
-        cursor = await self._conn.execute(
-            "SELECT format('%s@%s (%s)', usename, coalesce(client_addr::text, 'local'),"
-            " coalesce(nullif(application_name, ''), 'unnamed'))"
-            " FROM pg_stat_activity WHERE datname = current_database()"
-            " AND pid <> pg_backend_pid() AND backend_type = 'client backend'"
-        )
-        raise DatabaseInUseError(db_name, [row[0] for row in await cursor.fetchall()])
 
     async def _set_search_path(self, schema_name: str) -> None:
         """Set the PostgreSQL search path for the current connection."""

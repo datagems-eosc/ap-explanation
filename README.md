@@ -186,7 +186,6 @@ Set on the provenance query's transaction only, in PostgreSQL's syntax; an empty
 | `PROVENANCE_MAX_MEMORY` | No | `1GB` | `provsql.max_memory` |
 | `PROVENANCE_TEMP_FILE_LIMIT` | No | `5GB` | `temp_file_limit` (superuser or `GRANT SET`, skipped otherwise) |
 | `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather` |
-| `CIRCUIT_CLEANUP_WAIT` | No | `60` | Seconds a circuit cleanup waits for other sessions to leave the database |
 
 ### LLM — Natural-language explanations (optional)
 

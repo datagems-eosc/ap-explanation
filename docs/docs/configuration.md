@@ -65,12 +65,6 @@ The minimum is because evaluations add up as well: two `sr_formula` evaluations 
 
 Within a database, provenance queries still run one at a time (the per-database lock).
 
-### Maintenance
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `CIRCUIT_CLEANUP_WAIT` | No | `60` | Seconds a circuit cleanup retries while other sessions are connected to the database, before failing |
-
 ### LLM — Natural-language explanations (optional)
 
 When `LLM_API_BASE` is not set, natural-language explanations are silently disabled and the service falls back to returning only the raw semiring result.

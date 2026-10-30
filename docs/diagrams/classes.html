@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ap-explanation classes</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Geist', system-ui, sans-serif; background: #f5f5f5; color: #2d3142; padding: 3rem 2rem; }
+    .frame { max-width: 1020px; margin: 0 auto; }
+    .diagram-container { width: 100%; overflow-x: auto; margin-bottom: 2.5rem; }
+    .eyebrow { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #4f5d75; margin-bottom: 0.5rem; }
+    h1 { font-family: 'Instrument Serif', 'Noto Serif', serif; font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    h2 { font-family: 'Instrument Serif', 'Noto Serif', serif; font-size: 1.35rem; font-weight: 400; margin-bottom: 0.25rem; }
+    p.lede { font-size: 0.9rem; line-height: 1.5; color: #4f5d75; margin-bottom: 1rem; max-width: 62rem; }
+    ol { font-size: 0.9rem; line-height: 1.55; padding-left: 1.4rem; max-width: 62rem; }
+    li { margin-bottom: 0.45rem; }
+    code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.82em; }
+    svg { width: 100%; min-width: 1020px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">UML class · chore/simplifications</p>
+    <h1>ap-explanation classes</h1>
+    <h2>Service and repositories</h2>
+    <p class="lede">What an explanation runs through.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1020 852" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="classes-core-title classes-core-desc">
+        <title id="classes-core-title">Service and repositories</title>
+        <desc id="classes-core-desc">ProvenanceService owns QueryRepository and AnnotationRepository and uses an Explainer; QueryRepository has a SqlRewriter, QueryLimits and an optional RedisRowBudget.</desc>
+        <defs><marker id="core-triangle" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker><marker id="core-filled" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#2d3142"/></marker><marker id="core-hollow" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker><marker id="core-open" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8" fill="none" stroke="#4f5d75" stroke-width="1"/></marker></defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+<line x1="380" y1="130" x2="300" y2="130" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#core-open)"/>
+<line x1="520" y1="220" x2="520" y2="300" stroke="#2d3142" stroke-width="1" marker-start="url(#core-filled)"/>
+<path d="M 660,130 H 842 Q 850,130 850,138 V 300" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#core-filled)"/>
+<path d="M 450,480 V 512 Q 450,520 442,520 H 178 Q 170,520 170,528 V 560" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#core-hollow)"/>
+<line x1="520" y1="480" x2="520" y2="560" stroke="#2d3142" stroke-width="1" marker-start="url(#core-hollow)"/>
+<path d="M 590,480 V 512 Q 590,520 598,520 H 842 Q 850,520 850,528 V 560" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#core-hollow)"/>
+<rect x="324" y="110" width="32" height="12" rx="2" fill="#f5f5f5"/><text x="340" y="119" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">USES</text>
+<rect x="530" y="280" width="12" height="12" rx="2" fill="#f5f5f5"/><text x="536" y="289" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+<rect x="860" y="280" width="12" height="12" rx="2" fill="#f5f5f5"/><text x="866" y="289" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+<rect x="530" y="540" width="12" height="12" rx="2" fill="#f5f5f5"/><text x="536" y="549" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+<rect x="180" y="540" width="12" height="12" rx="2" fill="#f5f5f5"/><text x="186" y="549" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+<rect x="860" y="540" width="28" height="12" rx="2" fill="#f5f5f5"/><text x="874" y="549" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..1</text>
+<rect x="380" y="40" width="280" height="180" rx="6" fill="#f5f5f5"/>
+<rect x="380" y="40" width="280" height="180" rx="6" fill="rgba(191,69,32,0.04)" stroke="#bf4520" stroke-width="1"/>
+<text x="520" y="64" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">ProvenanceService</text>
+<line x1="380" y1="80" x2="660" y2="80" stroke="rgba(191,69,32,0.40)" stroke-width="1"/>
+<text x="396" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ create(conn, rewriter, explainer, …)</text>
+<text x="396" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explain_ap(ap, semiring, prob): Provenance</text>
+<text x="396" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ annotate_dataset(table, schema, semirings)</text>
+<text x="396" y="160" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ compute_provenance(schema, sql, semirings)</text>
+<text x="396" y="180" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explain(schema, sql, derivations): str</text>
+<text x="396" y="200" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">…</text>
+<rect x="40" y="84" width="260" height="92" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="84" width="260" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="170" y="102" fill="#5a6580" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«interface»</text>
+<text x="170" y="120" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">Explainer</text>
+<line x1="40" y1="136" x2="300" y2="136" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="56" y="156" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explain(query, provenance, schema)</text>
+<rect x="380" y="300" width="280" height="180" rx="6" fill="#f5f5f5"/>
+<rect x="380" y="300" width="280" height="180" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="520" y="324" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">QueryRepository</text>
+<line x1="380" y1="340" x2="660" y2="340" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="396" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ create(conn, rewriter, limits, budget)</text>
+<text x="396" y="380" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ query(schema, sql, semirings): list</text>
+<text x="396" y="400" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ get_schema_definition(schema): str</text>
+<text x="396" y="420" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- _check_aggregated_rows(sql): int</text>
+<text x="396" y="440" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- _reserve(rows): context</text>
+<text x="396" y="460" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">…</text>
+<rect x="720" y="300" width="260" height="180" rx="6" fill="#f5f5f5"/>
+<rect x="720" y="300" width="260" height="180" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="850" y="324" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">AnnotationRepository</text>
+<line x1="720" y1="340" x2="980" y2="340" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="736" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ enable_provenance(schema, table)</text>
+<text x="736" y="380" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ add_semiring(schema, table, sr)</text>
+<text x="736" y="400" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ set_probabilities(schema, table, col)</text>
+<text x="736" y="420" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ remove_semiring(schema, table, sr)</text>
+<text x="736" y="440" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ remove_provenance(schema, table)</text>
+<text x="736" y="460" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">…</text>
+<rect x="40" y="560" width="260" height="100" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="560" width="260" height="100" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="170" y="584" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">SqlRewriter</text>
+<line x1="40" y1="600" x2="300" y2="600" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="56" y="620" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ rewrite(sql, semirings, …): str</text>
+<text x="56" y="640" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ is_aggregate(sql): bool</text>
+<rect x="380" y="560" width="280" height="200" rx="6" fill="#f5f5f5"/>
+<rect x="380" y="560" width="280" height="200" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="520" y="584" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">QueryLimits</text>
+<line x1="380" y1="600" x2="660" y2="600" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="396" y="620" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ statement_timeout: str | None</text>
+<text x="396" y="640" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ max_memory: str | None</text>
+<text x="396" y="660" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ temp_file_limit: str | None</text>
+<text x="396" y="680" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ max_aggregated_rows: int | None</text>
+<text x="396" y="700" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ max_formula_rows: int</text>
+<line x1="380" y1="720" x2="660" y2="720" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="396" y="740" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ settings(): dict[str, str]</text>
+<rect x="720" y="560" width="260" height="80" rx="6" fill="#f5f5f5"/>
+<rect x="720" y="560" width="260" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="850" y="584" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">RedisRowBudget</text>
+<line x1="720" y1="600" x2="980" y2="600" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="736" y="620" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ reserve(server, rows, budget): context</text>
+<line x1="40" y1="800" x2="980" y2="800" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+<text x="40" y="816" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · RELATIONSHIPS</text>
+<line x1="40" y1="832" x2="68" y2="832" stroke="#2d3142" stroke-width="1" marker-end="url(#core-triangle)"/>
+<text x="76" y="836" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Inheritance</text>
+<line x1="198" y1="832" x2="226" y2="832" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#core-triangle)"/>
+<text x="234" y="836" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Realization</text>
+<line x1="356" y1="832" x2="384" y2="832" stroke="#2d3142" stroke-width="1" marker-start="url(#core-filled)"/>
+<text x="392" y="836" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Composition · owns</text>
+<line x1="514" y1="832" x2="542" y2="832" stroke="#2d3142" stroke-width="1" marker-start="url(#core-hollow)"/>
+<text x="550" y="836" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregation · has</text>
+<line x1="672" y1="832" x2="700" y2="832" stroke="#4f5d75" stroke-width="1" marker-end="url(#core-open)"/>
+<text x="708" y="836" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Association</text>
+<line x1="830" y1="832" x2="858" y2="832" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#core-open)"/>
+<text x="866" y="836" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Dependency · uses</text>
+      </svg>
+    </div>
+    <h2>Domain types</h2>
+    <p class="lede">What the service receives and returns.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1020 792" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="classes-domain-title classes-domain-desc">
+        <title id="classes-domain-title">Domain types</title>
+        <desc id="classes-domain-desc">ProvenanceAnalyticalPattern extends moma&#x27;s AnalyticalPattern and has one DataSource, relational or CSV; DbSemiring and Provenance are plain data.</desc>
+        <defs><marker id="domain-triangle" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker><marker id="domain-filled" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#2d3142"/></marker><marker id="domain-hollow" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker><marker id="domain-open" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8" fill="none" stroke="#4f5d75" stroke-width="1"/></marker></defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+<line x1="190" y1="300" x2="190" y2="232" stroke="#2d3142" stroke-width="1" marker-end="url(#domain-triangle)"/>
+<line x1="340" y1="380" x2="420" y2="380" stroke="#2d3142" stroke-width="1" marker-start="url(#domain-hollow)"/>
+<path d="M 500,560 V 518 Q 500,510 508,510 H 522 Q 530,510 530,502 V 460" fill="none" stroke="#2d3142" stroke-width="1" marker-end="url(#domain-triangle)"/>
+<path d="M 800,560 V 518 Q 800,510 792,510 H 618 Q 610,510 610,502 V 460" fill="none" stroke="#2d3142" stroke-width="1" marker-end="url(#domain-triangle)"/>
+<rect x="390" y="360" width="28" height="12" rx="2" fill="#f5f5f5"/><text x="404" y="369" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..1</text>
+<rect x="40" y="40" width="300" height="192" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="40" width="300" height="192" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="190" y="58" fill="#5a6580" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">moma-domain</text>
+<text x="190" y="76" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">AnalyticalPattern</text>
+<line x1="40" y1="92" x2="340" y2="92" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="56" y="112" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ nodes: list[Node]</text>
+<text x="56" y="132" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ edges: list[Edge]</text>
+<line x1="40" y1="152" x2="340" y2="152" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="56" y="172" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ root: Node</text>
+<text x="56" y="192" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ normalize(): Self</text>
+<text x="56" y="212" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ difference(other): DeepDiff</text>
+<rect x="40" y="300" width="300" height="220" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="300" width="300" height="220" rx="6" fill="rgba(191,69,32,0.04)" stroke="#bf4520" stroke-width="1"/>
+<text x="190" y="324" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">ProvenanceAnalyticalPattern</text>
+<line x1="40" y1="340" x2="340" y2="340" stroke="rgba(191,69,32,0.40)" stroke-width="1"/>
+<text x="56" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ data_source: DataSource | None</text>
+<text x="56" y="380" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ validation_chain: StructureStep</text>
+<line x1="40" y1="400" x2="340" y2="400" stroke="rgba(191,69,32,0.40)" stroke-width="1"/>
+<text x="56" y="420" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ sql_operator: Node</text>
+<text x="56" y="440" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ to_wire(): dict</text>
+<text x="56" y="460" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ get_node_by_id(id): Node | None</text>
+<text x="56" y="480" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ get_edges_to(id): list[Edge]</text>
+<text x="56" y="500" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">…</text>
+<rect x="420" y="300" width="280" height="160" rx="6" fill="#f5f5f5"/>
+<rect x="420" y="300" width="280" height="160" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="560" y="324" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600" font-style="italic">DataSource</text>
+<line x1="420" y1="340" x2="700" y2="340" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="436" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ db_name: str</text>
+<text x="436" y="380" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ schema_name: str</text>
+<text x="436" y="400" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ table_names: list[str]</text>
+<text x="436" y="420" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ probability_columns: dict</text>
+<text x="436" y="440" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ seed_database(conn, path)</text>
+<rect x="380" y="560" width="240" height="120" rx="6" fill="#f5f5f5"/>
+<rect x="380" y="560" width="240" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="500" y="584" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">RelationalDbDataSource</text>
+<line x1="380" y1="600" x2="620" y2="600" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="396" y="620" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ table_nodes: list[Node]</text>
+<line x1="380" y1="640" x2="620" y2="640" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="396" y="660" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ seed_database(conn, path)</text>
+<rect x="660" y="560" width="280" height="160" rx="6" fill="#f5f5f5"/>
+<rect x="660" y="560" width="280" height="160" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="800" y="584" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">CsvSetDataSource</text>
+<line x1="660" y1="600" x2="940" y2="600" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="676" y="620" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ csv_nodes: list[Node]</text>
+<line x1="660" y1="640" x2="940" y2="640" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="676" y="660" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ seed_database(conn, path)</text>
+<text x="676" y="680" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- _setup(conn, schema, path)</text>
+<text x="676" y="700" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- _teardown(conn, schema)</text>
+<rect x="420" y="40" width="280" height="180" rx="6" fill="#f5f5f5"/>
+<rect x="420" y="40" width="280" height="180" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="560" y="64" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">DbSemiring</text>
+<line x1="420" y1="80" x2="700" y2="80" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="436" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ name: str</text>
+<text x="436" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ retrieval_function: str</text>
+<text x="436" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ supports_aggregates: bool</text>
+<text x="436" y="160" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ rows_function: str | None</text>
+<line x1="420" y1="180" x2="700" y2="180" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="436" y="200" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ union_table_name: str</text>
+<rect x="740" y="40" width="240" height="100" rx="6" fill="#f5f5f5"/>
+<rect x="740" y="40" width="240" height="100" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="860" y="64" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">Provenance</text>
+<line x1="740" y1="80" x2="980" y2="80" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="756" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ derivations: list[Derivation]</text>
+<text x="756" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explanation: str | None</text>
+<line x1="40" y1="740" x2="980" y2="740" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+<text x="40" y="756" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · RELATIONSHIPS</text>
+<line x1="40" y1="772" x2="68" y2="772" stroke="#2d3142" stroke-width="1" marker-end="url(#domain-triangle)"/>
+<text x="76" y="776" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Inheritance</text>
+<line x1="198" y1="772" x2="226" y2="772" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#domain-triangle)"/>
+<text x="234" y="776" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Realization</text>
+<line x1="356" y1="772" x2="384" y2="772" stroke="#2d3142" stroke-width="1" marker-start="url(#domain-filled)"/>
+<text x="392" y="776" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Composition · owns</text>
+<line x1="514" y1="772" x2="542" y2="772" stroke="#2d3142" stroke-width="1" marker-start="url(#domain-hollow)"/>
+<text x="550" y="776" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregation · has</text>
+<line x1="672" y1="772" x2="700" y2="772" stroke="#4f5d75" stroke-width="1" marker-end="url(#domain-open)"/>
+<text x="708" y="776" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Association</text>
+<line x1="830" y1="772" x2="858" y2="772" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#domain-open)"/>
+<text x="866" y="776" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Dependency · uses</text>
+      </svg>
+    </div>
+    <h2>Ports</h2>
+    <p class="lede">The three protocols, and how many implementations each has. Coral marks the two with only one.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1020 464" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="classes-ports-title classes-ports-desc">
+        <title id="classes-ports-title">Ports</title>
+        <desc id="classes-ports-desc">LockProvider and CacheProvider each have one Redis implementation; only Explainer has two implementations.</desc>
+        <defs><marker id="ports-triangle" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker><marker id="ports-filled" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#2d3142"/></marker><marker id="ports-hollow" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker><marker id="ports-open" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8" fill="none" stroke="#4f5d75" stroke-width="1"/></marker></defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+<line x1="180" y1="240" x2="180" y2="132" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#ports-triangle)"/>
+<line x1="480" y1="240" x2="480" y2="172" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#ports-triangle)"/>
+<path d="M 720,240 V 196 Q 720,188 728,188 H 752 Q 760,188 760,180 V 132" fill="none" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#ports-triangle)"/>
+<path d="M 900,240 V 196 Q 900,188 892,188 H 828 Q 820,188 820,180 V 132" fill="none" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#ports-triangle)"/>
+<rect x="40" y="40" width="280" height="92" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="40" width="280" height="92" rx="6" fill="rgba(191,69,32,0.04)" stroke="#bf4520" stroke-width="1"/>
+<text x="180" y="58" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«interface»</text>
+<text x="180" y="76" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">LockProvider</text>
+<line x1="40" y1="92" x2="320" y2="92" stroke="rgba(191,69,32,0.40)" stroke-width="1"/>
+<text x="56" y="112" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ acquire(name): context</text>
+<rect x="40" y="240" width="280" height="80" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="240" width="280" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="180" y="264" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">RedisLockProvider</text>
+<line x1="40" y1="280" x2="320" y2="280" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="56" y="300" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ acquire(name): context</text>
+<rect x="360" y="40" width="240" height="132" rx="6" fill="#f5f5f5"/>
+<rect x="360" y="40" width="240" height="132" rx="6" fill="rgba(191,69,32,0.04)" stroke="#bf4520" stroke-width="1"/>
+<text x="480" y="58" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«interface»</text>
+<text x="480" y="76" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">CacheProvider</text>
+<line x1="360" y1="92" x2="600" y2="92" stroke="rgba(191,69,32,0.40)" stroke-width="1"/>
+<text x="376" y="112" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ get(key)</text>
+<text x="376" y="132" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ set(key, value, ttl)</text>
+<text x="376" y="152" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ delete(key)</text>
+<rect x="360" y="240" width="240" height="140" rx="6" fill="#f5f5f5"/>
+<rect x="360" y="240" width="240" height="140" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="480" y="264" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">RedisCacheProvider</text>
+<line x1="360" y1="280" x2="600" y2="280" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="376" y="300" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ make_key(*parts): str</text>
+<text x="376" y="320" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ get(key)</text>
+<text x="376" y="340" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ set(key, value, ttl)</text>
+<text x="376" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ delete(key)</text>
+<rect x="660" y="40" width="260" height="92" rx="6" fill="#f5f5f5"/>
+<rect x="660" y="40" width="260" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="790" y="58" fill="#5a6580" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«interface»</text>
+<text x="790" y="76" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">Explainer</text>
+<line x1="660" y1="92" x2="920" y2="92" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="676" y="112" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explain(query, provenance, schema)</text>
+<rect x="640" y="240" width="160" height="80" rx="6" fill="#f5f5f5"/>
+<rect x="640" y="240" width="160" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="720" y="264" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">ExplanationAgent</text>
+<line x1="640" y1="280" x2="800" y2="280" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="656" y="300" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explain(…)</text>
+<rect x="820" y="240" width="160" height="80" rx="6" fill="#f5f5f5"/>
+<rect x="820" y="240" width="160" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+<text x="900" y="264" fill="#2d3142" font-size="12" font-family="'Geist', sans-serif" text-anchor="middle" font-weight="600">NoOpExplainer</text>
+<line x1="820" y1="280" x2="980" y2="280" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+<text x="836" y="300" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ explain(…)</text>
+<line x1="40" y1="412" x2="980" y2="412" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+<text x="40" y="428" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · RELATIONSHIPS</text>
+<line x1="40" y1="444" x2="68" y2="444" stroke="#2d3142" stroke-width="1" marker-end="url(#ports-triangle)"/>
+<text x="76" y="448" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Inheritance</text>
+<line x1="198" y1="444" x2="226" y2="444" stroke="#2d3142" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#ports-triangle)"/>
+<text x="234" y="448" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Realization</text>
+<line x1="356" y1="444" x2="384" y2="444" stroke="#2d3142" stroke-width="1" marker-start="url(#ports-filled)"/>
+<text x="392" y="448" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Composition · owns</text>
+<line x1="514" y1="444" x2="542" y2="444" stroke="#2d3142" stroke-width="1" marker-start="url(#ports-hollow)"/>
+<text x="550" y="448" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregation · has</text>
+<line x1="672" y1="444" x2="700" y2="444" stroke="#4f5d75" stroke-width="1" marker-end="url(#ports-open)"/>
+<text x="708" y="448" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Association</text>
+<line x1="830" y1="444" x2="858" y2="444" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ports-open)"/>
+<text x="866" y="448" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Dependency · uses</text>
+      </svg>
+    </div>
+
+  </div>
+</body>
+</html>

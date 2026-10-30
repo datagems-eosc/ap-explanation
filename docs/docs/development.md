@@ -60,7 +60,7 @@ ap_explanation/
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
 ├── repositories/        # Data access layer
-│   ├── provsql.py       # ProvSqlRepository: enable, disable, probabilities, compute, circuit cleanup
+│   ├── provsql.py       # ProvSqlRepository: enable, disable, probabilities, compute
 │   ├── query_guard.py   # Limits of a provenance query, aggregate check, row budget
 │   ├── schema.py        # Schema description for the LLM
 │   └── seeding.py       # Sets a database up for a data source (CSV)
