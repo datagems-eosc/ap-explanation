@@ -1,74 +1,34 @@
 import logging
-import os
 import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from pathlib import Path
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from psycopg import AsyncConnection, OperationalError
 from psycopg.conninfo import make_conninfo
 from psycopg_pool import AsyncConnectionPool
 
+from ap_explanation.celery_app import celery_app
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider, RedisRowBudget
 from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.query import QueryLimits
 from ap_explanation.semirings import semirings
 from ap_explanation.services.authentication import Authentication
 from ap_explanation.services.provenance import ProvenanceService
+from ap_explanation.settings import QueryLimits, settings
 from ap_explanation.types.data_sources import DataSource
 from ap_explanation.types.semiring import DbSemiring
 
-load_dotenv()
 logger = logging.getLogger(__name__)
-REDIS_BROKER_URI = os.getenv("REDIS_BROKER_URI", "redis://redis:6379/0")
-S3_MOUNT_PATH = os.getenv("S3_MOUNT_PATH", "/mnt/s3")
-# When True (default), the FastAPI process spawns a Celery worker in a daemon
-# thread so no separate worker process is needed. Set to 'false' when running
-# dedicated standalone workers (e.g. via Docker) to avoid double-processing.
-USE_EMBEDDED_CELERY_WORKER = os.getenv(
-    "USE_EMBEDDED_CELERY_WORKER", "true").lower() == "true"
 # Poor man singleton
-lock_provider = RedisLockProvider(redis_url=REDIS_BROKER_URI)
-row_budget = RedisRowBudget(redis_url=REDIS_BROKER_URI)
-cache_provider = RedisCacheProvider(redis_url=REDIS_BROKER_URI)
-
-
-def _limit(name: str, default: str | None) -> str | None:
-    """A query limit from the environment; an empty value leaves the server's."""
-    return os.getenv(name, default) or None
-
-
-def _int_limit(name: str, default: int | None) -> int | None:
-    """A count from the environment; an empty value is None."""
-    value = _limit(name, None if default is None else str(default))
-    return int(value) if value else None
-
-
-# Bounds on the session running a provenance query, in PostgreSQL's syntax,
-# defaulting to QueryLimits'. Read once: they do not change while the process runs.
-_default_limits = QueryLimits()
-query_limits = QueryLimits(
-    statement_timeout=_limit(
-        "PROVENANCE_STATEMENT_TIMEOUT", _default_limits.statement_timeout),
-    provsql_max_memory=_limit(
-        "PROVENANCE_MAX_MEMORY", _default_limits.provsql_max_memory),
-    temp_file_limit=_limit(
-        "PROVENANCE_TEMP_FILE_LIMIT", _default_limits.temp_file_limit),
-    max_parallel_workers_per_gather=_limit(
-        "PROVENANCE_MAX_PARALLEL_WORKERS", _default_limits.max_parallel_workers_per_gather),
-    # An empty value skips the check
-    max_aggregated_rows=_int_limit("PROVENANCE_MAX_AGGREGATED_ROWS", _default_limits.max_aggregated_rows),
-    min_reserved_rows=_int_limit("PROVENANCE_MIN_RESERVED_ROWS", None),
-    precheck_timeout=_limit(
-        "PROVENANCE_PRECHECK_TIMEOUT", _default_limits.precheck_timeout) or _default_limits.precheck_timeout,
-    max_formula_rows=int(_limit("PROVENANCE_MAX_FORMULA_ROWS", "") or _default_limits.max_formula_rows),
-)
+lock_provider = RedisLockProvider(redis_url=settings.redis_broker_uri)
+row_budget = RedisRowBudget(redis_url=settings.redis_broker_uri)
+cache_provider = RedisCacheProvider(redis_url=settings.redis_broker_uri)
+# Read once: they do not change while the process runs.
+query_limits = QueryLimits()
 
 
 def get_lock_provider() -> LockProvider:
@@ -79,14 +39,8 @@ def get_cache_provider() -> CacheProvider:
     return cache_provider
 
 
-def get_s3_mount_path() -> Path:
-    return Path(S3_MOUNT_PATH)
-
-
 def _start_celery_worker() -> threading.Thread:
     """Start an embedded Celery worker in a daemon thread."""
-    from ap_explanation.celery_app import celery_app  # ensure tasks registered
-
     worker = celery_app.Worker(
         loglevel="INFO",
         concurrency=2,
@@ -105,38 +59,23 @@ def _start_celery_worker() -> threading.Thread:
 
 
 def get_explainer() -> Explainer:
-    api_base = os.getenv("LLM_API_BASE")
-    api_key = os.getenv("LLM_API_KEY", None)
-    model = os.getenv("LLM_API_MODEL")
-    ssl_verify = os.getenv("LLM_SSL_VERIFY", "true").lower() == "true"
-
-    if not api_base:
+    if not settings.llm_api_base:
         logger.warning(
             "LLM_API_BASE not set, NL explanations will be disabled for provenance results."
         )
         return NoOpExplainer()
 
-    if not all([api_base, model]):
+    if not settings.llm_api_model:
         raise ValueError(
             "Missing required environment variables for LLM explanation: LLM_API_BASE, LLM_API_MODEL"
         )
 
-    raw_timeout = os.getenv("LLM_TIMEOUT")
-    try:
-        timeout = (
-            float(raw_timeout) if raw_timeout else ExplanationAgent.DEFAULT_TIMEOUT
-        )
-    except ValueError:
-        raise ValueError(
-            f"LLM_TIMEOUT must be a number of seconds, got '{raw_timeout}'"
-        ) from None
-    if timeout <= 0:
-        raise ValueError(
-            f"LLM_TIMEOUT must be a positive number of seconds, got '{raw_timeout}'"
-        )
-
     return ExplanationAgent(
-        api_base, model, api_key, ssl_verify=ssl_verify, timeout=timeout
+        settings.llm_api_base,
+        settings.llm_api_model,
+        settings.llm_api_key,
+        ssl_verify=settings.llm_ssl_verify,
+        timeout=settings.llm_timeout,
     )
 
 
@@ -150,7 +89,7 @@ async def container_lifespan(_: FastAPI):
     Set it to ``false`` when running dedicated standalone workers so the API
     process does not also consume tasks.
     """
-    if USE_EMBEDDED_CELERY_WORKER:
+    if settings.use_embedded_celery_worker:
         _start_celery_worker()
     else:
         logger.info(
@@ -158,7 +97,7 @@ async def container_lifespan(_: FastAPI):
     yield
     # Celery worker runs in a daemon thread – it will be terminated when the
     # process exits. Explicit stop is not needed but we log for visibility.
-    if USE_EMBEDDED_CELERY_WORKER:
+    if settings.use_embedded_celery_worker:
         logger.info("Shutting down embedded Celery worker")
 
 
@@ -202,16 +141,16 @@ async def get_semirings() -> list[DbSemiring]:
 @lru_cache(maxsize=1)
 def get_authentication_service() -> Authentication | None:
     """Return a JwtValidator configured from environment variables."""
-    if not os.getenv("OIDC_ISSUER"):
+    if not settings.oidc_issuer:
         logger.warning("OIDC_ISSUER not set, authentication disabled")
         return None
 
     return Authentication(
-        issuer=os.getenv("OIDC_ISSUER", ""),
-        ttl=int(os.getenv("JWKS_TTL_SECONDS", "300")),
-        client_id=os.getenv("OIDC_CLIENT_ID") or None,
-        client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
-        exchange_scope=os.getenv("OIDC_EXCHANGE_SCOPE"),
+        issuer=settings.oidc_issuer,
+        ttl=settings.jwks_ttl_seconds,
+        client_id=settings.oidc_client_id,
+        client_secret=settings.oidc_client_secret,
+        exchange_scope=settings.oidc_exchange_scope,
     )
 
 
@@ -222,14 +161,7 @@ async def find_database(db_name: str) -> str:
     Raises:
         DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
-    user = os.getenv("POSTGRES_USER")
-    password = os.getenv("POSTGRES_PASSWORD")
-    postgres_host = os.getenv("POSTGRES_HOST")
-    postgres_port = os.getenv("POSTGRES_PORT", "5432")
-    timescale_host = os.getenv("POSTGRES_TIMESCALE_HOST")
-    timescale_port = os.getenv("POSTGRES_TIMESCALE_PORT", "5433")
-
-    if not all([user, password, postgres_host]):
+    if not all([settings.postgres_user, settings.postgres_password, settings.postgres_host]):
         raise ValueError(
             "Missing required environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST"
         )
@@ -237,13 +169,17 @@ async def find_database(db_name: str) -> str:
     # Postgres first, then Timescale if configured. make_conninfo quotes
     # db_name, which comes from the request: pasted into a URI, a name such
     # as 'db?host=elsewhere' would send the credentials to another server.
-    candidates = [(postgres_host, postgres_port)]
-    if timescale_host:
-        candidates.append((timescale_host, timescale_port))
+    candidates = [(settings.postgres_host, settings.postgres_port)]
+    if settings.postgres_timescale_host:
+        candidates.append((settings.postgres_timescale_host, settings.postgres_timescale_port))
 
     for host, port in candidates:
         connection_string = make_conninfo(
-            host=host, port=port, user=user, password=password, dbname=db_name
+            host=host,
+            port=port,
+            user=settings.postgres_user,
+            password=settings.postgres_password,
+            dbname=db_name,
         )
         try:
             check_conn = await AsyncConnection.connect(connection_string)
@@ -270,5 +206,5 @@ async def provenance_service_for(data_source: DataSource) -> AsyncGenerator[Prov
     qs = await find_database(data_source.db_name)
     async with create_connection_pool(qs) as pool:
         # NOTE: Some data sources require set up
-        async with data_source.seed_database(pool, get_s3_mount_path()):
+        async with data_source.seed_database(pool, settings.s3_mount_path):
             yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)

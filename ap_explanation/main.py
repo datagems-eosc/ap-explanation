@@ -1,5 +1,4 @@
 import logging
-from os import getenv
 from pathlib import Path
 from tomllib import loads as loads_toml
 
@@ -14,6 +13,7 @@ from ap_explanation.logger import configure_logging
 from ap_explanation.middlewares.correlation_id_passtrough import (
     correlation_id_passtrough,
 )
+from ap_explanation.settings import settings
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -23,14 +23,12 @@ pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
 pyproject = loads_toml(pyproject_path.read_text())
 project_version = pyproject["project"]["version"]
 
-ROOT_PATH = getenv("ROOT_PATH", "")
-
 app = FastAPI(
     title="AP Explanation API",
     description="API for explaining Analytical Patterns with provenance tracking using ProvSQL",
     version=project_version,
     lifespan=container_lifespan,
-    root_path=ROOT_PATH,
+    root_path=settings.root_path,
 
 )
 

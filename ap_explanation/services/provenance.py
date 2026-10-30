@@ -6,8 +6,9 @@ from ap_explanation.internal.explainer import Explainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repository.annotation import AnnotationRepository
 from ap_explanation.repository.provsql import activate_provsql
-from ap_explanation.repository.query import QueryLimits, QueryRepository
+from ap_explanation.repository.query import QueryRepository
 from ap_explanation.semirings import semirings as all_semirings
+from ap_explanation.settings import QueryLimits
 from ap_explanation.types.provenance import (
     Derivation,
     Provenance,

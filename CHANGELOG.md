@@ -8,6 +8,8 @@
 
 - **One mapping table per table** — annotating a table creates `<table>_provkey`, shared by every semiring, instead of five identical `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows). Tables annotated by earlier versions keep working, and are migrated the next time they are annotated: one per-semiring table is renamed, the others dropped.
 
+- **Configuration is checked at startup** — environment variables are read by pydantic-settings. A value of the wrong type (`LLM_TIMEOUT=abc`, `JWKS_TTL_SECONDS=abc`) now stops the service from starting. `LLM_SSL_VERIFY` and `USE_EMBEDDED_CELERY_WORKER` accept `1`, `yes` and `on` as true and `0`, `no` and `off` as false, refuse anything else, and an empty value means their default, `true`: it was `false`.
+
 ### New Features
 
 - **An aggregate's formula is returned as its first rows** — on ProvSQL 1.14, the formula of an aggregate is read with `sr_formula_rows`: the aggregate and its number of terms, then one term per line, up to `PROVENANCE_MAX_FORMULA_ROWS` (100) lines, and the tuples those terms name. `truncated` says that rows were left out. ProvSQL computes only the rows read, so an aggregate over millions of rows is explained in seconds instead of writing a formula of a term per row (and an evaluation that never stops, on some conditions on aggregates). A formula of one row is returned as before. On ProvSQL 1.13 nothing changes.

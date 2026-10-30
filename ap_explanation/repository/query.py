@@ -1,6 +1,5 @@
 from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, nullcontext
-from dataclasses import dataclass
 from logging import getLogger
 from typing import LiteralString, cast
 
@@ -22,69 +21,12 @@ from ap_explanation.repository.provsql import (
     references_in,
     set_search_path,
 )
+from ap_explanation.settings import QueryLimits
 from ap_explanation.types.provenance import Derivation, SemiringProvenance
 from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
 set_json_dumps(dumps)
-
-
-@dataclass(frozen=True)
-class QueryLimits:
-    """
-    Settings bounding the resources of a provenance query, in PostgreSQL's
-    syntax ('10min', '1GB'). ``None`` leaves the server's value.
-
-    Without them a costly query runs until it finishes or the database dies,
-    holding the per-database lock all along.
-    """
-
-    #: The one guard that holds whatever process grows: ProvSQL >= 1.13
-    #: honours cancellation.
-    statement_timeout: str | None = "10min"
-    #: Memory ProvSQL's evaluations may add to the backend. It does not
-    #: cover ProvSQL's store worker, hence the timeout.
-    provsql_max_memory: str | None = "1GB"
-    #: PostgreSQL's default is no limit, so a query can fill the disk.
-    #: Superuser-only (or GRANT SET): skipped with a warning otherwise.
-    temp_file_limit: str | None = "5GB"
-    #: Parallel workers grow outside provsql.max_memory's budget.
-    max_parallel_workers_per_gather: str | None = "0"
-    #: Most rows the aggregates of the queries running at once on a server
-    #: may receive. The circuit of an aggregate holds a gate per row, built
-    #: while the query runs, before provsql.max_memory applies: past 16
-    #: million rows on a 3 GB server, ProvSQL's store worker is killed and the
-    #: whole server restarts, and the queries of all its databases add up.
-    #: Counted by running the plain query first (see
-    #: QueryRepository._check_aggregated_rows); None skips the check.
-    max_aggregated_rows: int | None = 8_000_000
-    #: Rows each query reserves at least, whatever its aggregates: the
-    #: evaluations of queries running at once add up in the store worker too.
-    #: None is an eighth of max_aggregated_rows: at most eight queries at once,
-    #: as many as were measured together on a 3 GB server.
-    min_reserved_rows: int | None = None
-    #: statement_timeout of that plain run. A plain plan can be much slower
-    #: than ProvSQL's rewritten one: a question of the meteo use case whose
-    #: provenance query takes 0.3 s was refused at 60 s, and explained in
-    #: 157 s with 300 s.
-    precheck_timeout: str = "180s"
-    #: Most rows of an aggregate's formula to read (sr_formula_rows, ProvSQL
-    #: 1.14): the first is the aggregate with its number of terms, each other
-    #: a term of a few dozen symbols.
-    max_formula_rows: int = 100
-
-    def settings(self) -> dict[str, str]:
-        """The settings to apply, keyed by PostgreSQL parameter name."""
-        return {
-            name: value
-            for name, value in {
-                "statement_timeout": self.statement_timeout,
-                "provsql.max_memory": self.provsql_max_memory,
-                "temp_file_limit": self.temp_file_limit,
-                "max_parallel_workers_per_gather": self.max_parallel_workers_per_gather,
-            }.items()
-            if value
-        }
 
 
 class QueryRepository:
@@ -261,7 +203,7 @@ class QueryRepository:
             # or another of ProvSQL's bounds such as provsql.max_worlds
             if "memory" in f"{e} {e.diag.message_detail}":
                 raise QueryLimitExceededError(
-                    "provsql.max_memory", self._limits.provsql_max_memory, str(e)
+                    "provsql.max_memory", self._limits.max_memory, str(e)
                 ) from e
             raise QueryLimitExceededError("a ProvSQL limit", None, str(e)) from e
         except errors.ConfigurationLimitExceeded as e:

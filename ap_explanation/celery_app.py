@@ -2,11 +2,8 @@
 This is the entrypoint for a new worker process that runs AP explanation tasks. 
 """
 from celery import Celery
-from dotenv import load_dotenv
 
-from ap_explanation.di import REDIS_BROKER_URI
-
-load_dotenv()
+from ap_explanation.settings import settings
 
 # A standlaone celery worker can be run with :
 # docker run --rm \
@@ -17,8 +14,8 @@ load_dotenv()
 
 celery_app = Celery(
     "ap_explanation",
-    broker=REDIS_BROKER_URI,
-    backend=REDIS_BROKER_URI,
+    broker=settings.redis_broker_uri,
+    backend=settings.redis_broker_uri,
     include=["ap_explanation.tasks.explain", "ap_explanation.tasks.maintenance"],
 )
 

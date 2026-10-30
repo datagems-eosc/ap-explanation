@@ -12,7 +12,6 @@ a connection to it meanwhile. Other clients of the database must disconnect.
 """
 import asyncio
 import logging
-import os
 import time
 
 from psycopg import AsyncConnection, errors
@@ -21,12 +20,12 @@ from psycopg.rows import dict_row
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import find_database, get_lock_provider
 from ap_explanation.errors import DatabaseInUseError, ProvSqlMissingError
+from ap_explanation.settings import settings
 from ap_explanation.tasks.explain import _run_in_thread
 
 logger = logging.getLogger(__name__)
 
-# How long (seconds) to wait for the other sessions on the database to leave
-CIRCUIT_CLEANUP_WAIT = float(os.getenv("CIRCUIT_CLEANUP_WAIT", "60"))
+CIRCUIT_CLEANUP_WAIT = settings.circuit_cleanup_wait
 _RETRY_INTERVAL = 2
 
 

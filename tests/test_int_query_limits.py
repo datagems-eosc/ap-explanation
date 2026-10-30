@@ -14,7 +14,7 @@ from ap_explanation.errors import QueryLimitExceededError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.query import QueryLimits
+from ap_explanation.settings import QueryLimits
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
@@ -27,7 +27,7 @@ async def _service(
 
 
 def test_unset_limits_are_left_out():
-    limits = QueryLimits(statement_timeout="1s", provsql_max_memory=None, temp_file_limit=None)
+    limits = QueryLimits(statement_timeout="1s", max_memory=None, temp_file_limit=None)
     assert limits.settings() == {
         "statement_timeout": "1s",
         "max_parallel_workers_per_gather": "0",

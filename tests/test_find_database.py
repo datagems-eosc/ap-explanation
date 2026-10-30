@@ -7,14 +7,17 @@ import pytest
 from psycopg.conninfo import conninfo_to_dict
 
 from ap_explanation import di
+from ap_explanation.settings import Settings
 
 
 @pytest.mark.asyncio
 async def test_db_name_cannot_redirect_the_connection(monkeypatch):
-    monkeypatch.setenv("POSTGRES_USER", "u")
-    monkeypatch.setenv("POSTGRES_PASSWORD", "p")
-    monkeypatch.setenv("POSTGRES_HOST", "db.internal")
-    monkeypatch.delenv("POSTGRES_TIMESCALE_HOST", raising=False)
+    monkeypatch.setattr(di, "settings", Settings(
+        postgres_user="u",
+        postgres_password="p",
+        postgres_host="db.internal",
+        postgres_timescale_host=None,
+    ))
 
     class Conn:
         async def close(self):

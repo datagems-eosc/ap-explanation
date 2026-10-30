@@ -77,6 +77,7 @@ ap_explanation/
 ├── errors/              # Custom exceptions
 ├── semirings.py         # Semiring configurations
 ├── di.py                # Dependency injection & lifespan
+├── settings.py          # Configuration, read from the environment
 ├── celery_app.py        # Celery application
 └── main.py              # FastAPI application entry point
 ```

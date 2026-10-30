@@ -1,6 +1,8 @@
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 
+from ap_explanation.settings import settings
+
 
 async def _check_redis(uri: str) -> dict:
     """Ping the Redis instance."""
@@ -22,9 +24,7 @@ async def health_check():
 async def readiness_check():
     from fastapi.responses import JSONResponse
 
-    from ap_explanation.di import REDIS_BROKER_URI
-
-    redis_status = await _check_redis(REDIS_BROKER_URI)
+    redis_status = await _check_redis(settings.redis_broker_uri)
 
     # Put all dependency dicts in a list
     dependencies = [redis_status]

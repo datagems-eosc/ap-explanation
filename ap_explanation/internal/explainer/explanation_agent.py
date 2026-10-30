@@ -7,8 +7,6 @@ from .explainer import Explainer
 
 class ExplanationAgent(Explainer):
 
-    DEFAULT_TIMEOUT: float = 300.0
-
     def __init__(
         self,
         api_base: str,
@@ -16,7 +14,7 @@ class ExplanationAgent(Explainer):
         api_key: str | None = None,
         *,
         ssl_verify: bool = True,
-        timeout: float = DEFAULT_TIMEOUT,
+        timeout: float,
     ):
         self.api_base = api_base
         self.model = model

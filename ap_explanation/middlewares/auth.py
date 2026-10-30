@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 
+from ap_explanation.di import get_authentication_service
 from ap_explanation.services.authentication import Authentication
 
 logger = logging.getLogger(__name__)
@@ -50,8 +51,6 @@ def require_authentication():
     Returns the JWT claims dict when authentication is enabled, ``None`` when
     it is disabled (``OIDC_ISSUER`` not set).
     """
-    from ap_explanation.di import get_authentication_service  # Avoid circular import
-
     async def _check(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
         authentication: Annotated[Authentication | None, Depends(get_authentication_service)],
