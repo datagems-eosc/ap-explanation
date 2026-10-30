@@ -1,5 +1,6 @@
 """
-How this service labels the rows of an annotated table for ProvSQL.
+What the repositories share about ProvSQL: how the rows of an annotated table
+are labelled, and the session they run in.
 
 Each row carries a surrogate reference, a value rather than its physical
 location (the CTID this replaced), so it survives UPDATE, VACUUM FULL and
@@ -14,6 +15,9 @@ without one work the same way.
 """
 
 from re import compile
+
+from psycopg import AsyncConnection
+from psycopg.sql import SQL, Identifier
 
 # Name of the column added to every annotated table to hold its stable row
 # reference. It is also the mapping attribute handed to
@@ -52,3 +56,23 @@ def references_in(expression: str) -> list[tuple[str, str]]:
                       {"{table@k<hex>,table@k<hex>,...}"}
     """
     return [(table, f"{table}@k{key}") for table, key in _REFERENCE_RE.findall(expression)]
+
+
+async def activate_provsql(conn: AsyncConnection) -> None:
+    """
+    Enable ProvSQL on a connection, for the session.
+
+    Enabled per connection, never server-wide: the server default stays
+    provsql.active = 0 (set in the image's postgresql.conf) so that other
+    services querying the same database are never subject to ProvSQL's
+    rewriter, which does not support every SQL construct.
+    """
+    await conn.execute("SET provsql.active = 1")
+
+
+async def set_search_path(conn: AsyncConnection, schema_name: str) -> None:
+    """Set the PostgreSQL search path for the current connection."""
+    query = SQL("SET search_path TO {}, public, provsql;").format(
+        Identifier(schema_name)
+    )
+    await conn.execute(query)

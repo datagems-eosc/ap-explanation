@@ -20,7 +20,6 @@ from psycopg import AsyncConnection
 from ap_explanation.errors import TableOrSchemaNotFoundError
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
@@ -50,8 +49,7 @@ async def test_e2e_explain_sql_query(
     # Seed the database if needed (CSV sources create ephemeral schemas;
     # relational sources are no-ops).
     async with ds.seed_database(db_connection, CSV_SRC_DIR):
-        repo = await ProvenanceRepository.create(db_connection, sql_rewriter)
-        service = ProvenanceService(repo, NoOpExplainer())
+        service = await ProvenanceService.create(db_connection, sql_rewriter, NoOpExplainer())
 
         # 1. Annotate every table referenced by the data source
         try:

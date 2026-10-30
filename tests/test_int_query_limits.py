@@ -14,7 +14,7 @@ from ap_explanation.errors import QueryLimitExceededError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository, QueryLimits
+from ap_explanation.repository.query import QueryLimits
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
@@ -23,8 +23,7 @@ from tests.conftest import TestSchema
 async def _service(
     conn: AsyncConnection, limits: QueryLimits, budget: RedisRowBudget | None = None
 ) -> ProvenanceService:
-    repo = await ProvenanceRepository.create(conn, SqlRewriter(), limits, budget)
-    return ProvenanceService(repo, NoOpExplainer())
+    return await ProvenanceService.create(conn, SqlRewriter(), NoOpExplainer(), limits, budget)
 
 
 def test_unset_limits_are_left_out():
@@ -88,7 +87,7 @@ def test_aggregated_rows_reads_the_input_of_each_aggregate():
             ]},
         ],
     }
-    from ap_explanation.repository.provenance import _aggregated_rows
+    from ap_explanation.repository.query import _aggregated_rows
 
     assert _aggregated_rows(plan) == [3000, 7]
 

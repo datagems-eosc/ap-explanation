@@ -61,7 +61,9 @@ ap_explanation/
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
 ├── repository/          # Data access layer
-│   └── provsql.py       # Row references and mapping table names
+│   ├── annotation.py    # Annotations, semiring mappings, probabilities
+│   ├── query.py         # Provenance queries and their limits
+│   └── provsql.py       # Row references, mapping table names, session setup
 ├── internal/            # Internal modules
 │   ├── explainer/       # LLM-powered NL explanations
 │   ├── cache.py         # Redis cache provider

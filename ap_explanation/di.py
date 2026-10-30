@@ -17,7 +17,7 @@ from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import LockProvider, RedisLockProvider, RedisRowBudget
 from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository, QueryLimits
+from ap_explanation.repository.query import QueryLimits
 from ap_explanation.semirings import semirings
 from ap_explanation.services.authentication import Authentication
 from ap_explanation.services.provenance import ProvenanceService
@@ -275,8 +275,7 @@ def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], Async
         async with create_connection_pool(qs) as pool:
             # NOTE: Some data sources require set up
             async with data_source.seed_database(pool, get_s3_mount_path()):
-                repo = await ProvenanceRepository.create(pool, SqlRewriter(), query_limits, row_budget)
-                yield ProvenanceService(repo, get_explainer())
+                yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)
             return
 
     return _provide_service

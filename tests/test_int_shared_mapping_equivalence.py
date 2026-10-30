@@ -18,7 +18,7 @@ import orjson
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.repository.annotation import AnnotationRepository
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
 
@@ -69,7 +69,7 @@ async def _insert_assessment(conn: AsyncConnection) -> None:
 @pytest.mark.asyncio
 async def test_shared_mapping_gives_the_same_results(
     provenance_service: ProvenanceService,
-    provenance_repository: ProvenanceRepository,
+    annotation_repository: AnnotationRepository,
     db_connection: AsyncConnection,
     all_semirings: list[DbSemiring],
 ):
@@ -90,7 +90,7 @@ async def test_shared_mapping_gives_the_same_results(
                 (semiring.get_legacy_provenance_table_name_for(table), table),
             )
     for semiring in all_semirings:
-        await provenance_repository._rebuild_union_mapping(SCHEMA, semiring)
+        await annotation_repository._rebuild_union_mapping(SCHEMA, semiring)
 
     # Maintained alike: the guard appends the new row to each of them
     await _insert_assessment(db_connection)

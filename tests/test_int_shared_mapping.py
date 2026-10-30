@@ -7,7 +7,7 @@ are migrated when annotated again.
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.repository.annotation import AnnotationRepository
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
@@ -51,7 +51,7 @@ async def test_all_semirings_share_one_mapping_table(
 @pytest.mark.asyncio
 async def test_per_semiring_tables_keep_working_then_migrate(
     provenance_service: ProvenanceService,
-    provenance_repository: ProvenanceRepository,
+    annotation_repository: AnnotationRepository,
     db_connection: AsyncConnection,
     why_semiring: DbSemiring,
     how_semiring: DbSemiring,
@@ -77,7 +77,7 @@ async def test_per_semiring_tables_keep_working_then_migrate(
         (f"{table}_provhow", table),
     )
     for semiring in semirings:
-        await provenance_repository._rebuild_union_mapping(test_schema.schema, semiring)
+        await annotation_repository._rebuild_union_mapping(test_schema.schema, semiring)
     assert await _mapping_tables(db_connection, test_schema) == {
         f"{table}_provwhy",
         f"{table}_provhow",

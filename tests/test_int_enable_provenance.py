@@ -1,6 +1,6 @@
 """
 Integration tests for the superuser / extension-presence guard in
-ProvenanceRepository.enable_provenance(), using the postgres_container fixture
+AnnotationRepository.enable_provenance(), using the postgres_container fixture
 from conftest (each test gets its own isolated container).
 
 Cases covered:
@@ -13,8 +13,7 @@ import pytest
 from psycopg import AsyncConnection
 
 from ap_explanation.errors import ProvSqlMissingError
-from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.repository.annotation import AnnotationRepository
 
 
 @pytest.mark.asyncio
@@ -28,7 +27,7 @@ async def test_enable_provenance_already_installed_succeeds(connstr):
         await conn.execute("DROP TABLE IF EXISTS public.test_ep_installed CASCADE")
         await conn.execute("CREATE TABLE public.test_ep_installed (id serial PRIMARY KEY, val text)")
 
-        repo = ProvenanceRepository(conn, SqlRewriter())
+        repo = AnnotationRepository(conn)
         result = await repo.enable_provenance("public", "test_ep_installed")
 
     assert result is True
@@ -52,7 +51,7 @@ async def test_enable_provenance_not_installed_non_superuser_raises(connstr):
     async with await AsyncConnection.connect(
         connstr("limited_ep_user", "limited"), autocommit=True
     ) as conn:
-        repo = ProvenanceRepository(conn, SqlRewriter())
+        repo = AnnotationRepository(conn)
         with pytest.raises(ProvSqlMissingError) as exc_info:
             await repo.enable_provenance("public", "test_ep_noperm")
 
@@ -71,7 +70,7 @@ async def test_enable_provenance_not_installed_superuser_installs_extension(conn
         await conn.execute("DROP TABLE IF EXISTS public.test_ep_superuser CASCADE")
         await conn.execute("CREATE TABLE public.test_ep_superuser (id serial PRIMARY KEY, val text)")
 
-        repo = ProvenanceRepository(conn, SqlRewriter())
+        repo = AnnotationRepository(conn)
         result = await repo.enable_provenance("public", "test_ep_superuser")
 
         assert result is True

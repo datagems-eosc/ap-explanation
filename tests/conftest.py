@@ -12,7 +12,7 @@ from testcontainers.postgres import PostgresContainer
 
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository
+from ap_explanation.repository.annotation import AnnotationRepository
 from ap_explanation.semirings import semirings
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
@@ -117,19 +117,14 @@ async def db_connection(
         yield conn
 
 
-@pytest_asyncio.fixture
-async def provenance_repository(
-    db_connection: AsyncConnection, sql_rewriter: SqlRewriter
-):
-    """
-    Returns a ProvenanceRepository with semiring setup ensured.
-    """
-    return await ProvenanceRepository.create(db_connection, sql_rewriter)
-
-
 @pytest.fixture
-def provenance_service(provenance_repository: ProvenanceRepository):
-    return ProvenanceService(provenance_repository, NoOpExplainer())
+def annotation_repository(db_connection: AsyncConnection):
+    return AnnotationRepository(db_connection)
+
+
+@pytest_asyncio.fixture
+async def provenance_service(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
+    return await ProvenanceService.create(db_connection, sql_rewriter, NoOpExplainer())
 
 
 @pytest.fixture(scope="session")
