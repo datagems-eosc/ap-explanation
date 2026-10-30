@@ -70,7 +70,7 @@ ap_explanation/
 │   └── sql_rewriter.py  # SQL rewriting for provenance
 ├── types/               # Type definitions
 │   ├── data_sources/    # Data source types (relational DB, CSV set)
-│   ├── analytical_pattern.py
+│   ├── provenance_analytical_pattern.py
 │   ├── semiring.py
 │   └── provenance.py
 ├── errors/              # Custom exceptions

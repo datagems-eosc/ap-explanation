@@ -3,10 +3,9 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from fastapi.concurrency import asynccontextmanager
+from moma_management.domain.generated.nodes.node_schema import Node
 from psycopg import AsyncConnection
 from pydantic import BaseModel
-
-from ap_explanation.types.moma_graph import Node
 
 
 class DataSource(BaseModel):

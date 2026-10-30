@@ -1,18 +1,32 @@
 from typing import ClassVar, Self
+from uuid import UUID
 
+from moma_management.domain.analytical_pattern import AnalyticalPattern
+from moma_management.domain.generated.edges.edge_schema import Edge, EdgeLabel
+from moma_management.domain.generated.nodes.node_schema import Node
+from moma_management.domain.validation import StructureStep, ValidationStep
 from pydantic import Field, model_validator
 
 from ap_explanation.types.data_sources.csv_set_ds import CsvSetDataSource
 from ap_explanation.types.data_sources.relational_db_ds import RelationalDbDataSource
 
-from .analytical_pattern import AnalyticalPattern
 from .data_sources import DataSource
-from .moma_graph import EdgeLabel, Node
 
 
 class ProvenanceAnalyticalPattern(AnalyticalPattern):
+    """
+    A MoMa Analytical Pattern with a provenance operator over one data source.
+
+    Two things to know when handling moma's models: ``Node.id``, ``Edge.from_``
+    and ``Edge.to`` are :class:`~uuid.UUID`, not ``str``; and ``EdgeLabel`` is a
+    plain ``Enum``, so ``"input" in edge.labels`` is always ``False``: compare
+    against the member (``EdgeLabel.input in edge.labels``).
+    """
 
     PROVENANCE_OP: ClassVar[str] = "Provenance_SQL_Operator"
+    # Not moma's full chain: it accepts the fixtures, but what ap-executor
+    # sends has not been tried against it.
+    validation_chain: ClassVar[ValidationStep] = StructureStep()
     data_source: DataSource | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
@@ -92,6 +106,30 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
 
         self.data_source = found[0]
         return self
+
+    def to_wire(self) -> dict:
+        """
+        Dump the AP back to its JSON wire form.
+
+        Always use this rather than a bare ``model_dump`` when the result will
+        be validated again — over a Celery boundary, say. ``Edge.from_`` is
+        populated from the ``from`` alias and moma's model does not set
+        ``populate_by_name``, so a dump without ``by_alias`` produces a
+        ``from_`` key that no longer parses.
+        """
+        return self.model_dump(mode="json", by_alias=True)
+
+    def get_node_by_id(self, node_id: UUID) -> Node | None:
+        return next((n for n in self.nodes if n.id == node_id), None)
+
+    def get_edges_from(self, node_id: UUID) -> list[Edge]:
+        return [e for e in (self.edges or []) if e.from_ == node_id]
+
+    def get_edges_to(self, node_id: UUID) -> list[Edge]:
+        return [e for e in (self.edges or []) if e.to == node_id]
+
+    def get_nodes_by_label(self, label: str) -> list[Node]:
+        return [n for n in self.nodes if label in (n.labels or [])]
 
     def _contained_nodes(self, node: Node) -> list[Node]:
         """

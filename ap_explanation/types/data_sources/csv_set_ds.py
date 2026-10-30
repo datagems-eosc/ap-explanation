@@ -6,11 +6,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
+from moma_management.domain.generated.nodes.node_schema import Node
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier, Literal
 from pydantic import Field, PrivateAttr
-
-from ap_explanation.types.moma_graph import Node
 
 from .data_source import DataSource
 
