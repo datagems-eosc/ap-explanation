@@ -4,20 +4,20 @@ from typing import LiteralString, cast
 from psycopg import AsyncConnection, errors
 from psycopg.sql import SQL, Identifier
 
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import (
     InvalidProbabilityColumnError,
     ProvSqlInternalError,
     ProvSqlMissingError,
     TableOrSchemaNotFoundError,
 )
-from ap_explanation.repository.provsql import (
+from ap_explanation.repositories.provsql import (
     MAPPING_TABLE_SUFFIX,
     REFERENCE_COLUMN,
     reference_default,
     set_search_path,
 )
 from ap_explanation.semirings import semirings as all_semirings
-from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
 

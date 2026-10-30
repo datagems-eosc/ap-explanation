@@ -7,7 +7,7 @@ from starlette.responses import JSONResponse
 logger = structlog.get_logger(__name__)
 
 
-async def correlation_id_passtrough(request: Request, call_next):
+async def correlation_id_passthrough(request: Request, call_next):
     """
     This middleware echoes the correlation ID from the request headers in the response.
     If the incoming request doesn't have a correlation ID, a new one is generated.

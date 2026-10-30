@@ -9,6 +9,8 @@ from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
 
+from ap_explanation.domains.provenance import Derivation, SemiringProvenance
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import (
     ProvSqlInternalError,
     QueryLimitExceededError,
@@ -16,14 +18,12 @@ from ap_explanation.errors import (
 )
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provsql import (
+from ap_explanation.repositories.provsql import (
     REFERENCE_COLUMN,
     references_in,
     set_search_path,
 )
 from ap_explanation.settings import QueryLimits
-from ap_explanation.types.provenance import Derivation, SemiringProvenance
-from ap_explanation.types.semiring import DbSemiring
 
 logger = getLogger(__name__)
 set_json_dumps(dumps)

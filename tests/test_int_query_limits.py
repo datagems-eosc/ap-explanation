@@ -10,13 +10,13 @@ from psycopg import AsyncConnection
 from psycopg.pq import TransactionStatus
 from testcontainers.community.redis import RedisContainer
 
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import QueryLimitExceededError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.settings import QueryLimits
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
+from ap_explanation.settings import QueryLimits
 from tests.conftest import TestSchema
 
 
@@ -87,7 +87,7 @@ def test_aggregated_rows_reads_the_input_of_each_aggregate():
             ]},
         ],
     }
-    from ap_explanation.repository.query import _aggregated_rows
+    from ap_explanation.repositories.query import _aggregated_rows
 
     assert _aggregated_rows(plan) == [3000, 7]
 

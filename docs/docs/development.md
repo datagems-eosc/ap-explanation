@@ -52,15 +52,14 @@ Tests use testcontainers to spin up PostgreSQL with ProvSQL automatically.
 
 ```
 ap_explanation/
-├── api/v1/              # API endpoints
-│   ├── provenance/
-│   │   ├── managed/     # Async lifecycle (dispatch + poll)
-│   │   └── manual/      # Sync lifecycle (annotate / compute / remove)
-│   ├── dependencies/    # FastAPI dependencies (AP parser)
-│   └── health.py        # Health & readiness endpoints
+├── api/
+│   ├── middlewares/     # Authentication, correlation ID
+│   └── v1/              # API endpoints
+│       ├── provenance/managed/  # Async lifecycle (dispatch + poll)
+│       └── health.py    # Health & readiness endpoints
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
-├── repository/          # Data access layer
+├── repositories/        # Data access layer
 │   ├── annotation.py    # Annotations, semiring mappings, probabilities
 │   ├── query.py         # Provenance queries and their limits
 │   └── provsql.py       # Row references, mapping table names, session setup
@@ -69,7 +68,7 @@ ap_explanation/
 │   ├── cache.py         # Redis cache provider
 │   ├── distributed_lock.py  # Redis distributed lock
 │   └── sql_rewriter.py  # SQL rewriting for provenance
-├── types/               # Type definitions
+├── domains/             # Domain types
 │   ├── data_sources/    # Data source types (relational DB, CSV set)
 │   ├── provenance_analytical_pattern.py
 │   ├── semiring.py
@@ -96,14 +95,7 @@ DbSemiring(
 )
 ```
 
-2. **Create database functions** in `repository/resources/03_setup_semiring_parallel.sql`:
-
-```sql
-CREATE OR REPLACE FUNCTION custom_prov(...)
--- Implementation
-```
-
-3. **Test** the new semiring:
+2. **Test** the new semiring:
 
 ```python
 # Add test in tests/

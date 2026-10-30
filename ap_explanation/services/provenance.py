@@ -1,22 +1,22 @@
 from psycopg import AsyncConnection
 
+from ap_explanation.domains.provenance import (
+    Derivation,
+    Provenance,
+)
+from ap_explanation.domains.provenance_analytical_pattern import (
+    ProvenanceAnalyticalPattern,
+)
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import AggregateSemiringError, ProvSqlInternalError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.annotation import AnnotationRepository
-from ap_explanation.repository.provsql import activate_provsql
-from ap_explanation.repository.query import QueryRepository
+from ap_explanation.repositories.annotation import AnnotationRepository
+from ap_explanation.repositories.provsql import activate_provsql
+from ap_explanation.repositories.query import QueryRepository
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.settings import QueryLimits
-from ap_explanation.types.provenance import (
-    Derivation,
-    Provenance,
-)
-from ap_explanation.types.provenance_analytical_pattern import (
-    ProvenanceAnalyticalPattern,
-)
-from ap_explanation.types.semiring import DbSemiring
 
 
 class ProvenanceService:
@@ -163,7 +163,7 @@ class ProvenanceService:
         Execute a SQL query with provenance tracking in every semiring, and the
         probability if requested, all in one query.
 
-        Each returned :class:`~ap_explanation.types.provenance.Derivation`
+        Each returned :class:`~ap_explanation.domains.provenance.Derivation`
         contains the original query columns in ``answer`` and a per-semiring
         mapping in ``provenance``. On an aggregate query, or one whose rows'
         provenance involves an aggregate below the top level, that mapping holds
@@ -177,7 +177,7 @@ class ProvenanceService:
                 probabilities must have been set with :meth:`set_probabilities`
 
         Returns:
-            List of :class:`~ap_explanation.types.provenance.Derivation` instances,
+            List of :class:`~ap_explanation.domains.provenance.Derivation` instances,
             one per result row, ordered as returned by the database.
 
         Raises:

@@ -7,9 +7,9 @@ are migrated when annotated again.
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.repository.annotation import AnnotationRepository
+from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.repositories.annotation import AnnotationRepository
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 

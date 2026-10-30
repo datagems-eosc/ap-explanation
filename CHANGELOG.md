@@ -24,6 +24,7 @@
 
 ### Misc
 
+- Internal modules renamed: `types` → `domains`, `repository` → `repositories`, `middlewares` → `api/middlewares`.
 - Cached results are keyed on the new `probability` flag too, so entries cached before the upgrade are not reused.
 - The per-database lock is extended while its work runs, so an hour-long annotation no longer outlives it (letting a second worker in, then failing a finished task on release). It now expires 5 minutes after a crashed holder, instead of an hour.
 

@@ -25,8 +25,8 @@ from sqlglot.expressions import (
     alias_,
 )
 
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import AggregateSemiringError
-from ap_explanation.types.semiring import DbSemiring
 
 
 class SqlRewriter:

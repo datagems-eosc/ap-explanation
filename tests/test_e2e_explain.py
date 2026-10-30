@@ -17,14 +17,14 @@ from pathlib import Path
 import pytest
 from psycopg import AsyncConnection
 
+from ap_explanation.domains.provenance_analytical_pattern import (
+    ProvenanceAnalyticalPattern,
+)
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import TableOrSchemaNotFoundError
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.provenance_analytical_pattern import (
-    ProvenanceAnalyticalPattern,
-)
-from ap_explanation.types.semiring import DbSemiring
 
 # CSV fixture files reference paths like "s3:/assessment.csv" which resolve
 # to ``<src_dir>/assessment.csv``.  The real CSVs live in fixtures/real_mathe/.

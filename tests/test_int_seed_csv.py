@@ -6,7 +6,7 @@ from moma_management.domain.generated.nodes.node_schema import Node
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier
 
-from ap_explanation.types.data_sources.csv_set_ds import CsvSetDataSource
+from ap_explanation.domains.data_sources.csv_set_ds import CsvSetDataSource
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 # All CSV files are stored under fixtures/real_mathe/ and referenced via s3:/ URIs

@@ -1,4 +1,4 @@
-from ap_explanation.types.semiring import DbSemiring
+from ap_explanation.domains.semiring import DbSemiring
 
 semirings = [
     DbSemiring(

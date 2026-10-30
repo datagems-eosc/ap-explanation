@@ -13,7 +13,7 @@ import pytest
 from psycopg import AsyncConnection
 
 from ap_explanation.errors import ProvSqlMissingError
-from ap_explanation.repository.annotation import AnnotationRepository
+from ap_explanation.repositories.annotation import AnnotationRepository
 
 
 @pytest.mark.asyncio

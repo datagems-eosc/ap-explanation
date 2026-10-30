@@ -1,12 +1,12 @@
 
 import pytest
 
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import (
     AggregateSemiringError,
     TableNotAnnotatedError,
 )
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 

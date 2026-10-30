@@ -7,8 +7,8 @@ from moma_management.domain.generated.nodes.node_schema import Node
 from moma_management.domain.validation import StructureStep, ValidationStep
 from pydantic import Field, model_validator
 
-from ap_explanation.types.data_sources.csv_set_ds import CsvSetDataSource
-from ap_explanation.types.data_sources.relational_db_ds import RelationalDbDataSource
+from ap_explanation.domains.data_sources.csv_set_ds import CsvSetDataSource
+from ap_explanation.domains.data_sources.relational_db_ds import RelationalDbDataSource
 
 from .data_sources import DataSource
 

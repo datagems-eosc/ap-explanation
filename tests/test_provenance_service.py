@@ -2,10 +2,10 @@
 
 import pytest
 
+from ap_explanation.domains.provenance import Derivation
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import AggregateSemiringError, ProvSqlInternalError
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.provenance import Derivation
-from ap_explanation.types.semiring import DbSemiring
 
 VALUE_GATES = "Error details: ProvSQL: provenance_evaluate_compiled: This semiring does not support value gates."
 

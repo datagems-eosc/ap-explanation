@@ -3,7 +3,7 @@ from typing import Never
 
 from fastapi import Depends, Response, status
 
-from ap_explanation.middlewares.auth import require_authentication
+from ap_explanation.api.middlewares.auth import require_authentication
 from ap_explanation.tasks.maintenance import circuit_cleanup_task
 
 from .managed import ManagedProvenanceTaskResponse

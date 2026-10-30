@@ -4,8 +4,8 @@ from celery.result import AsyncResult
 from fastapi.params import Depends
 from pydantic import BaseModel
 
+from ap_explanation.api.middlewares.auth import require_authentication
 from ap_explanation.celery_app import celery_app
-from ap_explanation.middlewares.auth import require_authentication
 
 TaskStatus = Literal["pending", "started",
                      "success", "failure", "retry", "revoked"]

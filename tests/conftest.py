@@ -10,12 +10,12 @@ from psycopg_pool import AsyncConnectionPool
 from testcontainers.core.image import DockerImage
 from testcontainers.postgres import PostgresContainer
 
+from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.annotation import AnnotationRepository
+from ap_explanation.repositories.annotation import AnnotationRepository
 from ap_explanation.semirings import semirings
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
 
 
 @dataclass

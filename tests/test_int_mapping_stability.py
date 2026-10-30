@@ -9,9 +9,9 @@ snapshot mapping never learns about rows inserted after annotation.
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.repository.provsql import REFERENCE_COLUMN, references_in
+from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.repositories.provsql import REFERENCE_COLUMN, references_in
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 

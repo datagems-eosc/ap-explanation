@@ -6,13 +6,13 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from ap_explanation.api.middlewares.correlation_id_passthrough import (
+    correlation_id_passthrough,
+)
 from ap_explanation.api.v1.routes import router
 from ap_explanation.di import container_lifespan
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.logger import configure_logging
-from ap_explanation.middlewares.correlation_id_passtrough import (
-    correlation_id_passtrough,
-)
 from ap_explanation.settings import settings
 
 configure_logging()
@@ -54,7 +54,7 @@ app.include_router(router)
 ############
 # Middlewares
 ############
-app.middleware("http")(correlation_id_passtrough)
+app.middleware("http")(correlation_id_passthrough)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5000)
