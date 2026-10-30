@@ -13,11 +13,9 @@ from ap_explanation.celery_app import celery_app
 from ap_explanation.di import (
     get_cache_provider,
     get_lock_provider,
-    get_provenance_service_for_ap,
+    provenance_service_for,
 )
 from ap_explanation.internal.cache import RedisCacheProvider
-from ap_explanation.semirings import semirings as all_semirings
-from ap_explanation.types.provenance import Provenance
 from ap_explanation.types.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
@@ -36,65 +34,16 @@ def _run_in_thread(coro):
         return future.result()
 
 
-async def _do_explain(
-    ap_dict: dict,
-    semiring_name: str | None = None,
-    compute_probability: bool = False,
-) -> list:
-    """
-    Core async logic: annotate tables → compute provenance → remove annotation.
+async def _explain(
+    ap: ProvenanceAnalyticalPattern,
+    semiring_name: str | None,
+    compute_probability: bool,
+) -> dict:
+    async with provenance_service_for(ap.data_source) as service:
+        provenance = await service.explain_ap(ap, semiring_name, compute_probability)
 
-    If *semiring_name* is ``None`` all configured semirings are used; otherwise
-    only the requested one. If *compute_probability* is set, tuple probabilities
-    are read from each data node's ``probabilityColumn`` and every result row
-    gets its probability.
-    """
-
-    # Resolve semirings to use
-    if semiring_name is not None:
-        semiring = next(
-            (s for s in all_semirings if s.name == semiring_name), None)
-        if not semiring:
-            available = ", ".join(s.name for s in all_semirings)
-            raise ValueError(
-                f"Semiring '{semiring_name}' not found. Available: {available}"
-            )
-        target_semirings = [semiring]
-    else:
-        target_semirings = all_semirings
-
-    ap = ProvenanceAnalyticalPattern.model_validate(ap_dict)
-    ds = ap.data_source
-    query = ap.sql_operator.properties["query"]
-
-    service_factory = get_provenance_service_for_ap(ds)
-
-    async for service in service_factory():
-        # 1. Annotate
-        for table_name in ds.table_names:
-            await service.annotate_dataset(table_name, ds.schema_name, target_semirings)
-
-        # 1b. Set tuple probabilities (if requested)
-        if compute_probability:
-            await service.set_probabilities(ds.schema_name, ds.probability_columns)
-
-        # 2. Compute provenance
-        derivations = await service.compute_provenance(
-            ds.schema_name, query, target_semirings, compute_probability)
-
-        # 3. Compute NL explanation (if enabled)
-        explanation = await service.explain(ds.schema_name, query, derivations)
-
-        # # 4. Remove annotation (see provsql issue #67 workaround)
-        # for table_name in ds.table_names:
-        #     await service.remove_annotation(table_name, ds.schema_name)
-
-        prov = Provenance(derivations=derivations, explanation=explanation)
-
-        # Serialize the provenance result to JSON for caching and eventual IPC back to the caller
-        return prov.model_dump(mode="json")
-
-    return []
+    # Serialize the provenance result to JSON for caching and eventual IPC back to the caller
+    return provenance.model_dump(mode="json")
 
 
 @celery_app.task(bind=True, name="ap_explanation.tasks.explain.explain_task")
@@ -103,7 +52,7 @@ def explain_task(
     ap_dict: dict,
     semiring_name: str | None = None,
     compute_probability: bool = False,
-) -> list:
+) -> dict:
     """Celery task: annotate + compute provenance + remove annotation.
 
     Acquires a per-database Redis lock (key ``explain_lock:{db_name}``) so that
@@ -141,9 +90,7 @@ def explain_task(
     logger.info(f"[task:{self.request.id}] Acquiring lock '{lock_key}'")
     with lock_provider.acquire(lock_key):
         logger.info(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
-        res = _run_in_thread(
-            _do_explain(ap_dict, semiring_name, compute_probability)
-        )
+        res = _run_in_thread(_explain(ap, semiring_name, compute_probability))
         logger.info(f"[task:{self.request.id}] Released lock '{lock_key}'")
 
     cache.set(cache_key, res)

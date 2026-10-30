@@ -10,6 +10,10 @@ from ap_explanation.repository.query import QueryLimits, QueryRepository
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.provenance import (
     Derivation,
+    Provenance,
+)
+from ap_explanation.types.provenance_analytical_pattern import (
+    ProvenanceAnalyticalPattern,
 )
 from ap_explanation.types.semiring import DbSemiring
 
@@ -46,6 +50,57 @@ class ProvenanceService:
         await activate_provsql(conn)
         queries = await QueryRepository.create(conn, sql_rewriter, limits, budget)
         return cls(queries, AnnotationRepository(conn), explainer)
+
+    async def explain_ap(
+        self,
+        ap: ProvenanceAnalyticalPattern,
+        semiring_name: str | None = None,
+        compute_probability: bool = False,
+    ) -> Provenance:
+        """
+        The whole lifecycle of an AP: annotate its tables, compute the
+        provenance of its query, and explain it.
+
+        If *semiring_name* is ``None`` all configured semirings are used; otherwise
+        only the requested one. If *compute_probability* is set, tuple probabilities
+        are read from each data node's ``probabilityColumn`` and every result row
+        gets its probability.
+        """
+        if semiring_name is not None:
+            semiring = next(
+                (s for s in all_semirings if s.name == semiring_name), None)
+            if not semiring:
+                available = ", ".join(s.name for s in all_semirings)
+                raise ValueError(
+                    f"Semiring '{semiring_name}' not found. Available: {available}"
+                )
+            target_semirings = [semiring]
+        else:
+            target_semirings = all_semirings
+
+        ds = ap.data_source
+        query = ap.sql_operator.properties["query"]
+
+        # 1. Annotate
+        for table_name in ds.table_names:
+            await self.annotate_dataset(table_name, ds.schema_name, target_semirings)
+
+        # 1b. Set tuple probabilities (if requested)
+        if compute_probability:
+            await self.set_probabilities(ds.schema_name, ds.probability_columns)
+
+        # 2. Compute provenance
+        derivations = await self.compute_provenance(
+            ds.schema_name, query, target_semirings, compute_probability)
+
+        # 3. Compute NL explanation (if enabled)
+        explanation = await self.explain(ds.schema_name, query, derivations)
+
+        # # 4. Remove annotation (see provsql issue #67 workaround)
+        # for table_name in ds.table_names:
+        #     await self.remove_annotation(table_name, ds.schema_name)
+
+        return Provenance(derivations=derivations, explanation=explanation)
 
     async def annotate_dataset(self, table_name: str, schema_name: str, semirings: list[DbSemiring]) -> bool:
         """

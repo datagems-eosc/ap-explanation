@@ -1,7 +1,7 @@
 import logging
 import os
 import threading
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -255,27 +255,20 @@ async def find_database(db_name: str) -> str:
     raise DatabaseNotFoundError(db_name)
 
 
-def get_provenance_service_for_ap(data_source: DataSource) -> Callable[[], AsyncGenerator[ProvenanceService]]:
+@asynccontextmanager
+async def provenance_service_for(data_source: DataSource) -> AsyncGenerator[ProvenanceService]:
     """
-    Factory function to create a provenance service dependency with dynamic database connection.
-    The connection pool is created when the AP is processed and closed when processing completes.
+    The provenance service of a data source, with a dynamic database connection.
+    The connection pool is created on entry and closed on exit.
 
     Args:
         data_source: The resolved data source from the Provenance AP.
 
-    Returns:
-        Dependency function for ProvenanceService that can be used in FastAPI routes
-
     Raises:
         DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
-
-    async def _provide_service() -> AsyncGenerator[ProvenanceService]:
-        qs = await find_database(data_source.db_name)
-        async with create_connection_pool(qs) as pool:
-            # NOTE: Some data sources require set up
-            async with data_source.seed_database(pool, get_s3_mount_path()):
-                yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)
-            return
-
-    return _provide_service
+    qs = await find_database(data_source.db_name)
+    async with create_connection_pool(qs) as pool:
+        # NOTE: Some data sources require set up
+        async with data_source.seed_database(pool, get_s3_mount_path()):
+            yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)

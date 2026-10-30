@@ -150,7 +150,7 @@ Key points:
 ### Dependency Injection
 
 The service uses a DI container (defined in `di.py`) to manage dependencies:
-- **Dynamic Service Creation**: Service instances are created per-AP processing request using a factory function (`get_provenance_service_for_ap`)
+- **Dynamic Service Creation**: Service instances are created per-AP processing request using a context manager (`provenance_service_for`)
 - **Connection Pool Management**: Connection pools are created when an AP is processed and cleaned up after completion
 - **Database Routing**: The DI system handles automatic routing between primary PostgreSQL and Timescale instances
 - **Repository Layer**: Repositories are created with database connections from the appropriate pool
