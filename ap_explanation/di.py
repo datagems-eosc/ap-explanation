@@ -21,6 +21,7 @@ from ap_explanation.internal.distributed_lock import (
 )
 from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.repositories.seeding import seed_database
 from ap_explanation.semirings import semirings
 from ap_explanation.services.authentication import Authentication
 from ap_explanation.services.provenance import ProvenanceService
@@ -210,5 +211,5 @@ async def provenance_service_for(data_source: DataSource) -> AsyncGenerator[Prov
     qs = await find_database(data_source.db_name)
     async with create_connection_pool(qs) as pool:
         # NOTE: Some data sources require set up
-        async with data_source.seed_database(pool, settings.s3_mount_path):
+        async with seed_database(data_source, pool, settings.s3_mount_path):
             yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)

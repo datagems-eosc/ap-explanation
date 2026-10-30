@@ -1,10 +1,6 @@
 from abc import abstractmethod
-from collections.abc import AsyncGenerator
-from pathlib import Path
 
-from fastapi.concurrency import asynccontextmanager
 from moma_management.domain.generated.nodes.node_schema import Node
-from psycopg import AsyncConnection
 from pydantic import BaseModel
 
 
@@ -42,9 +38,3 @@ class DataSource(BaseModel):
                 PROBABILITY_COLUMN_PROPERTY)
             for node, table_name in zip(nodes, self.table_names)
         }
-
-    @abstractmethod
-    @asynccontextmanager
-    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None]:
-        """Perform any necessary setup for the data source, such as creating tables or loading data."""
-        ...

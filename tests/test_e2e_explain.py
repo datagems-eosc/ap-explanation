@@ -24,6 +24,7 @@ from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.errors import TableOrSchemaNotFoundError
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.repositories.seeding import seed_database
 from ap_explanation.services.provenance import ProvenanceService
 
 # CSV fixture files reference paths like "s3:/assessment.csv" which resolve
@@ -47,7 +48,7 @@ async def test_e2e_explain_sql_query(
 
     # Seed the database if needed (CSV sources create ephemeral schemas;
     # relational sources are no-ops).
-    async with ds.seed_database(db_connection, CSV_SRC_DIR):
+    async with seed_database(ds, db_connection, CSV_SRC_DIR):
         service = await ProvenanceService.create(db_connection, sql_rewriter, NoOpExplainer())
 
         # Annotate, set tuple probabilities from the fixture's probabilityColumn

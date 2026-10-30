@@ -7,6 +7,7 @@ from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier
 
 from ap_explanation.domains.data_sources.csv_set_ds import CsvSetDataSource
+from ap_explanation.repositories.seeding import seed_database
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 # All CSV files are stored under fixtures/real_mathe/ and referenced via s3:/ URIs
@@ -67,7 +68,7 @@ async def test_seed_database_creates_schema_and_table(db_connection: AsyncConnec
     """Schema and table are visible inside the seed_database context."""
     ds = _make_csv_source(["assessment.csv"])
 
-    async with ds.seed_database(db_connection, CSV_SRC_DIR):
+    async with seed_database(ds, db_connection, CSV_SRC_DIR):
         assert await _schema_exists(db_connection, ds.schema_name), (
             f"Schema '{ds.schema_name}' should exist after setup"
         )
@@ -82,7 +83,7 @@ async def test_seed_database_drops_schema_on_exit(db_connection: AsyncConnection
     ds = _make_csv_source(["assessment.csv"])
     schema_name = ds.schema_name
 
-    async with ds.seed_database(db_connection, CSV_SRC_DIR):
+    async with seed_database(ds, db_connection, CSV_SRC_DIR):
         pass  # setup happened; teardown runs on exit
 
     assert not await _schema_exists(db_connection, schema_name), (
@@ -96,7 +97,7 @@ async def test_seed_database_multiple_tables(db_connection: AsyncConnection):
     filenames = ["assessment.csv", "platform__topic.csv"]
     ds = _make_csv_source(filenames)
 
-    async with ds.seed_database(db_connection, CSV_SRC_DIR):
+    async with seed_database(ds, db_connection, CSV_SRC_DIR):
         for table_name in ds.table_names:
             assert await _table_exists(db_connection, ds.schema_name, table_name), (
                 f"Table '{table_name}' should exist inside the context"
@@ -111,7 +112,7 @@ async def test_seed_database_table_has_rows(db_connection: AsyncConnection):
     """The seeded table contains at least one row of data."""
     ds = _make_csv_source(["assessment.csv"])
 
-    async with ds.seed_database(db_connection, CSV_SRC_DIR):
+    async with seed_database(ds, db_connection, CSV_SRC_DIR):
         async with db_connection.cursor() as cur:
             await cur.execute(
                 SQL("SELECT COUNT(*) FROM {}.{}").format(
@@ -131,7 +132,7 @@ async def test_seed_database_teardown_on_exception(db_connection: AsyncConnectio
     schema_name = ds.schema_name
 
     with pytest.raises(RuntimeError, match="intentional"):
-        async with ds.seed_database(db_connection, CSV_SRC_DIR):
+        async with seed_database(ds, db_connection, CSV_SRC_DIR):
             raise RuntimeError("intentional error")
 
     assert not await _schema_exists(db_connection, schema_name), (
@@ -148,5 +149,5 @@ async def test_seed_database_missing_content_url_raises(db_connection: AsyncConn
     ds = CsvSetDataSource(base_node=base_node, csv_nodes=[bad_node])
 
     with pytest.raises(ValueError, match="contentUrl"):
-        async with ds.seed_database(db_connection, CSV_SRC_DIR):
+        async with seed_database(ds, db_connection, CSV_SRC_DIR):
             pass

@@ -1,9 +1,4 @@
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-from pathlib import Path
-
 from moma_management.domain.generated.nodes.node_schema import Node
-from psycopg import AsyncConnection
 from pydantic import Field
 
 from .data_source import DataSource
@@ -63,8 +58,3 @@ class RelationalDbDataSource(DataSource):
     @property
     def probability_columns(self) -> dict[str, str | None]:
         return self._probability_columns_of(self.table_nodes)
-
-    @asynccontextmanager
-    async def seed_database(self, conn: AsyncConnection, src_dir: Path) -> AsyncGenerator[None]:
-        """Relational databases don't require seeding, so this is a no-op."""
-        yield
