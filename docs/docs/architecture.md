@@ -65,7 +65,7 @@ Each semiring has:
 
 Every semiring reads the same labels:
 - **Rows are labelled by their token** — `<table>@k<hex>`, where `<hex>` is the row's `provsql` token. Annotating a table therefore adds only ProvSQL's own column, and prepares the table for every semiring. A row's token, and so its reference, only changes with its probability.
-- **One temporary view per query** — `compute` creates `apx_mapping` in its transaction, the `UNION ALL` of the schema's annotated tables, and drops it before committing. ProvSQL's `sr_*` functions need a single relation holding every table's tokens. Left in place, the view would stop other sessions dropping those tables. Annotating a table removes the `provsql_ref` columns, mapping tables and views of earlier versions.
+- **One temporary view per query** — `compute` creates `apx_mapping` in its transaction, the `UNION ALL` of the schema's annotated tables, and drops it before committing. ProvSQL's `sr_*` functions need a single relation holding every table's tokens. Left in place, the view would stop other sessions dropping those tables.
 
 ### SQL Rewriting
 

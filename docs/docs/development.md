@@ -63,8 +63,7 @@ ap_explanation/
 │   ├── provsql.py       # ProvSqlRepository: enable, disable, probabilities, compute, circuit cleanup
 │   ├── query_guard.py   # Limits of a provenance query, aggregate check, row budget
 │   ├── schema.py        # Schema description for the LLM
-│   ├── seeding.py       # Sets a database up for a data source (CSV)
-│   └── legacy_mappings.py   # What earlier versions left in annotated databases
+│   └── seeding.py       # Sets a database up for a data source (CSV)
 ├── internal/            # Internal modules
 │   ├── cache.py         # Redis cache provider
 │   └── distributed_lock.py  # Redis distributed lock

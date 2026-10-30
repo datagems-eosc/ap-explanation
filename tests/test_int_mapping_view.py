@@ -1,8 +1,6 @@
 """
 Semiring calls label rows through a temporary view over the annotated tables, so
-annotating a table adds only ProvSQL's own column. Earlier versions kept a
-reference column, mapping tables and views over them: nothing reads those
-anymore, and annotating a table again removes them.
+annotating a table adds only ProvSQL's own column.
 """
 
 import pytest
@@ -168,42 +166,3 @@ async def test_a_query_without_annotated_tables_is_refused(
         await provenance_service.compute_provenance(
             test_schema.schema, f"SELECT * FROM {table} LIMIT 3", [why_semiring]
         )
-
-
-@pytest.mark.asyncio
-async def test_annotating_again_removes_what_earlier_versions_left(
-    provenance_service: ProvenanceService,
-    db_connection: AsyncConnection,
-    all_semirings: list[DbSemiring],
-    test_schema: TestSchema,
-):
-    table = test_schema.table
-    await provenance_service.annotate_dataset(table, test_schema.schema)
-    columns = await _columns(db_connection, test_schema)
-    relations = await _relations(db_connection, test_schema)
-
-    # Wind back to what they left: the reference column, maintained mapping
-    # tables, and unions over them, views or snapshots.
-    await db_connection.execute(f"SET search_path TO {test_schema.schema}, public, provsql")
-    await db_connection.execute(
-        f"ALTER TABLE {table} ADD COLUMN provsql_ref text NOT NULL"
-        f" DEFAULT ('{table}@k' || translate(gen_random_uuid()::text, '-', ''))"
-    )
-    for mapping in (f"{table}_provkey", f"{table}_provwhy"):
-        await db_connection.execute(
-            "SELECT create_provenance_mapping(%s, %s, 'provsql_ref', false, true)", (mapping, table)
-        )
-    await db_connection.execute(f"CREATE VIEW provkey_mapping AS TABLE {table}_provkey")
-    await db_connection.execute(f"CREATE VIEW why_mapping AS TABLE {table}_provwhy")
-    await db_connection.execute(f"CREATE TABLE how_mapping AS TABLE {table}_provwhy")
-    # A table of the dataset's own that happens to have one of the names
-    await db_connection.execute("CREATE TABLE which_mapping (id int)")
-
-    newly = await provenance_service.annotate_dataset(table, test_schema.schema)
-
-    assert newly is False
-    assert await _columns(db_connection, test_schema) == columns
-    assert await _relations(db_connection, test_schema) == relations | {"which_mapping"}
-    cursor = await db_connection.execute("SELECT count(*) FROM provsql.provenance_mapping_registry")
-    assert (await cursor.fetchone())[0] == 0
-    await _assert_resolves(provenance_service, all_semirings, test_schema)

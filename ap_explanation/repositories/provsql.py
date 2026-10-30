@@ -35,7 +35,6 @@ from ap_explanation.errors import (
     TableOrSchemaNotFoundError,
 )
 from ap_explanation.internal.distributed_lock import RedisRowBudget
-from ap_explanation.repositories.legacy_mappings import remove_legacy_mappings
 from ap_explanation.repositories.query_guard import QueryGuard
 from ap_explanation.settings import QueryLimits
 
@@ -127,9 +126,66 @@ class ProvSqlRepository:
         Returns:
             True if the table was newly annotated, False if it already was.
         """
-        newly_annotated = await self._add_provenance(schema_name, table_name)
-        await remove_legacy_mappings(self._conn, schema_name, table_name)
-        return newly_annotated
+        # ProvSQL's add_provenance is idempotent (1.9.0+), but its
+        # NOTICE-and-no-op path is indistinguishable from a real annotation, so
+        # the existence check is what computes this method's return value.
+        async with self._conn.transaction():
+            cursor = await self._conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = %s AND table_name = %s AND column_name = 'provsql')",
+                (schema_name, table_name),
+            )
+            result = await cursor.fetchone()
+            already_annotated = result[0] if result else False
+
+        if already_annotated:
+            logger.info(
+                f"Provenance column for table '{table_name}' already exists, skipping"
+            )
+            return False
+
+        try:
+            async with self._conn.transaction():
+                # Check if provsql is already installed
+                cursor = await self._conn.execute(
+                    "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'provsql')"
+                )
+                provsql_installed = (await cursor.fetchone())[0]
+
+                if not provsql_installed:
+                    # provsql is not installed — verify the current user is a superuser before attempting
+                    cursor = await self._conn.execute(
+                        "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
+                    )
+                    row = await cursor.fetchone()
+                    is_superuser = row[0] if row else False
+
+                    if not is_superuser:
+                        raise ProvSqlMissingError(
+                            "ProvSQL extension is not installed and the current database user is not a superuser. "
+                            "Please ask a superuser to install the extension with: CREATE EXTENSION provsql CASCADE"
+                        )
+
+                    await self._conn.execute(
+                        "CREATE EXTENSION IF NOT EXISTS provsql CASCADE"
+                    )
+                await self._set_search_path(schema_name)
+                await self._conn.execute("SELECT add_provenance(%s)", (table_name,))
+        except (errors.UndefinedFile, errors.FeatureNotSupported) as e:
+            logger.error(
+                f"ProvSQL extension is not installed on the postgres server: {e}"
+            )
+            raise ProvSqlMissingError(
+                f"ProvSQL extension is not installed or not available: {e!s}"
+            ) from e
+        except errors.UndefinedTable as e:
+            logger.warning(
+                f"Table '{table_name}' does not exist in schema '{schema_name}': {e}"
+            )
+            raise TableOrSchemaNotFoundError(
+                table_name=table_name, schema_name=schema_name
+            ) from e
+
+        return True
 
     async def disable(self, schema_name: str, table_name: str) -> None:
         """
@@ -148,8 +204,6 @@ class ProvSqlRepository:
         # used to carry).
         async with self._conn.transaction():
             await self._conn.execute("SELECT remove_provenance(%s)", (table_name,))
-
-        await remove_legacy_mappings(self._conn, schema_name, table_name)
 
     async def set_probabilities(
         self, schema_name: str, table_name: str, column: str | None
@@ -442,69 +496,6 @@ class ProvSqlRepository:
         await self._conn.execute(
             SQL("SET search_path TO {}, public, provsql;").format(Identifier(schema_name))
         )
-
-    async def _add_provenance(self, schema_name: str, table_name: str) -> bool:
-        """Add ProvSQL's provenance to a table, and return whether it was missing."""
-        # ProvSQL's add_provenance is idempotent (1.9.0+), but its
-        # NOTICE-and-no-op path is indistinguishable from a real annotation, so
-        # the existence check is what computes this method's return value.
-        async with self._conn.transaction():
-            cursor = await self._conn.execute(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = %s AND table_name = %s AND column_name = 'provsql')",
-                (schema_name, table_name),
-            )
-            result = await cursor.fetchone()
-            already_annotated = result[0] if result else False
-
-        if already_annotated:
-            logger.info(
-                f"Provenance column for table '{table_name}' already exists, skipping"
-            )
-            return False
-
-        try:
-            async with self._conn.transaction():
-                # Check if provsql is already installed
-                cursor = await self._conn.execute(
-                    "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'provsql')"
-                )
-                provsql_installed = (await cursor.fetchone())[0]
-
-                if not provsql_installed:
-                    # provsql is not installed — verify the current user is a superuser before attempting
-                    cursor = await self._conn.execute(
-                        "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
-                    )
-                    row = await cursor.fetchone()
-                    is_superuser = row[0] if row else False
-
-                    if not is_superuser:
-                        raise ProvSqlMissingError(
-                            "ProvSQL extension is not installed and the current database user is not a superuser. "
-                            "Please ask a superuser to install the extension with: CREATE EXTENSION provsql CASCADE"
-                        )
-
-                    await self._conn.execute(
-                        "CREATE EXTENSION IF NOT EXISTS provsql CASCADE"
-                    )
-                await self._set_search_path(schema_name)
-                await self._conn.execute("SELECT add_provenance(%s)", (table_name,))
-        except (errors.UndefinedFile, errors.FeatureNotSupported) as e:
-            logger.error(
-                f"ProvSQL extension is not installed on the postgres server: {e}"
-            )
-            raise ProvSqlMissingError(
-                f"ProvSQL extension is not installed or not available: {e!s}"
-            ) from e
-        except errors.UndefinedTable as e:
-            logger.warning(
-                f"Table '{table_name}' does not exist in schema '{schema_name}': {e}"
-            )
-            raise TableOrSchemaNotFoundError(
-                table_name=table_name, schema_name=schema_name
-            ) from e
-
-        return True
 
     async def _create_mapping_view(self, schema_name: str) -> None:
         """
