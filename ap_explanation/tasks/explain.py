@@ -12,7 +12,7 @@ import logging
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import (
     get_cache_provider,
-    get_lock_provider,
+    locked,
     provenance_service_for,
 )
 from ap_explanation.domains.provenance_analytical_pattern import (
@@ -84,14 +84,11 @@ def explain_task(
 
     # Acquire lock to ensure exclusive access to the database during the explain operation
     # TODO: We could consider finer-grained locks in the future, e.g. per-table instead of per-db, to allow more concurrency
-    lock_provider = get_lock_provider()
-    lock_key = f"explain_lock:{db_name}"
-
-    logger.info(f"[task:{self.request.id}] Acquiring lock '{lock_key}'")
-    with lock_provider.acquire(lock_key):
-        logger.info(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
+    logger.info(f"[task:{self.request.id}] Acquiring the lock of '{db_name}'")
+    with locked(db_name):
+        logger.info(f"[task:{self.request.id}] Acquired the lock of '{db_name}'")
         res = _run_in_thread(_explain(ap, semiring_name, compute_probability))
-        logger.info(f"[task:{self.request.id}] Released lock '{lock_key}'")
+    logger.info(f"[task:{self.request.id}] Released the lock of '{db_name}'")
 
     cache.set(cache_key, res)
     logger.debug(

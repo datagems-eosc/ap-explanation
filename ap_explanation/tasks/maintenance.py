@@ -15,7 +15,7 @@ import logging
 from psycopg import AsyncConnection
 
 from ap_explanation.celery_app import celery_app
-from ap_explanation.di import find_database, get_lock_provider
+from ap_explanation.di import find_database, locked
 from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.settings import settings
@@ -45,9 +45,8 @@ def circuit_cleanup_task(self, db_name: str) -> dict:
         ``wires_before``, ``wires_after``, ``extra_bytes_before``,
         ``extra_bytes_after``.
     """
-    lock_key = f"explain_lock:{db_name}"
-    logger.info(f"[task:{self.request.id}] Acquiring lock '{lock_key}' for circuit cleanup")
-    with get_lock_provider().acquire(lock_key):
+    logger.info(f"[task:{self.request.id}] Acquiring the lock of '{db_name}' for circuit cleanup")
+    with locked(db_name):
         res = _run_in_thread(_do_circuit_cleanup(db_name))
     logger.info(f"[task:{self.request.id}] Circuit cleanup of '{db_name}': {res}")
     return res

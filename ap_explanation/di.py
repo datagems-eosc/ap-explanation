@@ -1,7 +1,7 @@
 import logging
 import threading
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AbstractContextManager, asynccontextmanager
 from functools import lru_cache
 
 from fastapi import FastAPI
@@ -38,6 +38,11 @@ query_limits = QueryLimits()
 
 def get_lock_provider() -> LockProvider:
     return lock_provider
+
+
+def locked(db_name: str) -> AbstractContextManager[None]:
+    """Keep the tasks of a database from running at the same time."""
+    return get_lock_provider().acquire(f"explain_lock:{db_name}")
 
 
 def get_cache_provider() -> CacheProvider:
