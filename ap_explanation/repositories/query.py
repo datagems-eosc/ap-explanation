@@ -1,10 +1,9 @@
 from collections import defaultdict
-from contextlib import AbstractAsyncContextManager, nullcontext
 from logging import getLogger
 from typing import LiteralString, cast
 
 from orjson import dumps
-from psycopg import AsyncConnection, Rollback, errors
+from psycopg import AsyncConnection, errors
 from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
@@ -23,6 +22,7 @@ from ap_explanation.repositories.provsql import (
     references_in,
     set_search_path,
 )
+from ap_explanation.repositories.query_guard import QueryGuard
 from ap_explanation.settings import QueryLimits
 
 logger = getLogger(__name__)
@@ -54,7 +54,7 @@ class QueryRepository:
         self._conn = conn
         self._sql_rewriter = sql_rewriter
         self._limits = limits or QueryLimits()
-        self._budget = budget
+        self._guard = QueryGuard(conn, self._limits, budget)
 
     @classmethod
     async def create(
@@ -101,7 +101,7 @@ class QueryRepository:
 
         Raises:
             QueryLimitExceededError: If the query ran past one of the
-                repository's :class:`QueryLimits`
+                :class:`QueryLimits`
         """
         # The semirings whose aggregate formula is read as rows
         rows_semirings = (
@@ -120,13 +120,13 @@ class QueryRepository:
         try:
             await set_search_path(self._conn, schema_name)
             async with self._conn.transaction():
-                await self._apply_limits()
-                aggregated_rows = await self._check_aggregated_rows(query)
+                await self._guard.apply_limits()
+                aggregated_rows = await self._guard.check_aggregated_rows(query)
 
             # Waiting for the server's budget outside a transaction: an idle one
             # would hold back VACUUM, or be ended by idle_in_transaction_session_timeout
-            async with self._reserve(aggregated_rows), self._conn.transaction():
-                await self._apply_limits()
+            async with self._guard.reserve(aggregated_rows), self._conn.transaction():
+                await self._guard.apply_limits()
 
                 if rows_semirings:
                     # An aggregate's token is only valid in the statement that built it, or
@@ -243,96 +243,6 @@ class QueryRepository:
             return rows[0][1], False
         return "\n".join(f"{name} = {formula}" for name, formula in rows[:limit]), len(rows) > limit
 
-    async def _check_aggregated_rows(self, query: str) -> int:
-        """
-        The rows the aggregates of *query* receive, refusing it past
-        ``max_aggregated_rows``, before its provenance is built.
-
-        PostgreSQL's estimates cannot tell: on joins on expressions
-        (``ROUND(CAST(latitude AS DECIMAL), 1)``) it estimates 1 row where an
-        aggregate gets 24 million. So the query runs once without provenance,
-        under ``EXPLAIN ANALYZE`` and ``precheck_timeout``, and the actual rows
-        going into each aggregate are read from the plan. Without provenance
-        this costs a fraction of the provenance query.
-
-        Returns:
-            The rows of all its aggregates: each builds a gate per row.
-            0 without an aggregate, or with ``max_aggregated_rows`` unset
-
-        Raises:
-            QueryLimitExceededError: If its aggregates receive too many rows,
-                or the plain query runs past ``precheck_timeout``
-        """
-        limit = self._limits.max_aggregated_rows
-        if limit is None:
-            return 0
-        rows = 0
-        try:
-            # A savepoint rolled back on the way out, undoing the SET LOCALs
-            async with self._conn.transaction():
-                await self._conn.execute("SET LOCAL provsql.active = 0")
-                await self._conn.execute(
-                    "SELECT set_config('statement_timeout', %s, true)",
-                    (self._limits.precheck_timeout,),
-                )
-                cursor = await self._conn.execute(SQL(cast(LiteralString, f"EXPLAIN (FORMAT JSON) {query}")))
-                # Without an aggregate in its plan, the query has nothing to count: no need to run it
-                if _aggregated_rows((await cursor.fetchone())[0][0]["Plan"]):
-                    cursor = await self._conn.execute(
-                        SQL(cast(LiteralString, f"EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) {query}"))
-                    )
-                    rows = sum(_aggregated_rows((await cursor.fetchone())[0][0]["Plan"]))
-                raise Rollback()
-        except errors.QueryCanceled as e:
-            if "statement timeout" not in str(e):
-                raise
-            raise QueryLimitExceededError(
-                "the plain query's statement_timeout", self._limits.precheck_timeout,
-                "the query takes too long even without provenance to explain it",
-            ) from e
-
-        if rows > limit:
-            raise QueryLimitExceededError(
-                "max_aggregated_rows", f"{limit:,}",
-                f"the aggregates of the query receive {rows:,} rows",
-            )
-        return rows
-
-    def _reserve(self, aggregated_rows: int) -> AbstractAsyncContextManager[None]:
-        """
-        Hold the rows of the provenance query out of its server's
-        ``max_aggregated_rows``, shared with the queries of all its databases,
-        waiting until the others leave enough.
-        """
-        budget = self._limits.max_aggregated_rows
-        if self._budget is None or budget is None:
-            return nullcontext()
-        least = self._limits.min_reserved_rows
-        rows = max(aggregated_rows, budget // 8 if least is None else least)
-        info = self._conn.info
-        return self._budget.reserve(f"{info.host}:{info.port}", min(rows, budget), budget)
-
-    async def _apply_limits(self) -> None:
-        """
-        Apply the repository's :class:`QueryLimits` to the current transaction.
-
-        ``set_config(..., true)`` is ``SET LOCAL`` with bound parameters: the
-        settings revert at commit, so annotation and the other services on the
-        database keep the server's values. Each one is set in its own
-        savepoint so that a parameter the user may not set (temp_file_limit
-        needs superuser or GRANT SET) is skipped rather than failing the query.
-        """
-        for name, value in self._limits.settings().items():
-            try:
-                async with self._conn.transaction():
-                    await self._conn.execute(
-                        "SELECT set_config(%s, %s, true)", (name, value)
-                    )
-            except errors.InsufficientPrivilege as e:
-                logger.warning(
-                    f"Cannot set {name} = {value}, leaving the server's value: {e}"
-                )
-
     async def _fetch_related_data(self, provenance: str) -> list[dict]:
         # Group by table
         table_groups = defaultdict(list)
@@ -366,99 +276,3 @@ class QueryRepository:
                     )
 
         return results
-
-    async def get_schema_definition(self, schema_name: str) -> str:
-        """
-        Retrieve schema information such as table and column names for the specified schema.
-
-        Args:
-            schema_name: The name of the database schema to retrieve information for.
-        Returns:
-            A string containing schema information, including tables, columns, and relationships.
-        """
-        # NOTE: The simplest way to do this would be to use pg_dump with postgres.
-        # However, we use this kind of convoluted method to be able to support a large panel of databases.
-        # This may not be sufficient to support all db, in which case we can consider implementing multiple strategies for schema retrieval
-
-        # Pseudo string builder for schema info, can be replaced with structured dict if needed
-        sb = []
-        async with self._conn.cursor() as cur:
-            # 1. Get all tables in the schema
-            await cur.execute(
-                """
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = %s
-                AND table_type='BASE TABLE'
-                ORDER BY table_name
-            """,
-                (schema_name,),
-            )
-            tables = [row[0] for row in await cur.fetchall()]
-
-            for table_name in tables:
-                # 2. Get columns for this table
-                await cur.execute(
-                    """
-                    SELECT column_name, data_type, is_nullable, column_default
-                    FROM information_schema.columns
-                    WHERE table_schema = %s
-                    AND table_name = %s
-                    ORDER BY ordinal_position
-                """,
-                    (schema_name, table_name),
-                )
-                columns = await cur.fetchall()
-
-                # 3. Collect column definitions
-                col_defs = []
-                for col_name, data_type, is_nullable, col_default in columns:
-                    nullable = "" if is_nullable == "NO" else " NULL"
-                    default = f" DEFAULT {col_default}" if col_default else ""
-                    col_defs.append(f"    {col_name} {data_type}{nullable}{default}")
-
-                # 4. Print CREATE TABLE once per table
-                sb.append(f"--\n-- Table: {schema_name}.{table_name}\n--")
-                sb.append(
-                    f"CREATE TABLE {schema_name}.{table_name} (\n"
-                    + ",\n".join(col_defs)
-                    + "\n);\n"
-                )
-
-                # 5. Add primary key once per table
-                await cur.execute(
-                    """
-                    SELECT kcu.column_name
-                    FROM information_schema.table_constraints tc
-                    JOIN information_schema.key_column_usage kcu
-                    ON tc.constraint_name = kcu.constraint_name
-                    WHERE tc.table_schema = %s
-                    AND tc.table_name = %s
-                    AND tc.constraint_type = 'PRIMARY KEY'
-                    ORDER BY kcu.ordinal_position
-                """,
-                    (schema_name, table_name),
-                )
-                pk_columns = [row[0] for row in await cur.fetchall()]
-                if pk_columns:
-                    pk_cols = ", ".join(pk_columns)
-                    sb.append(
-                        f"ALTER TABLE {schema_name}.{table_name} ADD PRIMARY KEY ({pk_cols});\n"
-                    )
-
-        return "\n".join(sb)
-
-
-def _aggregated_rows(node: dict) -> list[int]:
-    """The actual rows going into each aggregate of an ``EXPLAIN ANALYZE`` plan."""
-    found = []
-    if "Aggregate" in node["Node Type"]:
-        # Its input, not the subqueries of its expressions (InitPlan, SubPlan)
-        found.append(sum(
-            int(child.get("Actual Rows", 0) * child.get("Actual Loops", 1))
-            for child in node.get("Plans", [])
-            if child.get("Parent Relationship") == "Outer"
-        ))
-    for child in node.get("Plans", []):
-        found.extend(_aggregated_rows(child))
-    return found

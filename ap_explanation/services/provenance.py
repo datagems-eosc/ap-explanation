@@ -15,6 +15,7 @@ from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.annotation import AnnotationRepository
 from ap_explanation.repositories.provsql import activate_provsql
 from ap_explanation.repositories.query import QueryRepository
+from ap_explanation.repositories.schema import SchemaRepository
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.settings import QueryLimits
 
@@ -28,11 +29,19 @@ class ProvenanceService:
 
     _queries: QueryRepository
     _annotations: AnnotationRepository
+    _schemas: SchemaRepository
     _explainer: Explainer
 
-    def __init__(self, queries: QueryRepository, annotations: AnnotationRepository, explainer: Explainer):
+    def __init__(
+        self,
+        queries: QueryRepository,
+        annotations: AnnotationRepository,
+        schemas: SchemaRepository,
+        explainer: Explainer,
+    ):
         self._queries = queries
         self._annotations = annotations
+        self._schemas = schemas
         self._explainer = explainer
 
     @classmethod
@@ -50,7 +59,7 @@ class ProvenanceService:
         """
         await activate_provsql(conn)
         queries = await QueryRepository.create(conn, sql_rewriter, limits, budget)
-        return cls(queries, AnnotationRepository(conn), explainer)
+        return cls(queries, AnnotationRepository(conn), SchemaRepository(conn), explainer)
 
     async def explain_ap(
         self,
@@ -96,10 +105,6 @@ class ProvenanceService:
 
         # 3. Compute NL explanation (if enabled)
         explanation = await self.explain(ds.schema_name, query, derivations)
-
-        # # 4. Remove annotation (see provsql issue #67 workaround)
-        # for table_name in ds.table_names:
-        #     await self.remove_annotation(table_name, ds.schema_name)
 
         return Provenance(derivations=derivations, explanation=explanation)
 
@@ -192,9 +197,11 @@ class ProvenanceService:
             # the semirings supporting aggregates evaluate it
             if "does not support value gates" not in str(e):
                 raise
-            aggregate_semirings = [s for s in semirings if s.supports_aggregates]
+            aggregate_semirings = [
+                s for s in semirings if s.supports_aggregates]
             if not aggregate_semirings:
-                raise AggregateSemiringError([s.name for s in semirings]) from e
+                raise AggregateSemiringError(
+                    [s.name for s in semirings]) from e
             if aggregate_semirings == semirings:
                 raise
             return await self._queries.query(schema_name, sql_query, aggregate_semirings, compute_probability)
@@ -203,5 +210,5 @@ class ProvenanceService:
         """
         Generate a human-readable explanation from provenance results.
         """
-        schema = await self._queries.get_schema_definition(schema_name)
+        schema = await self._schemas.get_definition(schema_name)
         return await self._explainer.explain(sql_query, str(provenance_results), schema)

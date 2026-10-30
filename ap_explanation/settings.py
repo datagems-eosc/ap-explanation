@@ -91,7 +91,7 @@ class QueryLimits(BaseSettings):
     #: million rows on a 3 GB server, ProvSQL's store worker is killed and the
     #: whole server restarts, and the queries of all its databases add up.
     #: Counted by running the plain query first (see
-    #: QueryRepository._check_aggregated_rows); None skips the check.
+    #: QueryGuard.check_aggregated_rows); None skips the check.
     max_aggregated_rows: Annotated[int | None, _EmptyIsNone] = 8_000_000
     #: Rows each query reserves at least, whatever its aggregates: the
     #: evaluations of queries running at once add up in the store worker too.

@@ -87,7 +87,7 @@ def test_aggregated_rows_reads_the_input_of_each_aggregate():
             ]},
         ],
     }
-    from ap_explanation.repositories.query import _aggregated_rows
+    from ap_explanation.repositories.query_guard import _aggregated_rows
 
     assert _aggregated_rows(plan) == [3000, 7]
 
