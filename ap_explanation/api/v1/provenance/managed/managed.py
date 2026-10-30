@@ -6,10 +6,10 @@ from fastapi import Depends, Query, Response, status
 from pydantic import BaseModel
 
 from ap_explanation.api.middlewares.auth import require_authentication
-from ap_explanation.domains.provenance_analytical_pattern import (
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
-from ap_explanation.semirings import semirings
+from ap_explanation.domains.provenance.semiring import semirings
 from ap_explanation.tasks.explain import explain_task
 
 SemiringName = StrEnum("SemiringName", {s.name: s.name for s in semirings})

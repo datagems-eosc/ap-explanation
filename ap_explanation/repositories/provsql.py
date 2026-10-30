@@ -22,8 +22,9 @@ from psycopg.rows import dict_row
 from psycopg.sql import SQL, Identifier, Literal
 from psycopg.types.json import set_json_dumps
 
-from ap_explanation.domains.provenance import Derivation, SemiringProvenance
-from ap_explanation.domains.semiring import MAPPING_VIEW, DbSemiring
+from ap_explanation.domains.provenance.derivation import Derivation, SemiringProvenance
+from ap_explanation.domains.provenance.semiring import MAPPING_VIEW, DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import (
     DatabaseInUseError,
     InvalidProbabilityColumnError,
@@ -34,7 +35,6 @@ from ap_explanation.errors import (
     TableOrSchemaNotFoundError,
 )
 from ap_explanation.internal.distributed_lock import RedisRowBudget
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.legacy_mappings import remove_legacy_mappings
 from ap_explanation.repositories.query_guard import QueryGuard
 from ap_explanation.settings import QueryLimits

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ap_explanation.domains.provenance_analytical_pattern import (
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
 

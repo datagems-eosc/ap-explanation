@@ -50,7 +50,7 @@ The service has specific database prerequisites:
 
 ### Semiring Annotations
 
-The service supports the following ProvSQL built-in semirings, all defined in `ap_explanation/semirings.py`:
+The service supports the following ProvSQL built-in semirings, all defined in `ap_explanation/domains/provenance/semiring.py`:
 
 | Name | ProvSQL function | Description |
 |---|---|---|
@@ -69,7 +69,7 @@ Every semiring reads the same labels:
 
 ### SQL Rewriting
 
-The `SqlRewriter` class (`internal/sql_rewriter.py`) transforms SQL queries to include provenance tracking:
+The `SqlRewriter` class (`domains/provenance/sql_rewriter.py`) transforms SQL queries to include provenance tracking:
 
 **Non-aggregate queries:**
 ```sql

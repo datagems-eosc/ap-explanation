@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 from sqlglot import parse_one
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import AggregateSemiringError
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 
 # Each case directory holds a query.sql and an expected_<name>.sql per rewriting
 # it tests, <name> being a semiring name or "probability"

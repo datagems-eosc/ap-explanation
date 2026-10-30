@@ -12,7 +12,7 @@ from pathlib import Path
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier, Literal
 
-from ap_explanation.domains.data_sources import CsvSetDataSource, DataSource
+from ap_explanation.domains.provenance.data_sources import CsvSetDataSource, DataSource
 
 logger = logging.getLogger(__name__)
 

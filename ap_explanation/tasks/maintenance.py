@@ -16,7 +16,7 @@ from psycopg import AsyncConnection
 
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import find_database, locked
-from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.settings import settings
 from ap_explanation.tasks.explain import _run_in_thread

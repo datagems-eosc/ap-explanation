@@ -1,7 +1,7 @@
 
 import pytest
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import (
     AggregateSemiringError,
     TableNotAnnotatedError,

@@ -8,7 +8,7 @@ anymore, and annotating a table again removes them.
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import TableNotAnnotatedError
 from ap_explanation.repositories.provsql import references_in
 from ap_explanation.services.provenance import ProvenanceService

@@ -12,8 +12,8 @@ Cases covered:
 import pytest
 from psycopg import AsyncConnection
 
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import ProvSqlMissingError
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.provsql import ProvSqlRepository
 
 

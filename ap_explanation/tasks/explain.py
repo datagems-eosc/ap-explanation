@@ -15,7 +15,7 @@ from ap_explanation.di import (
     locked,
     provenance_service_for,
 )
-from ap_explanation.domains.provenance_analytical_pattern import (
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
 from ap_explanation.internal.cache import RedisCacheProvider

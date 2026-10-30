@@ -1,20 +1,20 @@
 from psycopg import AsyncConnection
 
-from ap_explanation.domains.provenance import (
+from ap_explanation.domains.nl_explanation import Explainer
+from ap_explanation.domains.provenance.derivation import (
     Derivation,
     Provenance,
 )
-from ap_explanation.domains.provenance_analytical_pattern import (
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import semirings as all_semirings
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import AggregateSemiringError, ProvSqlInternalError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
-from ap_explanation.internal.explainer import Explainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.repositories.schema import SchemaRepository
-from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.settings import QueryLimits
 
 

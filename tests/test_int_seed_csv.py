@@ -6,7 +6,7 @@ from moma_management.domain.generated.nodes.node_schema import Node
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier
 
-from ap_explanation.domains.data_sources.csv_set_ds import CsvSetDataSource
+from ap_explanation.domains.provenance.data_sources.csv_set_ds import CsvSetDataSource
 from ap_explanation.repositories.seeding import seed_database
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"

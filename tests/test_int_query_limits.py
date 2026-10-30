@@ -10,11 +10,11 @@ from psycopg import AsyncConnection
 from psycopg.pq import TransactionStatus
 from testcontainers.community.redis import RedisContainer
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.nl_explanation.noop_explainer import NoOpExplainer
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import QueryLimitExceededError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
-from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.settings import QueryLimits
 from tests.conftest import TestSchema

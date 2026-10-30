@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from psycopg import AsyncConnection
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import InvalidProbabilityColumnError
 from ap_explanation.services.provenance import ProvenanceService
 from tests.conftest import TestSchema

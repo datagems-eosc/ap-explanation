@@ -66,17 +66,17 @@ ap_explanation/
 │   ├── seeding.py       # Sets a database up for a data source (CSV)
 │   └── legacy_mappings.py   # What earlier versions left in annotated databases
 ├── internal/            # Internal modules
-│   ├── explainer/       # LLM-powered NL explanations
 │   ├── cache.py         # Redis cache provider
-│   ├── distributed_lock.py  # Redis distributed lock
-│   └── sql_rewriter.py  # SQL rewriting for provenance
-├── domains/             # Domain types
-│   ├── data_sources/    # Data source types (relational DB, CSV set)
-│   ├── provenance_analytical_pattern.py
-│   ├── semiring.py
-│   └── provenance.py
+│   └── distributed_lock.py  # Redis distributed lock
+├── domains/             # One directory per domain
+│   ├── provenance/
+│   │   ├── data_sources/    # Data source types (relational DB, CSV set)
+│   │   ├── derivation.py    # Results: Derivation, Provenance
+│   │   ├── provenance_analytical_pattern.py
+│   │   ├── semiring.py      # DbSemiring and the configured semirings
+│   │   └── sql_rewriter.py  # SQL rewriting for provenance
+│   └── nl_explanation/  # LLM-powered NL explanations
 ├── errors/              # Custom exceptions
-├── semirings.py         # Semiring configurations
 ├── di.py                # Dependency injection & lifespan
 ├── settings.py          # Configuration, read from the environment
 ├── celery_app.py        # Celery application
@@ -87,7 +87,7 @@ ap_explanation/
 
 ## Adding a New Semiring
 
-1. **Define the semiring** in `ap_explanation/semirings.py`:
+1. **Define the semiring** in `ap_explanation/domains/provenance/semiring.py`:
 
 ```python
 DbSemiring(

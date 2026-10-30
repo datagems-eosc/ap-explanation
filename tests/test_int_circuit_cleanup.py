@@ -6,10 +6,10 @@ database to itself.
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.nl_explanation.noop_explainer import NoOpExplainer
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import DatabaseInUseError
-from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.tasks import maintenance
 from tests.conftest import TestSchema

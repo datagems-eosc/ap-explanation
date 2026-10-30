@@ -2,7 +2,7 @@
 
 import pytest
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import TableOrSchemaNotFoundError
 from ap_explanation.services.provenance import ProvenanceService
 from tests.conftest import TestSchema

@@ -10,8 +10,14 @@ from psycopg.conninfo import make_conninfo
 from psycopg_pool import AsyncConnectionPool
 
 from ap_explanation.celery_app import celery_app
-from ap_explanation.domains.data_sources import DataSource
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.nl_explanation import (
+    Explainer,
+    ExplanationAgent,
+    NoOpExplainer,
+)
+from ap_explanation.domains.provenance.data_sources import DataSource
+from ap_explanation.domains.provenance.semiring import DbSemiring, semirings
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors.exceptions import DatabaseNotFoundError
 from ap_explanation.internal.cache import CacheProvider, RedisCacheProvider
 from ap_explanation.internal.distributed_lock import (
@@ -19,10 +25,7 @@ from ap_explanation.internal.distributed_lock import (
     RedisLockProvider,
     RedisRowBudget,
 )
-from ap_explanation.internal.explainer import Explainer, ExplanationAgent, NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.seeding import seed_database
-from ap_explanation.semirings import semirings
 from ap_explanation.services.authentication import Authentication
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.settings import QueryLimits, settings

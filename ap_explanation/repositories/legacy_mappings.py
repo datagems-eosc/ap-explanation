@@ -12,7 +12,7 @@ from logging import getLogger
 from psycopg import AsyncConnection
 from psycopg.sql import SQL, Identifier
 
-from ap_explanation.semirings import semirings
+from ap_explanation.domains.provenance.semiring import semirings
 
 logger = getLogger(__name__)
 

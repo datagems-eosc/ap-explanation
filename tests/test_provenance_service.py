@@ -2,8 +2,8 @@
 
 import pytest
 
-from ap_explanation.domains.provenance import Derivation
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.derivation import Derivation
+from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import AggregateSemiringError, ProvSqlInternalError
 from ap_explanation.services.provenance import ProvenanceService
 

@@ -17,13 +17,13 @@ from pathlib import Path
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.domains.provenance_analytical_pattern import (
+from ap_explanation.domains.nl_explanation.noop_explainer import NoOpExplainer
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import TableOrSchemaNotFoundError
-from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
 from ap_explanation.repositories.seeding import seed_database
 from ap_explanation.services.provenance import ProvenanceService
 

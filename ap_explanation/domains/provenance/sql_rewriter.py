@@ -25,7 +25,7 @@ from sqlglot.expressions import (
     alias_,
 )
 
-from ap_explanation.domains.semiring import MAPPING_VIEW, DbSemiring
+from ap_explanation.domains.provenance.semiring import MAPPING_VIEW, DbSemiring
 from ap_explanation.errors import AggregateSemiringError
 
 

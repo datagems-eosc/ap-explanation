@@ -1,4 +1,4 @@
-from ap_explanation.internal.explainer.explainer import Explainer
+from ap_explanation.domains.nl_explanation.explainer import Explainer
 
 
 class NoOpExplainer(Explainer):

@@ -26,6 +26,7 @@
 
 - The schema description given to the LLM now has its tables' columns and primary keys: the lookups never matched, so it listed empty tables.
 - Internal modules renamed: `types` → `domains`, `repository` → `repositories`, `middlewares` → `api/middlewares`.
+- Domains split by subject: `domains/provenance` (with `sql_rewriter` and the semirings, and `provenance.py` renamed `derivation.py`) and `domains/nl_explanation` (formerly `internal/explainer`).
 - Cached results are keyed on the new `probability` flag too, so entries cached before the upgrade are not reused.
 - The per-database lock is extended while its work runs, so an hour-long annotation no longer outlives it (letting a second worker in, then failing a finished task on release). It now expires 5 minutes after a crashed holder, instead of an hour.
 
