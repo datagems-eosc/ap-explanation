@@ -1,7 +1,7 @@
 """
-Every semiring using the same mapping strategy shares one mapping table per
-table. Earlier versions created one identical table per semiring; databases
-annotated by them keep working, and are migrated when annotated again.
+Every semiring shares one mapping table per table. Earlier versions created
+one identical table per semiring; databases annotated by them keep working, and
+are migrated when annotated again.
 """
 
 import pytest

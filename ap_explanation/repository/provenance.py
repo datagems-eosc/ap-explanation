@@ -18,7 +18,12 @@ from ap_explanation.errors import (
 )
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
+from ap_explanation.repository.provsql import (
+    MAPPING_TABLE_SUFFIX,
+    REFERENCE_COLUMN,
+    reference_default,
+    references_in,
+)
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.types.provenance import Derivation, SemiringProvenance
 from ap_explanation.types.semiring import DbSemiring
@@ -226,7 +231,7 @@ class ProvenanceRepository:
                                 row[f"{semiring.rows_function}_token"], semiring)
                             provenance[semiring.name] = SemiringProvenance(
                                 expression=expression,
-                                data=await self._fetch_related_data(expression, semiring),
+                                data=await self._fetch_related_data(expression),
                                 truncated=truncated,
                             )
                         elif semiring.retrieval_function in row:
@@ -234,7 +239,7 @@ class ProvenanceRepository:
                             expression = row[semiring.retrieval_function] or ""
                             provenance[semiring.name] = SemiringProvenance(
                                 expression=expression,
-                                data=await self._fetch_related_data(expression, semiring),
+                                data=await self._fetch_related_data(expression),
                             )
 
                     results.append(
@@ -301,7 +306,7 @@ class ProvenanceRepository:
             SQL("SELECT (f.r).name, (f.r).formula FROM ("
                 "SELECT provsql.{}(%s::uuid, %s::regclass) AS r LIMIT %s) AS f").format(
                 Identifier(cast(str, semiring.rows_function))),
-            (token, semiring.mapping_table, limit + 1),
+            (token, semiring.union_table_name, limit + 1),
         )
         rows = await cursor.fetchall()
         if len(rows) == 1:
@@ -565,10 +570,9 @@ class ProvenanceRepository:
         """
         Add a semiring's provenance annotations to an existing table that have provenance enabled.
 
-        The mapping table is shared by every semiring using the same mapping
-        strategy, as its contents only depend on the strategy: enabling a
-        second semiring on a table only adds the table to that semiring's
-        union view. A table annotated by an earlier version, which kept one
+        The mapping table is shared by every semiring, as its contents do not
+        depend on the semiring: enabling a second semiring on a table only adds
+        the table to that semiring's union view. A table annotated by an earlier version, which kept one
         identical mapping table per semiring, is migrated: one of its current
         per-semiring tables is renamed to the shared name and the others are
         dropped. Tables of the schema not annotated again keep their
@@ -581,13 +585,8 @@ class ProvenanceRepository:
             True if the mapping table was newly created (or rebuilt from an
             outdated format), False if it was already in place.
         """
-        prov_table = semiring.get_provenance_table_name_for(table_name)
-        strategy = semiring.mappingStrategy
-        legacy_tables = [
-            s.get_legacy_provenance_table_name_for(table_name)
-            for s in all_semirings
-            if s.mappingStrategy.name == strategy.name
-        ]
+        prov_table = f"{table_name}{MAPPING_TABLE_SUFFIX}"
+        legacy_tables = [s.get_legacy_provenance_table_name_for(table_name) for s in all_semirings]
 
         await self._set_search_path(schema_name)
 
@@ -598,7 +597,7 @@ class ProvenanceRepository:
         legacy_tables = [t for t in legacy_tables if t in existing]
 
         if prov_table in existing and not legacy_tables and await self._mapping_is_current(
-            schema_name, table_name, prov_table, strategy
+            schema_name, table_name, prov_table
         ):
             logger.info(
                 f"Provenance table '{prov_table}' already exists, skipping creation"
@@ -612,12 +611,11 @@ class ProvenanceRepository:
         enabled = await self._enabled_semirings(schema_name)
 
         if prov_table in existing and not await self._mapping_is_current(
-            schema_name, table_name, prov_table, strategy
+            schema_name, table_name, prov_table
         ):
-            # Built by a different mapping strategy (a pre-KeyMapping ctid
-            # mapping, or one predating maintained registration): its stored
-            # values cannot be converted, so rebuild from the tokens the source
-            # table currently holds.
+            # Built by an earlier version (a ctid mapping, or one predating
+            # maintained registration): its stored values cannot be converted,
+            # so rebuild from the tokens the source table currently holds.
             logger.info(
                 f"Provenance table '{prov_table}' is not a current maintained mapping, rebuilding"
             )
@@ -629,9 +627,7 @@ class ProvenanceRepository:
 
         if prov_table not in existing:
             for legacy_table in legacy_tables:
-                if await self._mapping_is_current(
-                    schema_name, table_name, legacy_table, strategy
-                ):
+                if await self._mapping_is_current(schema_name, table_name, legacy_table):
                     # The registry keys on the mapping's oid, which a rename
                     # keeps: the mapping stays maintained.
                     logger.info(f"Migrating provenance table '{legacy_table}' to '{prov_table}'")
@@ -658,7 +654,7 @@ class ProvenanceRepository:
                 await self._rebuild_union_mappings(schema_name, [semiring, *enabled])
             return False
 
-        await self._ensure_reference_column(schema_name, table_name, strategy)
+        await self._ensure_reference_column(schema_name, table_name)
 
         try:
             async with self._conn.transaction():
@@ -673,7 +669,7 @@ class ProvenanceRepository:
                 # name: the guard interpolates it as ($1).%I.
                 await self._conn.execute(
                     "SELECT create_provenance_mapping(%s, %s, %s, false, true)",
-                    (prov_table, table_name, strategy.reference_column),
+                    (prov_table, table_name, REFERENCE_COLUMN),
                 )
         except Exception as e:
             logger.error(f"Unexpected error in create_provenance_mapping: {e}")
@@ -717,11 +713,11 @@ class ProvenanceRepository:
                 await self._rebuild_union_mapping(schema_name, semiring)
 
     async def _mapping_is_current(
-        self, schema_name: str, table_name: str, prov_table: str, strategy
+        self, schema_name: str, table_name: str, prov_table: str
     ) -> bool:
         """
-        Check whether an existing mapping table was built by the current
-        strategy, and so can be left alone.
+        Check whether an existing mapping table has the current layout, and so
+        can be left alone.
 
         This is a structural check rather than a check of the stored values:
         the values a mapping built by an older version holds are CTIDs of a
@@ -740,7 +736,7 @@ class ProvenanceRepository:
                 (
                     schema_name,
                     table_name,
-                    strategy.reference_column,
+                    REFERENCE_COLUMN,
                     f"{schema_name}.{prov_table}",
                 ),
             )
@@ -748,18 +744,8 @@ class ProvenanceRepository:
 
         return bool(has_reference_column and is_registered)
 
-    async def _ensure_reference_column(
-        self, schema_name: str, table_name: str, strategy
-    ) -> None:
-        """
-        Add the strategy's reference column to a source table.
-
-        A plain column with a DEFAULT rather than a GENERATED column: ProvSQL's
-        provenance_guard reads it as ``NEW.<column>`` from a BEFORE INSERT
-        trigger, where a generated column is not yet computed.
-        """
-        column = strategy.reference_column
-
+    async def _ensure_reference_column(self, schema_name: str, table_name: str) -> None:
+        """Add the reference column to a source table."""
         await self._set_search_path(schema_name)
 
         async with self._conn.transaction():
@@ -768,8 +754,8 @@ class ProvenanceRepository:
                     "ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} text NOT NULL DEFAULT ({})"
                 ).format(
                     Identifier(table_name),
-                    Identifier(column),
-                    SQL(cast(LiteralString, strategy.encode(table_name))),
+                    Identifier(REFERENCE_COLUMN),
+                    SQL(cast(LiteralString, reference_default(table_name))),
                 )
             )
             # Deliberately not UNIQUE: ProvSQL's data-modification machinery
@@ -777,9 +763,9 @@ class ProvenanceRepository:
             # unique index could reject.
             await self._conn.execute(
                 SQL("CREATE INDEX IF NOT EXISTS {} ON {} ({})").format(
-                    Identifier(f"{table_name}_{column}_idx"),
+                    Identifier(f"{table_name}_{REFERENCE_COLUMN}_idx"),
                     Identifier(table_name),
-                    Identifier(column),
+                    Identifier(REFERENCE_COLUMN),
                 )
             )
 
@@ -789,8 +775,8 @@ class ProvenanceRepository:
         """
         Remove a semiring's provenance annotations from an existing table that have provenance enabled.
 
-        The mapping table is shared by every semiring using the same mapping
-        strategy, so this removes the table from all of them.
+        The mapping table is shared by every semiring, so this removes the
+        table from all of them.
 
         Args:
             schema_name: The schema where the base table is located.
@@ -800,7 +786,7 @@ class ProvenanceRepository:
 
         """
         prov_tables = [
-            semiring.get_provenance_table_name_for(table_name),
+            f"{table_name}{MAPPING_TABLE_SUFFIX}",
             semiring.get_legacy_provenance_table_name_for(table_name),
         ]
 
@@ -866,9 +852,8 @@ class ProvenanceRepository:
         so that the rows ``provenance_guard`` appends to a maintained mapping
         are visible to queries without re-annotating.
 
-        It reads the mapping tables shared by the semiring's mapping strategy,
-        and the semiring's own tables that earlier versions created, for the
-        tables not migrated yet.
+        It reads the shared mapping tables, and the semiring's own tables that
+        earlier versions created, for the tables not migrated yet.
         """
         await self._set_search_path(schema_name)
 
@@ -881,23 +866,23 @@ class ProvenanceRepository:
             " AND (tablename LIKE %s OR tablename LIKE %s)",
             (
                 schema_name,
-                ending_with(semiring.table_suffix),
+                ending_with(MAPPING_TABLE_SUFFIX),
                 ending_with(semiring.legacy_table_suffix),
             ),
         )
         names = {row[0] for row in await cursor.fetchall()}
-        shared = {n for n in names if n.endswith(semiring.table_suffix)}
+        shared = {n for n in names if n.endswith(MAPPING_TABLE_SUFFIX)}
         legacy = {
             n
             for n in names - shared
             # A table with both would have each of its tokens twice
-            if n.removesuffix(semiring.legacy_table_suffix) + semiring.table_suffix not in shared
+            if n.removesuffix(semiring.legacy_table_suffix) + MAPPING_TABLE_SUFFIX not in shared
         }
         mapping_tables = sorted(shared | legacy)
 
         if not mapping_tables:
             logger.warning(
-                f"No tables ending with {semiring.table_suffix} found in schema {schema_name}"
+                f"No tables ending with {MAPPING_TABLE_SUFFIX} found in schema {schema_name}"
             )
             return False
 
@@ -952,54 +937,36 @@ class ProvenanceRepository:
         )
         await self._conn.execute(query)
 
-    async def _fetch_related_data(
-        self, provenance: str, semiring: DbSemiring
-    ) -> list[dict]:
-        strategy = semiring.mappingStrategy
-        matches = strategy.decode_equation(provenance)
-
+    async def _fetch_related_data(self, provenance: str) -> list[dict]:
         # Group by table
         table_groups = defaultdict(list)
-        for row in matches:
-            table_groups[row["table"]].append(row)
+        for table, reference in references_in(provenance):
+            table_groups[table].append(reference)
 
         results = []
 
         # Query each table for the relevant rows
-        for table, rows in table_groups.items():
-            lookups = [strategy.lookup_value(r) for r in rows]
-
-            # Alias the lookup column so the results can be keyed by it
-            # regardless of whether it is a real column or a system one.
-            query = SQL(
-                "SELECT *, {lookup}::text AS __lookup FROM {table} WHERE {lookup}::text = ANY(%s)"
-            ).format(lookup=Identifier(strategy.lookup_column), table=Identifier(table))
-            cursor = await self._conn.cursor(row_factory=dict_row).execute(
-                query, (lookups,)
+        for table, references in table_groups.items():
+            query = SQL("SELECT * FROM {table} WHERE {column} = ANY(%s)").format(
+                table=Identifier(table), column=Identifier(REFERENCE_COLUMN)
             )
-            data_by_lookup = {r["__lookup"]: r for r in await cursor.fetchall()}
+            cursor = await self._conn.cursor(row_factory=dict_row).execute(
+                query, (references,)
+            )
+            data_by_reference = {r[REFERENCE_COLUMN]: r for r in await cursor.fetchall()}
 
-            for r in rows:
-                lookup = strategy.lookup_value(r)
-                if row := data_by_lookup.get(lookup):
+            for reference in references:
+                if row := data_by_reference.get(reference):
                     row = dict(row)
-                    row.pop("__lookup", None)
-                    row.pop(REFERENCE_COLUMN, None)
+                    row.pop(REFERENCE_COLUMN)
                     # Belt and braces: this query runs with ProvSQL paused, so
                     # there should be no provenance column to strip.
                     row.pop("provsql", None)
 
-                    results.append(
-                        {
-                            "reference": strategy.reference(r),
-                            "data": row,
-                        }
-                    )
+                    results.append({"reference": reference, "data": row})
                 else:
                     logger.warning(
-                        "No data found for %s with reference %s",
-                        table,
-                        strategy.reference(r),
+                        "No data found for %s with reference %s", table, reference
                     )
 
         return results

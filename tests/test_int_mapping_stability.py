@@ -9,7 +9,7 @@ snapshot mapping never learns about rows inserted after annotation.
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.repository.mapping.key_mapping import REFERENCE_COLUMN
+from ap_explanation.repository.provsql import REFERENCE_COLUMN, references_in
 from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
@@ -241,7 +241,7 @@ async def test_outdated_ctid_mapping_is_rebuilt(
     rather than skip over it.
     """
     table = f"{test_schema.schema}.{test_schema.table}"
-    prov_table = why_semiring.get_provenance_table_name_for(test_schema.table)
+    prov_table = f"{test_schema.table}_provkey"
     qualified = f"{test_schema.schema}.{prov_table}"
 
     await provenance_service.annotate_dataset(
@@ -265,7 +265,7 @@ async def test_outdated_ctid_mapping_is_rebuilt(
 
     cursor = await db_connection.execute(f"SELECT value FROM {qualified} LIMIT 1")
     value = (await cursor.fetchone())[0]
-    why_semiring.mappingStrategy.decode(value)  # raises ValueError if still old format
+    assert references_in(value), f"still in the old format: {value}"
 
     # And the rebuilt mapping still resolves.
     query = f"SELECT * FROM {table} LIMIT 5"

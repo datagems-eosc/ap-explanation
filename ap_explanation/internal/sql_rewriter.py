@@ -258,10 +258,10 @@ class SqlRewriter:
     @staticmethod
     def _semiring_call(semiring: DbSemiring, token: Expression | None = None) -> Anonymous:
         """Build the semiring function call on *token*, by default the current row's provenance()."""
-        args = [token if token is not None else Anonymous(this="provenance")]
-        if semiring.mapping_table is not None:
-            args.append(Literal.string(semiring.mapping_table))
-
+        args = [
+            token if token is not None else Anonymous(this="provenance"),
+            Literal.string(semiring.union_table_name),
+        ]
         return Anonymous(this=semiring.retrieval_function, expressions=args)
 
     @classmethod

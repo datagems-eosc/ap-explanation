@@ -61,8 +61,7 @@ ap_explanation/
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
 ├── repository/          # Data access layer
-│   ├── mapping/         # Mapping strategies (ctid, etc.)
-│   └── resources/       # SQL scripts for semiring setup
+│   └── provsql.py       # Row references and mapping table names
 ├── internal/            # Internal modules
 │   ├── explainer/       # LLM-powered NL explanations
 │   ├── cache.py         # Redis cache provider
@@ -90,9 +89,7 @@ ap_explanation/
 DbSemiring(
     name="custom",
     retrieval_function="custom_prov",
-    aggregate_function="custom_agg",  # Optional
-    mapping_table="custom_mapping",
-    mappingStrategy=CtidMapping(),
+    supports_aggregates=True,  # Optional
 )
 ```
 
