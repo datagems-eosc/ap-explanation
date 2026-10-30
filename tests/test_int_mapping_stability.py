@@ -6,6 +6,8 @@ mapping of CTIDs resolves to nothing — or to a different row. And a snapshot
 never learns about rows inserted after annotation.
 """
 
+from typing import LiteralString
+
 import pytest
 from psycopg import AsyncConnection
 
@@ -14,7 +16,7 @@ from ap_explanation.services.provenance import ProvenanceService
 from tests.conftest import TestSchema
 
 
-def table_of(test_schema: TestSchema) -> str:
+def table_of(test_schema: TestSchema) -> LiteralString:
     return f"{test_schema.schema}.{test_schema.table}"
 
 
@@ -111,9 +113,9 @@ async def test_rows_inserted_after_annotation_are_mapped(
     cursor = await db_connection.execute(
         f"SELECT {', '.join(columns)} FROM {table} ORDER BY id LIMIT 1"
     )
-    values = list((await cursor.fetchone())[: len(columns)])
+    values = list((await cursor.fetchall())[0][: len(columns)])
 
-    placeholders = ", ".join(["%s"] * len(columns))
+    placeholders = "%s" + ", %s" * (len(columns) - 1)
     await db_connection.execute(
         f"INSERT INTO {table} (id, {', '.join(columns)}) VALUES (%s, {placeholders})",
         [new_id, *values],
@@ -178,7 +180,7 @@ async def test_provsql_stays_off_for_other_connections(
     other = await AsyncConnection.connect(connstr(), autocommit=True)
     try:
         cursor = await other.execute("SELECT current_setting('provsql.active')")
-        assert (await cursor.fetchone())[
+        assert (await cursor.fetchall())[0][
             0
         ] == "off", "ProvSQL is active by default for every connection to this database"
 
@@ -191,7 +193,7 @@ async def test_provsql_stays_off_for_other_connections(
 
     # This app's own connection keeps ProvSQL enabled for the next query.
     cursor = await db_connection.execute("SELECT current_setting('provsql.active')")
-    assert (await cursor.fetchone())[0] == "on"
+    assert (await cursor.fetchall())[0][0] == "on"
 
 
 @pytest.mark.asyncio

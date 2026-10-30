@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import LiteralString
 from urllib.parse import urlparse, urlunparse
 
 import pytest
@@ -18,8 +19,8 @@ from ap_explanation.services.provenance import ProvenanceService
 
 @dataclass
 class TestSchema:
-    table: str = "assessment"
-    schema: str = "mathe"
+    table: LiteralString = "assessment"
+    schema: LiteralString = "mathe"
 
 
 @pytest.fixture(scope="session")

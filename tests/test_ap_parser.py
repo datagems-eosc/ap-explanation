@@ -15,7 +15,7 @@ def ap(explain_sql_query_file: Path) -> ProvenanceAnalyticalPattern:
 
 def test_ap_parses_as_provenance_ap(ap: ProvenanceAnalyticalPattern):
     assert len(ap.nodes) > 0
-    assert len(ap.edges) > 0
+    assert ap.edges
     assert ap.data_source is not None
 
 

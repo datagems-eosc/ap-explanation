@@ -62,11 +62,11 @@ class QueryGuard:
                 )
                 cursor = await self._conn.execute(SQL(cast(LiteralString, f"EXPLAIN (FORMAT JSON) {query}")))
                 # Without an aggregate in its plan, the query has nothing to count: no need to run it
-                if _aggregated_rows((await cursor.fetchone())[0][0]["Plan"]):
+                if _aggregated_rows((await cursor.fetchall())[0][0][0]["Plan"]):
                     cursor = await self._conn.execute(
                         SQL(cast(LiteralString, f"EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) {query}"))
                     )
-                    rows = sum(_aggregated_rows((await cursor.fetchone())[0][0]["Plan"]))
+                    rows = sum(_aggregated_rows((await cursor.fetchall())[0][0][0]["Plan"]))
                 raise Rollback()
         except errors.QueryCanceled as e:
             if "statement timeout" not in str(e):

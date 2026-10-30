@@ -172,7 +172,7 @@ class ProvenanceService:
                 raise
             return await self._provsql.compute(schema_name, sql_query, aggregate_semirings, compute_probability)
 
-    async def explain(self, schema_name: str, sql_query: str, provenance_results: list[Derivation]) -> str:
+    async def explain(self, schema_name: str, sql_query: str, provenance_results: list[Derivation]) -> str | None:
         """
         Generate a human-readable explanation from provenance results.
         """

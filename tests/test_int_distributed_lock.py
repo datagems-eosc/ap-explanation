@@ -30,9 +30,8 @@ def test_lock_outlives_its_timeout(lock_provider: RedisLockProvider):
     with lock_provider.acquire("test_lock:long", timeout=1):
         time.sleep(3)
         # Still held: nobody else gets in
-        with pytest.raises(RuntimeError):
-            with lock_provider.acquire("test_lock:long", timeout=1, blocking_timeout=0.1):
-                pass
+        with pytest.raises(RuntimeError), lock_provider.acquire("test_lock:long", timeout=1, blocking_timeout=0.1):
+            pass
 
     # Released at the end
     with lock_provider.acquire("test_lock:long", timeout=1, blocking_timeout=0.1):

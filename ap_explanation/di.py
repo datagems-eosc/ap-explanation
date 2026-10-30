@@ -217,7 +217,6 @@ async def provenance_service_for(data_source: DataSource) -> AsyncGenerator[Prov
         DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
     qs = await find_database(data_source.db_name)
-    async with create_connection_pool(qs) as pool:
-        # NOTE: Some data sources require set up
-        async with seed_database(data_source, pool, settings.s3_mount_path):
-            yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)
+    # NOTE: Some data sources require set up
+    async with create_connection_pool(qs) as pool, seed_database(data_source, pool, settings.s3_mount_path):
+        yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, row_budget)

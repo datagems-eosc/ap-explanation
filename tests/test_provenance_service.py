@@ -29,7 +29,7 @@ class StubRepository:
 async def test_ok_value_gates_retried_with_aggregate_semirings(all_semirings: list[DbSemiring]):
     """An aggregate below the top level reaches the rows' provenance: formula only, rather than failing."""
     repo = StubRepository()
-    await ProvenanceService(repo, None, None).compute_provenance("s", "q", all_semirings)
+    await ProvenanceService(repo, None, None).compute_provenance("s", "q", all_semirings)  # type: ignore
 
     assert repo.calls == [[s.name for s in all_semirings], ["formula"]]
 
@@ -39,19 +39,19 @@ async def test_ko_value_gates_with_aggregate_semirings_only(formula_semiring: Db
     """Nothing to leave out: the same query would fail again."""
     repo = StubRepository(fails=True)
     with pytest.raises(ProvSqlInternalError):
-        await ProvenanceService(repo, None, None).compute_provenance("s", "q", [formula_semiring])
+        await ProvenanceService(repo, None, None).compute_provenance("s", "q", [formula_semiring])  # type: ignore
     assert repo.calls == [["formula"]]
 
 
 @pytest.mark.asyncio
 async def test_ko_value_gates_without_aggregate_semiring(why_semiring: DbSemiring):
     with pytest.raises(AggregateSemiringError):
-        await ProvenanceService(StubRepository(), None, None).compute_provenance("s", "q", [why_semiring])
+        await ProvenanceService(StubRepository(), None, None).compute_provenance("s", "q", [why_semiring])  # type: ignore
 
 
 @pytest.mark.asyncio
 async def test_ko_other_provsql_errors_not_retried(all_semirings: list[DbSemiring]):
     repo = StubRepository(error="ProvSQL: ORDER BY on the result of an aggregate function is not supported")
     with pytest.raises(ProvSqlInternalError):
-        await ProvenanceService(repo, None, None).compute_provenance("s", "q", all_semirings)
+        await ProvenanceService(repo, None, None).compute_provenance("s", "q", all_semirings)  # type: ignore
     assert len(repo.calls) == 1

@@ -2,6 +2,7 @@ import base64
 import logging
 import threading
 import time
+from typing import cast
 
 import requests
 from jose import jwt
@@ -43,9 +44,9 @@ class Authentication:
                 logger.info("Refreshing JWKS from %s", url)
                 resp = requests.get(url, timeout=10)
                 resp.raise_for_status()
-                self._jwks = resp.json()
+                self._jwks = cast(dict, resp.json())
                 self._fetched_at = now
-        return self._jwks
+            return self._jwks
 
     def validate(self, token: str) -> dict:
         """Decode and validate *token*.

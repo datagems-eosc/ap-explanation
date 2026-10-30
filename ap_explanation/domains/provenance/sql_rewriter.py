@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from sqlglot import parse_one
 from sqlglot.expressions import (
     AggFunc,
@@ -7,7 +9,7 @@ from sqlglot.expressions import (
     Column,
     Count,
     Except,
-    Expression,
+    Expr,
     Intersect,
     Limit,
     Literal,
@@ -58,7 +60,7 @@ class SqlRewriter:
         root = parse_one(query, dialect=self.db_dialect)
         return self._is_aggregate(root)
 
-    def _is_aggregate(self, root: Expression) -> bool:
+    def _is_aggregate(self, root: Expr) -> bool:
         return not isinstance(root, Union) and any(self._top_level_aggregates(e) for e in root.expressions)
 
     def rewrite(
@@ -117,12 +119,12 @@ class SqlRewriter:
             calls.append(self._probability_call())
 
         # Any top-level aggregate (not in subqueries) makes it an aggregate query
-        if self._is_aggregate(root):
+        if isinstance(root, Select) and self._is_aggregate(root):
             rewritten = self._rewrite_aggregate(root, semirings, probability, formula_rows)
         # NOTE : We wrap distinct queries because if we just add the provenance calls, the DISTINCT
         # will also be applied to the provenance calls, which is not the expected result
         # from a user standpoint
-        elif not isinstance(root, Union) and root.args.get("distinct"):
+        elif isinstance(root, Select) and root.args.get("distinct"):
             rewritten = self._wrap_in_subquery(root, [*self._all_selected_columns_of(root), *calls])
         # NOTE : Filtering on present(provenance()) needs the row's provenance in an outer
         # query, so any other query (unions included) is wrapped as a subquery. HAVING keeps
@@ -209,7 +211,7 @@ class SqlRewriter:
 
         return self._wrap_in_subquery(select, outer_columns)
 
-    def _top_level_aggregates(self, node: Expression) -> list[AggFunc]:
+    def _top_level_aggregates(self, node: Expr) -> list[AggFunc]:
         """
         The aggregate functions of *node*, without looking into subqueries, into
         an aggregate or into a window function (sum(...) OVER (...) does not group).
@@ -217,7 +219,7 @@ class SqlRewriter:
         stop = (AggFunc, Subquery, Select, Window)
         return [n for n in node.walk(prune=lambda n: isinstance(n, stop)) if isinstance(n, AggFunc)]
 
-    def _wrap_in_subquery(self, query: Expression, outer_columns: list[Expression]) -> Select:
+    def _wrap_in_subquery(self, query: Expr, outer_columns: Sequence[Expr]) -> Select:
         """
         Wrap *query* as the subquery SUBQUERY_ALIAS and select *outer_columns* from it.
 
@@ -229,7 +231,7 @@ class SqlRewriter:
             Subquery(this=query, alias=self.SUBQUERY_ALIAS))
 
     @staticmethod
-    def _limit_actual_result(root: Expression) -> None:
+    def _limit_actual_result(root: Expr) -> None:
         """
         Write every LIMIT k as LIMIT plain(k), the truncation of the actual result:
         ProvSQL's ORDER BY ... LIMIT k otherwise returns every row that may be among
@@ -256,7 +258,7 @@ class SqlRewriter:
         return references
 
     @staticmethod
-    def _semiring_call(semiring: DbSemiring, token: Expression | None = None) -> Anonymous:
+    def _semiring_call(semiring: DbSemiring, token: Expr | None = None) -> Anonymous:
         """Build the semiring function call on *token*, by default the current row's provenance()."""
         args = [
             token if token is not None else Anonymous(this="provenance"),

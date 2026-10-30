@@ -133,7 +133,7 @@ async def test_the_view_does_not_outlive_the_query(
 
     async def view() -> str | None:
         cursor = await db_connection.execute("SELECT to_regclass('pg_temp.apx_mapping')")
-        return (await cursor.fetchone())[0]
+        return (await cursor.fetchall())[0][0]
 
     await provenance_service.compute_provenance(
         test_schema.schema, f"SELECT * FROM {table} LIMIT 3", [why_semiring]

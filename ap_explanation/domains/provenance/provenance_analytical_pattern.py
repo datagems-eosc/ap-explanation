@@ -29,7 +29,8 @@ class ProvenanceAnalyticalPattern(AnalyticalPattern):
     # Not moma's full chain: it accepts the fixtures, but what ap-executor
     # sends has not been tried against it.
     validation_chain: ClassVar[ValidationStep] = StructureStep()
-    data_source: DataSource | None = Field(default=None, exclude=True)
+    # Set by check_prov_structure, which refuses an AP without one
+    data_source: DataSource = Field(default=None, exclude=True)  # type: ignore
 
     @model_validator(mode="after")
     def check_prov_structure(self: Self) -> Self:

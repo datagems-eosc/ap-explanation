@@ -80,4 +80,4 @@ async def test_enable_provenance_not_installed_superuser_installs_extension(conn
         cursor = await conn.execute(
             "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'provsql')"
         )
-        assert (await cursor.fetchone())[0] is True
+        assert (await cursor.fetchall())[0][0] is True

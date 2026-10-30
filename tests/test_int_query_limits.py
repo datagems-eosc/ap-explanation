@@ -63,7 +63,7 @@ async def test_limits_are_local_to_the_query(
 ):
     """The limits revert once the query ends, so annotation is not bounded by them."""
     cursor = await db_connection.execute("SHOW statement_timeout")
-    before = (await cursor.fetchone())[0]
+    before = (await cursor.fetchall())[0][0]
 
     service = await _service(db_connection, QueryLimits(statement_timeout="5min"))
     await service.annotate_dataset(test_schema.table, test_schema.schema)
@@ -74,7 +74,7 @@ async def test_limits_are_local_to_the_query(
     )
 
     cursor = await db_connection.execute("SHOW statement_timeout")
-    assert (await cursor.fetchone())[0] == before
+    assert (await cursor.fetchall())[0][0] == before
 
 
 def test_aggregated_rows_reads_the_input_of_each_aggregate():
@@ -126,7 +126,7 @@ async def test_ko_aggregated_rows_add_up(
     table = f"{test_schema.schema}.{test_schema.table}"
     async with db_connection.transaction():
         await db_connection.execute("SET LOCAL provsql.active = 0")
-        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
+        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchall())[0][0]
     service = await _service(db_connection, QueryLimits(max_aggregated_rows=2 * count - 1))
     await service.annotate_dataset(test_schema.table, test_schema.schema)
 
@@ -180,7 +180,7 @@ async def test_ko_precheck_timeout(
     assert exc_info.value.limit == "the plain query's statement_timeout"
 
     cursor = await db_connection.execute("SHOW provsql.active")
-    assert (await cursor.fetchone())[0] == "on"
+    assert (await cursor.fetchall())[0][0] == "on"
 
 
 @pytest.mark.asyncio
@@ -199,7 +199,7 @@ async def test_ok_aggregate_formula_as_rows(
     table = f"{test_schema.schema}.{test_schema.table}"
     async with db_connection.transaction():
         await db_connection.execute("SET LOCAL provsql.active = 0")
-        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
+        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchall())[0][0]
     rows = await service.compute_provenance(test_schema.schema, f"SELECT COUNT(*) AS n FROM {table}", [formula_semiring])
 
     assert len(rows) == 1

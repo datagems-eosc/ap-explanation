@@ -52,7 +52,7 @@ def managed_provenance_ap(
 
 
 def managed_provenance_ap_with_semiring(
-    semiring_name: SemiringName,
+    semiring_name: SemiringName,  # type: ignore
     ap: ProvenanceAnalyticalPattern,
     response: Response,
     probability: bool = ProbabilityFlag,

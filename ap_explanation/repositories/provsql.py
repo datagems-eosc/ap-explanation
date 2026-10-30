@@ -113,7 +113,7 @@ class ProvSqlRepository:
         # rewriter, which does not support every SQL construct.
         await conn.execute("SET provsql.active = 1")
         cursor = await conn.execute("SELECT to_regproc('provsql.sr_formula_rows') IS NOT NULL")
-        repo._formula_rows = (await cursor.fetchone())[0]
+        repo._formula_rows = (await cursor.fetchall())[0][0]
         return repo
 
     async def enable(self, schema_name: str, table_name: str) -> bool:
@@ -149,7 +149,7 @@ class ProvSqlRepository:
                 cursor = await self._conn.execute(
                     "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'provsql')"
                 )
-                provsql_installed = (await cursor.fetchone())[0]
+                provsql_installed = (await cursor.fetchall())[0][0]
 
                 if not provsql_installed:
                     # provsql is not installed — verify the current user is a superuser before attempting
@@ -252,7 +252,7 @@ class ProvSqlRepository:
                             table, probability
                         )
                     )
-                    (out_of_range,) = await cursor.fetchone()
+                    out_of_range = (await cursor.fetchall())[0][0]
                     if out_of_range:
                         raise InvalidProbabilityColumnError(
                             table_name,

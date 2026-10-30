@@ -244,14 +244,14 @@ def test_rewrite_sql_keeps_plain_limits(sql_rewriter: SqlRewriter, why_semiring:
 
 @pytest.mark.parametrize(("query", "expected"), [
     ("SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1",
-     "SELECT x.a, x.n, sr_formula(x.n, 'apx_mapping') "
-     "FROM (SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1) AS x WHERE present(provenance())"),
+     ("SELECT x.a, x.n, sr_formula(x.n, 'apx_mapping') "
+     "FROM (SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1) AS x WHERE present(provenance())")),
     ("SELECT DISTINCT a FROM t",
-     "SELECT x.a, sr_formula(provenance(), 'apx_mapping') FROM (SELECT DISTINCT a FROM t) AS x "
-     "WHERE present(provenance())"),
+     ("SELECT x.a, sr_formula(provenance(), 'apx_mapping') FROM (SELECT DISTINCT a FROM t) AS x "
+     "WHERE present(provenance())")),
     ("SELECT a FROM t1 UNION SELECT a FROM t2",
-     "SELECT x.*, sr_formula(provenance(), 'apx_mapping') FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x "
-     "WHERE present(provenance())"),
+     ("SELECT x.*, sr_formula(provenance(), 'apx_mapping') FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x "
+     "WHERE present(provenance())")),
 ])
 def test_rewrite_sql_keeps_the_rows_of_the_sql_answer(
     query: str, expected: str, sql_rewriter: SqlRewriter, formula_semiring: DbSemiring

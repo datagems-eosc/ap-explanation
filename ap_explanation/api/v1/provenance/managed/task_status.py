@@ -1,7 +1,7 @@
 from typing import Any, Literal, Never
 
 from celery.result import AsyncResult
-from fastapi.params import Depends
+from fastapi import Depends
 from pydantic import BaseModel
 
 from ap_explanation.api.middlewares.auth import require_authentication

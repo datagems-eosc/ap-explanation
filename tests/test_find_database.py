@@ -23,14 +23,16 @@ async def test_db_name_cannot_redirect_the_connection(monkeypatch):
         async def close(self):
             pass
 
+    seen = []
+
     async def connect(conninfo):
-        connect.seen = conninfo
+        seen.append(conninfo)
         return Conn()
 
     monkeypatch.setattr(di.AsyncConnection, "connect", connect)
 
     await di.find_database("mathe?host=evil.example")
 
-    params = conninfo_to_dict(connect.seen)
+    params = conninfo_to_dict(seen[0])
     assert params["host"] == "db.internal"
     assert params["dbname"] == "mathe?host=evil.example"

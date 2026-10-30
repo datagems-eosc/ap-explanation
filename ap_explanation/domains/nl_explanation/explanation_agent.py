@@ -1,6 +1,8 @@
 
+from typing import Any, cast
+
 import litellm
-from litellm import Message, completion
+from litellm import Message, ModelResponse, completion
 
 from .explainer import Explainer
 
@@ -23,18 +25,20 @@ class ExplanationAgent(Explainer):
         # Some LLM Api use self-signed certificates
         litellm.ssl_verify = ssl_verify
 
-    def _completion(self, messages: list[Message]) -> str:
+    def _completion(self, messages: list[Message]) -> str | None:
+        # Do not pass api_key if it's None, litellm will complain
+        credentials: dict[str, Any] = {"api_key": self.api_key} if self.api_key else {}
         response = completion(
             api_base=self.api_base,
-            # Do not pass api_key if it's None, litellm will complain
-            **({"api_key": self.api_key} if self.api_key else {}),
+            **credentials,
             model=self.model,
             messages=messages,
             timeout=self.timeout,
         )
-        return response.choices[0].message.content
+        # Not streaming
+        return cast(ModelResponse, response).choices[0].message.content
 
-    async def explain(self, query: str, provenance: str, database_schema: str) -> str:
+    async def explain(self, query: str, provenance: str, database_schema: str) -> str | None:
         """Generate an explanation for a SQL query result based on the query, its provenance, and the database schema.
         Args:
             query: The SQL query that was executed.
