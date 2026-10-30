@@ -9,7 +9,7 @@ import pytest
 from psycopg import AsyncConnection
 
 from ap_explanation.domains.semiring import DbSemiring
-from ap_explanation.repositories.annotation import AnnotationRepository
+from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.services.provenance import ProvenanceService
 from tests.conftest import TestSchema
 
@@ -53,7 +53,7 @@ async def test_all_semirings_share_one_mapping(
 @pytest.mark.asyncio
 async def test_per_semiring_tables_keep_working_then_migrate(
     provenance_service: ProvenanceService,
-    annotation_repository: AnnotationRepository,
+    provsql_repository: ProvSqlRepository,
     db_connection: AsyncConnection,
     why_semiring: DbSemiring,
     how_semiring: DbSemiring,
@@ -78,7 +78,7 @@ async def test_per_semiring_tables_keep_working_then_migrate(
         "SELECT create_provenance_mapping(%s, %s, 'provsql_ref', false, true)",
         (f"{table}_provhow", table),
     )
-    await annotation_repository._rebuild_mapping_view(test_schema.schema)
+    await provsql_repository._rebuild_mapping_view(test_schema.schema)
     await db_connection.execute(f"CREATE VIEW why_mapping AS TABLE {table}_provwhy")
     await db_connection.execute(f"CREATE TABLE how_mapping AS TABLE {table}_provhow")
     assert await _mapping_tables(db_connection, test_schema) == {

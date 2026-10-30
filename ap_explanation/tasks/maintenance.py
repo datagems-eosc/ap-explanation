@@ -10,55 +10,26 @@ a token stored in the database still references and rewrites the files. Like
 database, so it takes the database's explain lock first: no explain task holds
 a connection to it meanwhile. Other clients of the database must disconnect.
 """
-import asyncio
 import logging
-import time
 
-from psycopg import AsyncConnection, errors
-from psycopg.rows import dict_row
+from psycopg import AsyncConnection
 
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import find_database, get_lock_provider
-from ap_explanation.errors import DatabaseInUseError, ProvSqlMissingError
+from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.settings import settings
 from ap_explanation.tasks.explain import _run_in_thread
 
 logger = logging.getLogger(__name__)
 
 CIRCUIT_CLEANUP_WAIT = settings.circuit_cleanup_wait
-_RETRY_INTERVAL = 2
 
 
 async def _do_circuit_cleanup(db_name: str) -> dict:
-    conn = await AsyncConnection.connect(await find_database(db_name), autocommit=True)
-    try:
-        deadline = time.monotonic() + CIRCUIT_CLEANUP_WAIT
-        while True:
-            try:
-                # Must be the first statement of its transaction: autocommit
-                cursor = await conn.cursor(row_factory=dict_row).execute(
-                    "SELECT * FROM provsql.circuit_cleanup()"
-                )
-                return await cursor.fetchone() or {}
-            except errors.ObjectInUse:
-                if time.monotonic() >= deadline:
-                    break
-                await asyncio.sleep(_RETRY_INTERVAL)
-            except (errors.UndefinedFunction, errors.InvalidSchemaName) as e:
-                raise ProvSqlMissingError(
-                    f"provsql.circuit_cleanup() is not available on '{db_name}' "
-                    f"(ProvSQL >= 1.13 required): {e!s}"
-                ) from e
-
-        cursor = await conn.execute(
-            "SELECT format('%s@%s (%s)', usename, coalesce(client_addr::text, 'local'),"
-            " coalesce(nullif(application_name, ''), 'unnamed'))"
-            " FROM pg_stat_activity WHERE datname = current_database()"
-            " AND pid <> pg_backend_pid() AND backend_type = 'client backend'"
-        )
-        raise DatabaseInUseError(db_name, [row[0] for row in await cursor.fetchall()])
-    finally:
-        await conn.close()
+    async with await AsyncConnection.connect(await find_database(db_name), autocommit=True) as conn:
+        repository = await ProvSqlRepository.create(conn, SqlRewriter())
+        return await repository.cleanup_circuits(CIRCUIT_CLEANUP_WAIT)
 
 
 @celery_app.task(bind=True, name="ap_explanation.tasks.maintenance.circuit_cleanup_task")

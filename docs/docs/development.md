@@ -60,9 +60,10 @@ ap_explanation/
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
 ├── repositories/        # Data access layer
-│   ├── annotation.py    # Annotations, semiring mappings, probabilities
-│   ├── query.py         # Provenance queries and their limits
-│   └── provsql.py       # Row references, mapping table names, session setup
+│   ├── provsql.py       # ProvSqlRepository: enable, disable, probabilities, compute, circuit cleanup
+│   ├── query_guard.py   # Limits of a provenance query, aggregate check, row budget
+│   ├── schema.py        # Schema description for the LLM
+│   └── legacy_mappings.py   # What earlier versions left in annotated databases
 ├── internal/            # Internal modules
 │   ├── explainer/       # LLM-powered NL explanations
 │   ├── cache.py         # Redis cache provider

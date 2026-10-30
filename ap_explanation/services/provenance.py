@@ -12,9 +12,7 @@ from ap_explanation.errors import AggregateSemiringError, ProvSqlInternalError
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.explainer import Explainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repositories.annotation import AnnotationRepository
-from ap_explanation.repositories.provsql import activate_provsql
-from ap_explanation.repositories.query import QueryRepository
+from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.repositories.schema import SchemaRepository
 from ap_explanation.semirings import semirings as all_semirings
 from ap_explanation.settings import QueryLimits
@@ -27,20 +25,12 @@ class ProvenanceService:
     Orchestrates business logic by delegating to the repositories.
     """
 
-    _queries: QueryRepository
-    _annotations: AnnotationRepository
+    _provsql: ProvSqlRepository
     _schemas: SchemaRepository
     _explainer: Explainer
 
-    def __init__(
-        self,
-        queries: QueryRepository,
-        annotations: AnnotationRepository,
-        schemas: SchemaRepository,
-        explainer: Explainer,
-    ):
-        self._queries = queries
-        self._annotations = annotations
+    def __init__(self, provsql: ProvSqlRepository, schemas: SchemaRepository, explainer: Explainer):
+        self._provsql = provsql
         self._schemas = schemas
         self._explainer = explainer
 
@@ -53,13 +43,9 @@ class ProvenanceService:
         limits: QueryLimits | None = None,
         budget: RedisRowBudget | None = None,
     ) -> ProvenanceService:
-        """
-        Build the service over *conn*. Its repositories have to share the
-        connection: search_path and provsql.active are per session.
-        """
-        await activate_provsql(conn)
-        queries = await QueryRepository.create(conn, sql_rewriter, limits, budget)
-        return cls(queries, AnnotationRepository(conn), SchemaRepository(conn), explainer)
+        """Build the service over *conn*."""
+        provsql = await ProvSqlRepository.create(conn, sql_rewriter, limits, budget)
+        return cls(provsql, SchemaRepository(conn), explainer)
 
     async def explain_ap(
         self,
@@ -119,7 +105,7 @@ class ProvenanceService:
         Returns:
             bool: True if the table was newly annotated, False otherwise
         """
-        return await self._annotations.enable(schema_name, table_name)
+        return await self._provsql.enable(schema_name, table_name)
 
     async def remove_annotation(self, table_name: str, schema_name: str) -> None:
         """
@@ -129,7 +115,7 @@ class ProvenanceService:
             table_name: Name of the table to remove annotations from
             schema_name: Schema where the table is located
         """
-        await self._annotations.disable(schema_name, table_name)
+        await self._provsql.disable(schema_name, table_name)
 
     async def set_probabilities(self, schema_name: str, probability_columns: dict[str, str | None]) -> None:
         """
@@ -141,7 +127,7 @@ class ProvenanceService:
                 probabilities, or to None when all its tuples are certain
         """
         for table_name, column in probability_columns.items():
-            await self._annotations.set_probabilities(schema_name, table_name, column)
+            await self._provsql.set_probabilities(schema_name, table_name, column)
 
     async def compute_provenance(self, schema_name: str, sql_query: str, semirings: list[DbSemiring], compute_probability: bool = False) -> list[Derivation]:
         """
@@ -170,7 +156,7 @@ class ProvenanceService:
                 semirings supports aggregates
         """
         try:
-            return await self._queries.query(schema_name, sql_query, semirings, compute_probability)
+            return await self._provsql.compute(schema_name, sql_query, semirings, compute_probability)
         except ProvSqlInternalError as e:
             # A comparison on an aggregate below the top level (a CTE's SUM in WHERE)
             # can reach a row's provenance, which the rewriting does not see: only
@@ -184,7 +170,7 @@ class ProvenanceService:
                     [s.name for s in semirings]) from e
             if aggregate_semirings == semirings:
                 raise
-            return await self._queries.query(schema_name, sql_query, aggregate_semirings, compute_probability)
+            return await self._provsql.compute(schema_name, sql_query, aggregate_semirings, compute_probability)
 
     async def explain(self, schema_name: str, sql_query: str, provenance_results: list[Derivation]) -> str:
         """

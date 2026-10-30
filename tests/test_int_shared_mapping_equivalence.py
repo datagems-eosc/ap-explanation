@@ -19,8 +19,8 @@ import pytest
 from psycopg import AsyncConnection
 
 from ap_explanation.domains.semiring import DbSemiring
-from ap_explanation.repositories.annotation import AnnotationRepository
 from ap_explanation.repositories.legacy_mappings import legacy_tables_of
+from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.services.provenance import ProvenanceService
 
 SCHEMA = "mathe"
@@ -70,7 +70,7 @@ async def _insert_assessment(conn: AsyncConnection) -> None:
 @pytest.mark.asyncio
 async def test_shared_mapping_gives_the_same_results(
     provenance_service: ProvenanceService,
-    annotation_repository: AnnotationRepository,
+    provsql_repository: ProvSqlRepository,
     db_connection: AsyncConnection,
     all_semirings: list[DbSemiring],
 ):
@@ -88,7 +88,7 @@ async def test_shared_mapping_gives_the_same_results(
                 "SELECT create_provenance_mapping(%s, %s, 'provsql_ref', false, true)",
                 (other, table),
             )
-    await annotation_repository._rebuild_mapping_view(SCHEMA)
+    await provsql_repository._rebuild_mapping_view(SCHEMA)
 
     # Maintained alike: the guard appends the new row to each of them
     await _insert_assessment(db_connection)

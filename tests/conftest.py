@@ -13,7 +13,7 @@ from testcontainers.postgres import PostgresContainer
 from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repositories.annotation import AnnotationRepository
+from ap_explanation.repositories.provsql import ProvSqlRepository
 from ap_explanation.semirings import semirings
 from ap_explanation.services.provenance import ProvenanceService
 
@@ -117,9 +117,9 @@ async def db_connection(
         yield conn
 
 
-@pytest.fixture
-def annotation_repository(db_connection: AsyncConnection):
-    return AnnotationRepository(db_connection)
+@pytest_asyncio.fixture
+async def provsql_repository(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
+    return await ProvSqlRepository.create(db_connection, sql_rewriter)
 
 
 @pytest_asyncio.fixture

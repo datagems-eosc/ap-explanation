@@ -1,6 +1,6 @@
 """
 Integration tests for the superuser / extension-presence guard in
-AnnotationRepository.enable(), using the postgres_container fixture
+ProvSqlRepository.enable(), using the postgres_container fixture
 from conftest (each test gets its own isolated container).
 
 Cases covered:
@@ -13,8 +13,8 @@ import pytest
 from psycopg import AsyncConnection
 
 from ap_explanation.errors import ProvSqlMissingError
-from ap_explanation.repositories.annotation import AnnotationRepository
-from ap_explanation.repositories.provsql import activate_provsql
+from ap_explanation.internal.sql_rewriter import SqlRewriter
+from ap_explanation.repositories.provsql import ProvSqlRepository
 
 
 @pytest.mark.asyncio
@@ -28,8 +28,7 @@ async def test_enable_provenance_already_installed_succeeds(connstr):
         await conn.execute("DROP TABLE IF EXISTS public.test_ep_installed CASCADE")
         await conn.execute("CREATE TABLE public.test_ep_installed (id serial PRIMARY KEY, val text)")
 
-        await activate_provsql(conn)
-        repo = AnnotationRepository(conn)
+        repo = await ProvSqlRepository.create(conn, SqlRewriter())
         result = await repo.enable("public", "test_ep_installed")
 
     assert result is True
@@ -53,7 +52,7 @@ async def test_enable_provenance_not_installed_non_superuser_raises(connstr):
     async with await AsyncConnection.connect(
         connstr("limited_ep_user", "limited"), autocommit=True
     ) as conn:
-        repo = AnnotationRepository(conn)
+        repo = await ProvSqlRepository.create(conn, SqlRewriter())
         with pytest.raises(ProvSqlMissingError) as exc_info:
             await repo.enable("public", "test_ep_noperm")
 
@@ -72,8 +71,7 @@ async def test_enable_provenance_not_installed_superuser_installs_extension(conn
         await conn.execute("DROP TABLE IF EXISTS public.test_ep_superuser CASCADE")
         await conn.execute("CREATE TABLE public.test_ep_superuser (id serial PRIMARY KEY, val text)")
 
-        await activate_provsql(conn)
-        repo = AnnotationRepository(conn)
+        repo = await ProvSqlRepository.create(conn, SqlRewriter())
         result = await repo.enable("public", "test_ep_superuser")
 
         assert result is True
