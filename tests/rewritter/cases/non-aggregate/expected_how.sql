@@ -1,4 +1,4 @@
-SELECT x.name, sr_how(provenance(),'how_mapping')
+SELECT x.name, sr_how(provenance(),'provkey_mapping')
 FROM (
     SELECT DISTINCT t.name
     FROM assessment a

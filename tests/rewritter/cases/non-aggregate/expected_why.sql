@@ -1,5 +1,5 @@
 -- Wrapped: sr_why must apply to each result row, after DISTINCT merged rows
-SELECT x.name, sr_why(provenance(),'why_mapping')
+SELECT x.name, sr_why(provenance(),'provkey_mapping')
 FROM (
     SELECT DISTINCT t.name
     FROM assessment a

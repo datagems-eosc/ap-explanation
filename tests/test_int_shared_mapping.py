@@ -1,7 +1,8 @@
 """
-Every semiring shares one mapping table per table. Earlier versions created
-one identical table per semiring; databases annotated by them keep working, and
-are migrated when annotated again.
+Every semiring shares one mapping table per table, and one view over them per
+schema. Earlier versions created one identical table per semiring and a view per
+semiring; databases annotated by them keep working, and are migrated when
+annotated again.
 """
 
 import pytest
@@ -36,13 +37,14 @@ async def _assert_resolves(
 
 
 @pytest.mark.asyncio
-async def test_all_semirings_share_one_mapping_table(
+async def test_all_semirings_share_one_mapping(
     provenance_service: ProvenanceService,
     db_connection: AsyncConnection,
     all_semirings: list[DbSemiring],
     test_schema: TestSchema,
 ):
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, all_semirings)
+    """Annotating a table is enough for every semiring: none is chosen before the query."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
 
     assert await _mapping_tables(db_connection, test_schema) == {f"{test_schema.table}_provkey"}
     await _assert_resolves(provenance_service, all_semirings, test_schema)
@@ -64,10 +66,10 @@ async def test_per_semiring_tables_keep_working_then_migrate(
     """
     semirings = [why_semiring, how_semiring]
     table = test_schema.table
-    await provenance_service.annotate_dataset(table, test_schema.schema, semirings)
+    await provenance_service.annotate_dataset(table, test_schema.schema)
 
-    # Wind back to what the earlier version left: one maintained mapping per
-    # semiring, and union views over them.
+    # Wind back to what the earlier versions left: one maintained mapping per
+    # semiring, and a relation per semiring over them, a view or a snapshot.
     await db_connection.execute(f"SET search_path TO {test_schema.schema}, public, provsql")
     await db_connection.execute(
         f"ALTER TABLE {table}_provkey RENAME TO {table}_provwhy"
@@ -76,8 +78,9 @@ async def test_per_semiring_tables_keep_working_then_migrate(
         "SELECT create_provenance_mapping(%s, %s, 'provsql_ref', false, true)",
         (f"{table}_provhow", table),
     )
-    for semiring in semirings:
-        await annotation_repository._rebuild_union_mapping(test_schema.schema, semiring)
+    await annotation_repository._rebuild_mapping_view(test_schema.schema)
+    await db_connection.execute(f"CREATE VIEW why_mapping AS TABLE {table}_provwhy")
+    await db_connection.execute(f"CREATE TABLE how_mapping AS TABLE {table}_provhow")
     assert await _mapping_tables(db_connection, test_schema) == {
         f"{table}_provwhy",
         f"{table}_provhow",
@@ -85,9 +88,11 @@ async def test_per_semiring_tables_keep_working_then_migrate(
 
     await _assert_resolves(provenance_service, semirings, test_schema)
 
-    newly = await provenance_service.annotate_dataset(table, test_schema.schema, semirings)
+    newly = await provenance_service.annotate_dataset(table, test_schema.schema)
     assert newly is False  # renamed, not rebuilt
     assert await _mapping_tables(db_connection, test_schema) == {f"{table}_provkey"}
+    cursor = await db_connection.execute("SELECT to_regclass('why_mapping'), to_regclass('how_mapping')")
+    assert await cursor.fetchone() == (None, None)
 
     # Still maintained after the rename: provenance_guard maps new rows
     cursor = await db_connection.execute(

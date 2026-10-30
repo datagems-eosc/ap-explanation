@@ -47,7 +47,7 @@ async def test_references_survive_update_and_vacuum(
     """A row that moves on disk must still resolve, and to itself."""
     table = f"{test_schema.schema}.{test_schema.table}"
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
 
     query = f"SELECT * FROM {table} ORDER BY id LIMIT 5"
@@ -91,7 +91,7 @@ async def test_rows_inserted_after_annotation_are_mapped(
     """
     table = f"{test_schema.schema}.{test_schema.table}"
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
 
     # Clone an existing row under a fresh id: the seeded schema has foreign
@@ -143,7 +143,7 @@ async def test_reference_column_is_hidden_from_answers(
     """The bookkeeping column must not leak into SELECT * results."""
     table = f"{test_schema.schema}.{test_schema.table}"
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
 
     query = f"SELECT * FROM {table} LIMIT 5"
@@ -173,7 +173,7 @@ async def test_provsql_stays_off_for_other_connections(
     has annotated a table.
     """
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
     query = f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 5"
     await provenance_service.compute_provenance(
@@ -213,7 +213,7 @@ async def test_reference_resolution_is_not_rewritten(
     """
     table = f"{test_schema.schema}.{test_schema.table}"
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
 
     query = f"SELECT * FROM {table} LIMIT 5"
@@ -245,7 +245,7 @@ async def test_outdated_ctid_mapping_is_rebuilt(
     qualified = f"{test_schema.schema}.{prov_table}"
 
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
 
     # Wind the mapping back to what the previous version left behind: CTID
@@ -260,7 +260,7 @@ async def test_outdated_ctid_mapping_is_rebuilt(
     await db_connection.execute(f"ALTER TABLE {table} DROP COLUMN {REFERENCE_COLUMN}")
 
     await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema, [why_semiring]
+        test_schema.table, test_schema.schema
     )
 
     cursor = await db_connection.execute(f"SELECT value FROM {qualified} LIMIT 1")

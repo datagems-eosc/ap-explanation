@@ -9,7 +9,7 @@ from psycopg.sql import SQL, Identifier
 from psycopg.types.json import set_json_dumps
 
 from ap_explanation.domains.provenance import Derivation, SemiringProvenance
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.semiring import MAPPING_VIEW, DbSemiring
 from ap_explanation.errors import (
     ProvSqlInternalError,
     QueryLimitExceededError,
@@ -184,12 +184,9 @@ class QueryRepository:
 
             return results
         except errors.UndefinedTable as e:
-            # The mapping table doesn't exist, meaning the table hasn't been annotated
-            names = ", ".join(s.name for s in semirings)
-            logger.warning(f"Table not annotated with semiring '{names}': {e}")
-            raise TableNotAnnotatedError(
-                schema_name=schema_name, semiring_name=names
-            ) from e
+            # The mapping view doesn't exist, meaning no table of the schema has been annotated
+            logger.warning(f"Table not annotated: {e}")
+            raise TableNotAnnotatedError(schema_name=schema_name) from e
         except errors.QueryCanceled as e:
             # 57014: statement_timeout, or a pg_cancel_backend by an operator,
             # which is no limit
@@ -236,7 +233,7 @@ class QueryRepository:
             SQL("SELECT (f.r).name, (f.r).formula FROM ("
                 "SELECT provsql.{}(%s::uuid, %s::regclass) AS r LIMIT %s) AS f").format(
                 Identifier(cast(str, semiring.rows_function))),
-            (token, semiring.union_table_name, limit + 1),
+            (token, MAPPING_VIEW, limit + 1),
         )
         rows = await cursor.fetchall()
         if len(rows) == 1:

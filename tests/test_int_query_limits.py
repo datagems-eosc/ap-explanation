@@ -40,7 +40,7 @@ async def test_ko_statement_timeout(
 ):
     """A query running past statement_timeout fails with a clear error."""
     service = await _service(db_connection, QueryLimits(statement_timeout="200ms"))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     with pytest.raises(QueryLimitExceededError) as exc_info:
@@ -66,7 +66,7 @@ async def test_limits_are_local_to_the_query(
     before = (await cursor.fetchone())[0]
 
     service = await _service(db_connection, QueryLimits(statement_timeout="5min"))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
     await service.compute_provenance(
         test_schema.schema,
         f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 1",
@@ -98,7 +98,7 @@ async def test_ko_too_many_aggregated_rows(
 ):
     """An aggregate over more rows than max_aggregated_rows is refused before its provenance is built."""
     service = await _service(db_connection, QueryLimits(max_aggregated_rows=3))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     with pytest.raises(QueryLimitExceededError) as exc_info:
@@ -128,7 +128,7 @@ async def test_ko_aggregated_rows_add_up(
         await db_connection.execute("SET LOCAL provsql.active = 0")
         count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
     service = await _service(db_connection, QueryLimits(max_aggregated_rows=2 * count - 1))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     with pytest.raises(QueryLimitExceededError) as exc_info:
         await service.compute_provenance(
@@ -148,7 +148,7 @@ async def test_ok_query_waits_for_the_server_budget(
         budget = RedisRowBudget(
             f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0", poll=0.05)
         service = await _service(db_connection, QueryLimits(max_aggregated_rows=1_000_000), budget)
-        await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+        await service.annotate_dataset(test_schema.table, test_schema.schema)
 
         table = f"{test_schema.schema}.{test_schema.table}"
         server = f"{db_connection.info.host}:{db_connection.info.port}"
@@ -170,7 +170,7 @@ async def test_ko_precheck_timeout(
 ):
     """A query too slow even without provenance is refused, and the settings revert."""
     service = await _service(db_connection, QueryLimits(precheck_timeout="200ms"))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     with pytest.raises(QueryLimitExceededError) as exc_info:
@@ -194,7 +194,7 @@ async def test_ok_aggregate_formula_as_rows(
     of those terms only.
     """
     service = await _service(db_connection, QueryLimits(max_formula_rows=3))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     async with db_connection.transaction():

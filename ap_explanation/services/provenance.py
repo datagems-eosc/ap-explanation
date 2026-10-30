@@ -93,7 +93,7 @@ class ProvenanceService:
 
         # 1. Annotate
         for table_name in ds.table_names:
-            await self.annotate_dataset(table_name, ds.schema_name, target_semirings)
+            await self.annotate_dataset(table_name, ds.schema_name)
 
         # 1b. Set tuple probabilities (if requested)
         if compute_probability:
@@ -108,48 +108,28 @@ class ProvenanceService:
 
         return Provenance(derivations=derivations, explanation=explanation)
 
-    async def annotate_dataset(self, table_name: str, schema_name: str, semirings: list[DbSemiring]) -> bool:
+    async def annotate_dataset(self, table_name: str, schema_name: str) -> bool:
         """
         Annotate a table with provenance information.
 
         Args:
             table_name: Name of the table to annotate
             schema_name: Schema where the table is located
-            semirings: List of semirings to enable for the table
 
         Returns:
-            bool: True if the table was annotated or semirings were newly enabled, False otherwise
+            bool: True if the table was newly annotated, False otherwise
         """
-        newly_annotated = await self._annotations.enable_provenance(schema_name, table_name)
+        return await self._annotations.enable(schema_name, table_name)
 
-        semiring_newly_enabled = False
-        for semiring in semirings:
-            semiring_newly_enabled |= await self._annotations.add_semiring(schema_name, table_name, semiring)
-
-        return newly_annotated or semiring_newly_enabled
-
-    async def remove_annotation(self, table_name: str, schema_name: str) -> bool:
+    async def remove_annotation(self, table_name: str, schema_name: str) -> None:
         """
-        Remove provenance annotations from a table. This removes ALL provenance information for the table, including all semirings.
+        Remove all provenance information from a table.
 
         Args:
             table_name: Name of the table to remove annotations from
             schema_name: Schema where the table is located
-
-        Returns:
-            bool: True if any semiring was removed, False if none were found
         """
-
-        await self._annotations.remove_provenance(schema_name, table_name)
-
-        # Note : This will be unused for the time being,
-        # we don't support removing a single semiring, but we want to keep the option open to do so in the future, and it makes the implementation simpler for now to just remove all semirings when removing annotation
-        any_removed = False
-        for semiring in all_semirings:
-            was_removed = await self._annotations.remove_semiring(schema_name, table_name, semiring)
-            any_removed |= was_removed
-
-        return True
+        await self._annotations.disable(schema_name, table_name)
 
     async def set_probabilities(self, schema_name: str, probability_columns: dict[str, str | None]) -> None:
         """

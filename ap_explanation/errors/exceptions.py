@@ -46,29 +46,22 @@ class TableOrSchemaNotFoundError(Exception):
 class TableNotAnnotatedError(Exception):
     """
     Exception raised when attempting to query provenance on a table that has not been
-    annotated with the required semiring.
-
-    This error indicates that the table exists but has not been prepared for provenance
-    tracking with the requested semiring.
+    annotated: the table exists but has not been prepared for provenance tracking.
     """
 
-    def __init__(self, table_name: str | None = None, schema_name: str | None = None, semiring_name: str | None = None):
+    def __init__(self, table_name: str | None = None, schema_name: str | None = None):
         self.table_name = table_name
         self.schema_name = schema_name
-        self.semiring_name = semiring_name
-        super().__init__(table_name, schema_name, semiring_name)
+        super().__init__(table_name, schema_name)
 
     @property
     def message(self) -> str:
-        if self.table_name and self.schema_name and self.semiring_name:
+        if self.table_name and self.schema_name:
             return (
-                f"Table '{self.table_name}' in schema '{self.schema_name}' is not annotated "
-                f"with semiring '{self.semiring_name}'. Please annotate the table first."
+                f"Table '{self.table_name}' in schema '{self.schema_name}' is not annotated. "
+                "Please annotate the table first."
             )
-        elif self.semiring_name:
-            return f"Table is not annotated with semiring '{self.semiring_name}'. Please annotate the table first."
-        else:
-            return "Table is not annotated for provenance tracking. Please annotate the table first."
+        return "Table is not annotated for provenance tracking. Please annotate the table first."
 
     def __str__(self) -> str:
         return self.message

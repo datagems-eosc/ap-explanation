@@ -25,7 +25,7 @@ from sqlglot.expressions import (
     alias_,
 )
 
-from ap_explanation.domains.semiring import DbSemiring
+from ap_explanation.domains.semiring import MAPPING_VIEW, DbSemiring
 from ap_explanation.errors import AggregateSemiringError
 
 
@@ -260,7 +260,7 @@ class SqlRewriter:
         """Build the semiring function call on *token*, by default the current row's provenance()."""
         args = [
             token if token is not None else Anonymous(this="provenance"),
-            Literal.string(semiring.union_table_name),
+            Literal.string(MAPPING_VIEW),
         ]
         return Anonymous(this=semiring.retrieval_function, expressions=args)
 

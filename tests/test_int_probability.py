@@ -36,7 +36,7 @@ async def test_ok_probability_merges_distinct_rows(
     two_rows_of_one_student: str,
 ):
     """A DISTINCT row present if either of two independent 0.5 tuples is: 1 - 0.5 * 0.5."""
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     query = f"SELECT DISTINCT student_id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
@@ -55,7 +55,7 @@ async def test_ok_probability_merges_union_rows(
     two_rows_of_one_student: str,
 ):
     """A UNION row found in both branches, each a 0.5 tuple: 1 - 0.5 * 0.5."""
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     first, second = two_rows_of_one_student.split(", ")
@@ -83,7 +83,7 @@ async def test_ok_probability_overwritten_by_later_calls(
     ProvSQL writes a probability once, so a changed one is a new input gate:
     the rows' mapping values must follow it, the why-provenance unchanged.
     """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     query = f"SELECT id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
     explanations = []
 
@@ -108,7 +108,7 @@ async def test_ko_invalid_probability_column(
     test_schema: TestSchema,
     column: str,
 ):
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
 
     with pytest.raises(InvalidProbabilityColumnError) as exc_info:
         await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: column})
@@ -126,7 +126,7 @@ async def test_ok_probability_on_aggregate(
     """
     Only formula: the other semirings do not support aggregates ("value gates").
     """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     query = (
@@ -150,7 +150,7 @@ async def test_ok_no_probability_unless_requested(
     test_schema: TestSchema,
     two_rows_of_one_student: str,
 ):
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     query = f"SELECT id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
@@ -171,7 +171,7 @@ async def test_ok_probability_on_every_group(
     separate run, it was keyed by a token ProvSQL does not keep across runs
     for groups, and was lost.
     """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     query = f"SELECT student_id, COUNT(*) AS cnt FROM {test_schema.table} WHERE student_id < 50 GROUP BY student_id"

@@ -1,6 +1,6 @@
 """
 Integration tests for the superuser / extension-presence guard in
-AnnotationRepository.enable_provenance(), using the postgres_container fixture
+AnnotationRepository.enable(), using the postgres_container fixture
 from conftest (each test gets its own isolated container).
 
 Cases covered:
@@ -14,21 +14,23 @@ from psycopg import AsyncConnection
 
 from ap_explanation.errors import ProvSqlMissingError
 from ap_explanation.repositories.annotation import AnnotationRepository
+from ap_explanation.repositories.provsql import activate_provsql
 
 
 @pytest.mark.asyncio
 async def test_enable_provenance_already_installed_succeeds(connstr):
     """
     When provsql is already installed and the user is a superuser,
-    enable_provenance must succeed without performing the rolsuper check.
+    enable must succeed without performing the rolsuper check.
     """
     async with await AsyncConnection.connect(connstr(), autocommit=True) as conn:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS provsql CASCADE")
         await conn.execute("DROP TABLE IF EXISTS public.test_ep_installed CASCADE")
         await conn.execute("CREATE TABLE public.test_ep_installed (id serial PRIMARY KEY, val text)")
 
+        await activate_provsql(conn)
         repo = AnnotationRepository(conn)
-        result = await repo.enable_provenance("public", "test_ep_installed")
+        result = await repo.enable("public", "test_ep_installed")
 
     assert result is True
 
@@ -37,7 +39,7 @@ async def test_enable_provenance_already_installed_succeeds(connstr):
 async def test_enable_provenance_not_installed_non_superuser_raises(connstr):
     """
     When provsql is not installed and the connecting user is not a superuser,
-    enable_provenance must raise ProvSqlMissingError without attempting
+    enable must raise ProvSqlMissingError without attempting
     CREATE EXTENSION.
     """
     # Set up: drop provsql and create a limited login role
@@ -53,7 +55,7 @@ async def test_enable_provenance_not_installed_non_superuser_raises(connstr):
     ) as conn:
         repo = AnnotationRepository(conn)
         with pytest.raises(ProvSqlMissingError) as exc_info:
-            await repo.enable_provenance("public", "test_ep_noperm")
+            await repo.enable("public", "test_ep_noperm")
 
     assert "not a superuser" in str(exc_info.value)
 
@@ -62,7 +64,7 @@ async def test_enable_provenance_not_installed_non_superuser_raises(connstr):
 async def test_enable_provenance_not_installed_superuser_installs_extension(connstr):
     """
     When provsql is not installed but the user is a superuser,
-    enable_provenance must install the extension and succeed.
+    enable must install the extension and succeed.
 
     """
     async with await AsyncConnection.connect(connstr(), autocommit=True) as conn:
@@ -70,12 +72,13 @@ async def test_enable_provenance_not_installed_superuser_installs_extension(conn
         await conn.execute("DROP TABLE IF EXISTS public.test_ep_superuser CASCADE")
         await conn.execute("CREATE TABLE public.test_ep_superuser (id serial PRIMARY KEY, val text)")
 
+        await activate_provsql(conn)
         repo = AnnotationRepository(conn)
-        result = await repo.enable_provenance("public", "test_ep_superuser")
+        result = await repo.enable("public", "test_ep_superuser")
 
         assert result is True
 
-        # Verify provsql was installed by enable_provenance
+        # Verify provsql was installed by enable
         cursor = await conn.execute(
             "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'provsql')"
         )

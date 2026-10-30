@@ -8,6 +8,8 @@
 
 - **One mapping table per table** — annotating a table creates `<table>_provkey`, shared by every semiring, instead of five identical `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows). Tables annotated by earlier versions keep working, and are migrated the next time they are annotated: one per-semiring table is renamed, the others dropped.
 
+- **One mapping view per schema** — semirings now read `provkey_mapping` instead of a `<semiring>_mapping` view each, which held the same rows. Annotating a table prepares it for every semiring, and drops the old views of its schema.
+
 - **Configuration is checked at startup** — environment variables are read by pydantic-settings. A value of the wrong type (`LLM_TIMEOUT=abc`, `JWKS_TTL_SECONDS=abc`) now stops the service from starting. `LLM_SSL_VERIFY` and `USE_EMBEDDED_CELERY_WORKER` accept `1`, `yes` and `on` as true and `0`, `no` and `off` as false, refuse anything else, and an empty value means their default, `true`: it was `false`.
 
 ### New Features

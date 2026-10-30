@@ -1,7 +1,7 @@
 """
 Sharing one mapping table between all semirings does not change any result.
 
-Why it cannot: a semiring call ``sr_x(token, 'x_mapping')`` only reads its
+Why it cannot: a semiring call ``sr_x(token, 'provkey_mapping')`` only reads its
 mapping view as a set of (value, provenance) pairs, and the per-semiring
 tables earlier versions created are made by the same
 ``create_provenance_mapping`` call as the shared one (only the name differs),
@@ -20,6 +20,7 @@ from psycopg import AsyncConnection
 
 from ap_explanation.domains.semiring import DbSemiring
 from ap_explanation.repositories.annotation import AnnotationRepository
+from ap_explanation.repositories.legacy_mappings import legacy_tables_of
 from ap_explanation.services.provenance import ProvenanceService
 
 SCHEMA = "mathe"
@@ -74,23 +75,20 @@ async def test_shared_mapping_gives_the_same_results(
     all_semirings: list[DbSemiring],
 ):
     for table in TABLES:
-        await provenance_service.annotate_dataset(table, SCHEMA, all_semirings)
+        await provenance_service.annotate_dataset(table, SCHEMA)
 
     # Back to the layout of earlier versions: one maintained mapping table
     # per semiring, made by the call they used, and views over them.
     await db_connection.execute(f"SET search_path TO {SCHEMA}, public, provsql")
     for table in TABLES:
-        first, *others = all_semirings
-        await db_connection.execute(
-            f"ALTER TABLE {table}_provkey RENAME TO {first.get_legacy_provenance_table_name_for(table)}"
-        )
-        for semiring in others:
+        first, *others = legacy_tables_of(table)
+        await db_connection.execute(f"ALTER TABLE {table}_provkey RENAME TO {first}")
+        for other in others:
             await db_connection.execute(
                 "SELECT create_provenance_mapping(%s, %s, 'provsql_ref', false, true)",
-                (semiring.get_legacy_provenance_table_name_for(table), table),
+                (other, table),
             )
-    for semiring in all_semirings:
-        await annotation_repository._rebuild_union_mapping(SCHEMA, semiring)
+    await annotation_repository._rebuild_mapping_view(SCHEMA)
 
     # Maintained alike: the guard appends the new row to each of them
     await _insert_assessment(db_connection)
@@ -98,9 +96,8 @@ async def test_shared_mapping_gives_the_same_results(
     # The per-semiring tables hold the same pairs, so any one of them can
     # stand for all
     for table in TABLES:
-        reference = all_semirings[0].get_legacy_provenance_table_name_for(table)
-        for semiring in all_semirings[1:]:
-            other = semiring.get_legacy_provenance_table_name_for(table)
+        reference, *others = legacy_tables_of(table)
+        for other in others:
             cursor = await db_connection.execute(
                 f"SELECT (SELECT count(*) FROM (TABLE {reference} EXCEPT TABLE {other}) d),"
                 f" (SELECT count(*) FROM (TABLE {other} EXCEPT TABLE {reference}) d),"
@@ -117,7 +114,7 @@ async def test_shared_mapping_gives_the_same_results(
 
     # Annotating again migrates to the shared table
     for table in TABLES:
-        await provenance_service.annotate_dataset(table, SCHEMA, all_semirings)
+        await provenance_service.annotate_dataset(table, SCHEMA)
     cursor = await db_connection.execute(
         "SELECT tablename FROM pg_tables WHERE schemaname = %s AND tablename LIKE '%%\\_prov%%'",
         (SCHEMA,),

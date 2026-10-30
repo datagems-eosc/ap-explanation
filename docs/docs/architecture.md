@@ -44,7 +44,7 @@ The service has specific database prerequisites:
   - **Relational Database** (`RelationalDbDataSource`): connects to existing PostgreSQL tables
   - **CSV Set** (`CsvSetDataSource`): loads CSV files into a temporary schema in a `playground` database, runs provenance, then drops the schema
 
-- **Automatic Initialization**: When the service connects to the database, it automatically sets up per-table provenance side tables and the union mapping table for each active semiring. No custom PostgreSQL functions are installed — all provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
+- **Automatic Initialization**: When the service connects to the database, it automatically sets up a mapping table for each annotated table and one view over them per schema. No custom PostgreSQL functions are installed — all provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
 
 ## Core Concepts
 
@@ -62,8 +62,10 @@ The service supports the following ProvSQL built-in semirings, all defined in `a
 
 Each semiring has:
 - A **retrieval function** — one of ProvSQL's compiled `sr_*` functions, typed as `ANYELEMENT` so it works for both plain and aggregate provenance tokens without a separate aggregate function.
-- A **mapping table name** — a view (`why_mapping`...) mapping provenance tokens to source row labels, the `UNION ALL` of the per-table mapping tables.
-- **Shared mapping tables** — each row is labelled with the reference stored in its `provsql_ref` column. A mapping table does not depend on the semiring, so each annotated table has one, `<table>_provkey`, shared by every semiring. Tables annotated by earlier versions have one identical `<table>_prov<semiring>` per semiring: the views still read them, and annotating the table again renames one to `<table>_provkey` and drops the others.
+
+Every semiring reads the same mappings:
+- **Shared mapping tables** — each row is labelled with the reference stored in its `provsql_ref` column. A mapping table does not depend on the semiring, so each annotated table has one, `<table>_provkey`. Annotating a table therefore prepares it for every semiring. Tables annotated by earlier versions have one identical `<table>_prov<semiring>` per semiring: annotating the table again renames one to `<table>_provkey` and drops the others.
+- **One mapping view per schema** — `provkey_mapping`, the `UNION ALL` of the schema's mapping tables, maps provenance tokens to source row labels. It replaces the `<semiring>_mapping` relations of earlier versions, which annotating a table drops.
 
 ### SQL Rewriting
 
@@ -75,7 +77,7 @@ The `SqlRewriter` class (`internal/sql_rewriter.py`) transforms SQL queries to i
 SELECT name FROM students WHERE grade > 80
 
 -- Rewritten (e.g. with sr_why)
-SELECT name, sr_why(provenance(), 'why_mapping')
+SELECT name, sr_why(provenance(), 'provkey_mapping')
 FROM students WHERE grade > 80
 ```
 
@@ -85,7 +87,7 @@ FROM students WHERE grade > 80
 SELECT department, COUNT(*) FROM employees GROUP BY department
 
 -- Rewritten (e.g. with sr_formula)
-SELECT x.department, sr_formula(x.cnt, 'formula_mapping')
+SELECT x.department, sr_formula(x.cnt, 'provkey_mapping')
 FROM (
     SELECT department, COUNT(*) AS cnt
     FROM employees GROUP BY department

@@ -19,7 +19,7 @@ async def _explain(connstr: str, semiring: DbSemiring, test_schema: TestSchema, 
     """Annotate and explain on a connection of its own, closed afterwards."""
     async with await AsyncConnection.connect(connstr, autocommit=True) as conn:
         service = await ProvenanceService.create(conn, SqlRewriter(), NoOpExplainer())
-        await service.annotate_dataset(test_schema.table, test_schema.schema, [semiring])
+        await service.annotate_dataset(test_schema.table, test_schema.schema)
         return await service.compute_provenance(test_schema.schema, query, [semiring])
 
 
