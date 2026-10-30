@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
-# View of a schema's mapping tables, which every semiring call reads: a mapping
-# does not depend on the semiring
-MAPPING_VIEW = "provkey_mapping"
+# Temporary view labelling the rows of a schema's annotated tables, which every
+# semiring call reads: a label does not depend on the semiring
+MAPPING_VIEW = "apx_mapping"
 
 
 class DbSemiring(BaseModel):

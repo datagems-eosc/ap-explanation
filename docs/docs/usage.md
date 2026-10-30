@@ -79,7 +79,7 @@ Poll the task like an explanation. On success its result holds ProvSQL's counts 
 
 ## Semiring Types
 
-All semirings use ProvSQL's built-in `sr_*` functions, identify rows by their `provsql_ref` column, and share each table's mapping table.
+All semirings use ProvSQL's built-in `sr_*` functions and identify rows by their provenance token.
 
 | Name | ProvSQL function | Description |
 |---|---|---|

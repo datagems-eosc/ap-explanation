@@ -63,9 +63,9 @@ The service supports the following ProvSQL built-in semirings, all defined in `a
 Each semiring has:
 - A **retrieval function** — one of ProvSQL's compiled `sr_*` functions, typed as `ANYELEMENT` so it works for both plain and aggregate provenance tokens without a separate aggregate function.
 
-Every semiring reads the same mappings:
-- **Shared mapping tables** — each row is labelled with the reference stored in its `provsql_ref` column. A mapping table does not depend on the semiring, so each annotated table has one, `<table>_provkey`. Annotating a table therefore prepares it for every semiring. Tables annotated by earlier versions have one identical `<table>_prov<semiring>` per semiring: annotating the table again renames one to `<table>_provkey` and drops the others.
-- **One mapping view per schema** — `provkey_mapping`, the `UNION ALL` of the schema's mapping tables, maps provenance tokens to source row labels. It replaces the `<semiring>_mapping` relations of earlier versions, which annotating a table drops.
+Every semiring reads the same labels:
+- **Rows are labelled by their token** — `<table>@k<hex>`, where `<hex>` is the row's `provsql` token. Annotating a table therefore adds only ProvSQL's own column, and prepares the table for every semiring. A row's token, and so its reference, only changes with its probability.
+- **One temporary view per query** — `compute` creates `apx_mapping` in its transaction, the `UNION ALL` of the schema's annotated tables, and drops it before committing. ProvSQL's `sr_*` functions need a single relation holding every table's tokens. Left in place, the view would stop other sessions dropping those tables. Annotating a table removes the `provsql_ref` columns, mapping tables and views of earlier versions.
 
 ### SQL Rewriting
 
@@ -77,7 +77,7 @@ The `SqlRewriter` class (`internal/sql_rewriter.py`) transforms SQL queries to i
 SELECT name FROM students WHERE grade > 80
 
 -- Rewritten (e.g. with sr_why)
-SELECT name, sr_why(provenance(), 'provkey_mapping')
+SELECT name, sr_why(provenance(), 'apx_mapping')
 FROM students WHERE grade > 80
 ```
 
@@ -87,7 +87,7 @@ FROM students WHERE grade > 80
 SELECT department, COUNT(*) FROM employees GROUP BY department
 
 -- Rewritten (e.g. with sr_formula)
-SELECT x.department, sr_formula(x.cnt, 'provkey_mapping')
+SELECT x.department, sr_formula(x.cnt, 'apx_mapping')
 FROM (
     SELECT department, COUNT(*) AS cnt
     FROM employees GROUP BY department

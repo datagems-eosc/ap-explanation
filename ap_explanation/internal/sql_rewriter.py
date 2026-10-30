@@ -150,7 +150,7 @@ class SqlRewriter:
             GROUP BY col1;
 
             Rewritten query:
-            SELECT x.col1, x.total, sr_formula(x.total, 'formula_mapping')
+            SELECT x.col1, x.total, sr_formula(x.total, 'apx_mapping')
             FROM (
                 SELECT col1, SUM(col2) AS total
                 FROM table
@@ -222,8 +222,8 @@ class SqlRewriter:
         Wrap *query* as the subquery SUBQUERY_ALIAS and select *outer_columns* from it.
 
         Example:
-            _wrap_in_subquery(<SELECT DISTINCT a FROM t>, [x.a, sr_why(provenance(), 'why_mapping')])
-            SELECT x.a, sr_why(provenance(), 'why_mapping') FROM (SELECT DISTINCT a FROM t) AS x
+            _wrap_in_subquery(<SELECT DISTINCT a FROM t>, [x.a, sr_why(provenance(), 'apx_mapping')])
+            SELECT x.a, sr_why(provenance(), 'apx_mapping') FROM (SELECT DISTINCT a FROM t) AS x
         """
         return Select(expressions=outer_columns).from_(
             Subquery(this=query, alias=self.SUBQUERY_ALIAS))

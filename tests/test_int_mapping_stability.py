@@ -1,16 +1,15 @@
 """
-The scenarios the previous CTID-based mapping could not survive.
+The scenarios a mapping built once could not survive.
 
 A CTID is a physical row location: UPDATE and VACUUM FULL move rows, so a
-mapping built from CTIDs resolves to nothing — or to a different row. And a
-snapshot mapping never learns about rows inserted after annotation.
+mapping of CTIDs resolves to nothing — or to a different row. And a snapshot
+never learns about rows inserted after annotation.
 """
 
 import pytest
 from psycopg import AsyncConnection
 
 from ap_explanation.domains.semiring import DbSemiring
-from ap_explanation.repositories.provsql import REFERENCE_COLUMN, references_in
 from ap_explanation.services.provenance import ProvenanceService
 from tests.conftest import TestSchema
 
@@ -85,10 +84,7 @@ async def test_rows_inserted_after_annotation_are_mapped(
     why_semiring: DbSemiring,
     test_schema: TestSchema,
 ):
-    """
-    ProvSQL's maintained mappings (>= 1.11.0) append a mapping row for every
-    genuine INSERT, so a row added after annotation still explains itself.
-    """
+    """A row added after annotation still explains itself."""
     table = f"{test_schema.schema}.{test_schema.table}"
     await provenance_service.annotate_dataset(
         test_schema.table, test_schema.schema
@@ -98,8 +94,8 @@ async def test_rows_inserted_after_annotation_are_mapped(
     # keys, so invented values would not insert. Read the values out first
     # rather than INSERT ... SELECT, which ProvSQL cannot rewrite into a
     # tracked relation. The provsql column is left out of the column list,
-    # which is what makes this a genuine insert — provenance_guard mints a new
-    # token for it, and with a maintained mapping a mapping row to go with it.
+    # which is what makes this a genuine insert: provenance_guard mints a new
+    # token for it.
     new_id = 10_000_000
     columns = (
         "student_id",
@@ -135,7 +131,7 @@ async def test_rows_inserted_after_annotation_are_mapped(
 
 
 @pytest.mark.asyncio
-async def test_reference_column_is_hidden_from_answers(
+async def test_provsql_column_is_hidden_from_answers(
     provenance_service: ProvenanceService,
     why_semiring: DbSemiring,
     test_schema: TestSchema,
@@ -153,9 +149,7 @@ async def test_reference_column_is_hidden_from_answers(
 
     assert rows
     for row in rows:
-        assert REFERENCE_COLUMN not in row.answer
-        for entry in row.provenance[why_semiring.name].data:
-            assert REFERENCE_COLUMN not in entry["data"]
+        assert "provsql" not in row.answer
 
 
 @pytest.mark.asyncio
@@ -226,50 +220,3 @@ async def test_reference_resolution_is_not_rewritten(
     assert resolved
     for data in resolved.values():
         assert "provsql" not in data
-
-
-@pytest.mark.asyncio
-async def test_outdated_ctid_mapping_is_rebuilt(
-    provenance_service: ProvenanceService,
-    db_connection: AsyncConnection,
-    why_semiring: DbSemiring,
-    test_schema: TestSchema,
-):
-    """
-    A database annotated by an earlier version holds a mapping of CTIDs, with
-    no reference column and no registry entry. Re-annotating must rebuild it
-    rather than skip over it.
-    """
-    table = f"{test_schema.schema}.{test_schema.table}"
-    prov_table = f"{test_schema.table}_provkey"
-    qualified = f"{test_schema.schema}.{prov_table}"
-
-    await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema
-    )
-
-    # Wind the mapping back to what the previous version left behind: CTID
-    # values, no maintained registration, and no reference column.
-    await db_connection.execute(
-        f"UPDATE {qualified} SET value = '{test_schema.table}@p0r1'"
-    )
-    await db_connection.execute(
-        "DELETE FROM provsql.provenance_mapping_registry WHERE mapping = to_regclass(%s)::oid",
-        (qualified,),
-    )
-    await db_connection.execute(f"ALTER TABLE {table} DROP COLUMN {REFERENCE_COLUMN}")
-
-    await provenance_service.annotate_dataset(
-        test_schema.table, test_schema.schema
-    )
-
-    cursor = await db_connection.execute(f"SELECT value FROM {qualified} LIMIT 1")
-    value = (await cursor.fetchone())[0]
-    assert references_in(value), f"still in the old format: {value}"
-
-    # And the rebuilt mapping still resolves.
-    query = f"SELECT * FROM {table} LIMIT 5"
-    rows = await provenance_service.compute_provenance(
-        test_schema.schema, query, [why_semiring]
-    )
-    assert _references(rows, why_semiring)

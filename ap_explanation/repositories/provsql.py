@@ -2,16 +2,10 @@
 ProvSQL, as this service uses it, and how the rows of an annotated table are
 labelled.
 
-Each row carries a surrogate reference, a value rather than its physical
-location (the CTID this replaced), so it survives UPDATE, VACUUM FULL and
-ProvSQL's own data-modification rewrites.
-
-The reference lives in a plain column with a DEFAULT (rather than a GENERATED
-column) for two reasons: ProvSQL's ``provenance_guard`` trigger reads it as
-``NEW.provsql_ref`` in a BEFORE INSERT trigger, where a generated column is not
-yet computed, and a DEFAULT expression cannot reference other columns anyway —
-which rules out deriving the reference from a primary key, and lets tables
-without one work the same way.
+A row is labelled by its provsql token, so it needs no column of its own and
+survives UPDATE and VACUUM FULL. A token only changes with the row's
+probability (:meth:`ProvSqlRepository.set_probabilities`), or with
+``provsql.update_provenance`` on, which nothing here sets.
 """
 
 import asyncio
@@ -20,11 +14,12 @@ from collections import defaultdict
 from logging import getLogger
 from re import compile
 from typing import LiteralString, cast
+from uuid import UUID
 
 from orjson import dumps
 from psycopg import AsyncConnection, errors
 from psycopg.rows import dict_row
-from psycopg.sql import SQL, Identifier
+from psycopg.sql import SQL, Identifier, Literal
 from psycopg.types.json import set_json_dumps
 
 from ap_explanation.domains.provenance import Derivation, SemiringProvenance
@@ -40,42 +35,16 @@ from ap_explanation.errors import (
 )
 from ap_explanation.internal.distributed_lock import RedisRowBudget
 from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repositories.legacy_mappings import (
-    LEGACY_SUFFIXES,
-    drop_union_relations,
-    legacy_tables_of,
-    replace_legacy_tables,
-)
+from ap_explanation.repositories.legacy_mappings import remove_legacy_mappings
 from ap_explanation.repositories.query_guard import QueryGuard
 from ap_explanation.settings import QueryLimits
 
 logger = getLogger(__name__)
 set_json_dumps(dumps)
 
-# Name of the column added to every annotated table to hold its stable row
-# reference. It is also the mapping attribute handed to
-# create_provenance_mapping, which is what makes maintained mappings possible:
-# provenance_guard interpolates the attribute as ($1).%I, so it has to name a
-# real column rather than an expression.
-REFERENCE_COLUMN = "provsql_ref"
-
-# Suffix of a table's mapping table, shared by all semirings: the reference
-# identifies the row, not the provenance flavour.
-MAPPING_TABLE_SUFFIX = "_provkey"
-
-_REFERENCE_RE = compile(r"([a-zA-Z_][a-zA-Z0-9_]*)@k([0-9a-f]+)")
-
-
-def reference_default(table_name: str) -> str:
-    """
-    SQL DEFAULT expression populating the reference column.
-
-    A random suffix rather than a key-derived one: the expression must be
-    self-contained, and the hex alphabet keeps the reference unambiguous
-    inside the ``{…}`` / ``,`` / ``⊗`` / ``⊕`` syntax the semirings emit.
-    """
-    literal = table_name.replace("'", "''")
-    return f"'{literal}@k' || translate(gen_random_uuid()::text, '-', '')"
+# All 32 digits of a token: a formula also holds values, like an e-mail address
+# of a MIN(email) (anna@kfe.org), which are not references
+_REFERENCE_RE = compile(r"([a-zA-Z_][a-zA-Z0-9_]*)@k([0-9a-f]{32})")
 
 
 def references_in(expression: str) -> list[tuple[str, str]]:
@@ -89,6 +58,11 @@ def references_in(expression: str) -> list[tuple[str, str]]:
                       {"{table@k<hex>,table@k<hex>,...}"}
     """
     return [(table, f"{table}@k{key}") for table, key in _REFERENCE_RE.findall(expression)]
+
+
+def token_of(reference: str) -> UUID:
+    """The provsql token of the row a reference names."""
+    return UUID(reference.rpartition("@k")[2])
 
 
 class ProvSqlRepository:
@@ -151,17 +125,15 @@ class ProvSqlRepository:
             schema_name: The schema where the base table is located.
             table_name: The name of the base table.
         Returns:
-            True if the table was newly annotated or its mapping table created
-            (or rebuilt from an outdated format), False if both were in place.
+            True if the table was newly annotated, False if it already was.
         """
         newly_annotated = await self._add_provenance(schema_name, table_name)
-        newly_mapped = await self._ensure_mapping(schema_name, table_name)
-        return newly_annotated or newly_mapped
+        await remove_legacy_mappings(self._conn, schema_name, table_name)
+        return newly_annotated
 
     async def disable(self, schema_name: str, table_name: str) -> None:
         """
-        Undo :meth:`enable` for a table: its provenance, its reference column
-        and its mapping tables.
+        Undo :meth:`enable` for a table.
 
         Args:
             schema_name: The schema where the base table is located.
@@ -177,27 +149,7 @@ class ProvSqlRepository:
         async with self._conn.transaction():
             await self._conn.execute("SELECT remove_provenance(%s)", (table_name,))
 
-        # The reference column is ours, not ProvSQL's, so it needs dropping here.
-        async with self._conn.transaction():
-            await self._conn.execute(
-                SQL("ALTER TABLE {} DROP COLUMN IF EXISTS {}").format(
-                    Identifier(table_name), Identifier(REFERENCE_COLUMN)
-                )
-            )
-
-        prov_tables = await self._existing_tables(
-            schema_name, [f"{table_name}{MAPPING_TABLE_SUFFIX}", *legacy_tables_of(table_name)]
-        )
-        if not prov_tables:
-            return
-
-        # The drops take the mapping view with them
-        async with self._conn.transaction():
-            for prov_table in prov_tables:
-                await self._conn.execute(
-                    SQL("DROP TABLE {} CASCADE").format(Identifier(prov_table))
-                )
-            await self._rebuild_mapping_view(schema_name)
+        await remove_legacy_mappings(self._conn, schema_name, table_name)
 
     async def set_probabilities(
         self, schema_name: str, table_name: str, column: str | None
@@ -214,9 +166,8 @@ class ProvSqlRepository:
 
         ProvSQL writes a probability once: ``set_prob`` refuses to change one
         already set. A tuple whose probability changes is given a fresh input
-        gate by ``replace_input`` instead, and ProvSQL's provenance_guard
-        carries the tuple's mapping values over to it. Only these tuples are
-        replaced, as the mappings keep the values of the tokens replaced.
+        gate by ``replace_input`` instead, which also gives it a new reference.
+        Only these tuples are replaced, so the others keep theirs.
 
         Args:
             schema_name: The schema where the table is located.
@@ -329,7 +280,6 @@ class ProvSqlRepository:
         edited_query = self._sql_rewriter.rewrite(query, semirings, compute_probability, bool(rows_semirings))
         internal_columns = {
             "provsql",
-            REFERENCE_COLUMN,
             SqlRewriter.PROBABILITY_FUNCTION,
             *(s.retrieval_function for s in semirings),
             *(c for s in rows_semirings for c in (s.rows_function, f"{s.rows_function}_token")),
@@ -345,6 +295,7 @@ class ProvSqlRepository:
             # would hold back VACUUM, or be ended by idle_in_transaction_session_timeout
             async with self._guard.reserve(aggregated_rows), self._conn.transaction():
                 await self._guard.apply_limits()
+                await self._create_mapping_view(schema_name)
 
                 if rows_semirings:
                     # An aggregate's token is only valid in the statement that built it, or
@@ -400,9 +351,13 @@ class ProvSqlRepository:
                         )
                     )
 
+                # Not left on the connection: it would stop the other sessions
+                # dropping the tables it reads
+                await self._conn.execute(SQL("DROP VIEW pg_temp.{}").format(Identifier(MAPPING_VIEW)))
+
             return results
         except errors.UndefinedTable as e:
-            # The mapping view doesn't exist, meaning no table of the schema has been annotated
+            # A table of the query that does not exist, and so is not annotated
             logger.warning(f"Table not annotated: {e}")
             raise TableNotAnnotatedError(schema_name=schema_name) from e
         except errors.QueryCanceled as e:
@@ -551,214 +506,49 @@ class ProvSqlRepository:
 
         return True
 
-    async def _ensure_mapping(self, schema_name: str, table_name: str) -> bool:
+    async def _create_mapping_view(self, schema_name: str) -> None:
         """
-        Give a table its mapping table, and add it to the mapping view.
+        Create the view semiring calls read to label rows, for the current
+        transaction.
 
-        The mapping table does not depend on the semiring. A table annotated by
-        an earlier version, which kept one identical mapping table per
-        semiring, is migrated: one of its current per-semiring tables is
-        renamed to the shared name and the others are dropped.
+        A semiring call (``sr_why(provenance(), 'apx_mapping')``) takes a single
+        relation holding the tokens of every table of its query. Reading them
+        from the tables themselves leaves no mapping to keep up to date. The
+        one thing it misses is a row changed with ``provsql.update_provenance``
+        on: its token is no longer the input gate its provenance reaches, and
+        that gate loses its label.
 
-        Returns:
-            True if the mapping table was newly created (or rebuilt from an
-            outdated format), False if it was already in place.
+        Raises:
+            TableNotAnnotatedError: If no table of the schema is annotated
         """
-        prov_table = f"{table_name}{MAPPING_TABLE_SUFFIX}"
-        legacy_tables = legacy_tables_of(table_name)
+        cursor = await self._conn.execute(
+            "SELECT c.relname FROM pg_trigger t"
+            " JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace"
+            " WHERE n.nspname = %s AND t.tgname = 'provenance_guard'",
+            (schema_name,),
+        )
+        tables = [row[0] for row in await cursor.fetchall()]
+        if not tables:
+            raise TableNotAnnotatedError(schema_name=schema_name)
 
-        await self._set_search_path(schema_name)
-
-        # ProvSQL's create_provenance_mapping is idempotent (1.9.0+), but its
-        # NOTICE-and-no-op path is indistinguishable from a real creation, so
-        # the existence check is what computes this method's return value.
-        existing = await self._existing_tables(schema_name, [prov_table, *legacy_tables])
-        legacy_tables = [t for t in legacy_tables if t in existing]
-        has_mapping = prov_table in existing
-
-        if has_mapping and not await self._mapping_is_current(
-            schema_name, table_name, prov_table
-        ):
-            # Built by an earlier version (a ctid mapping, or one predating
-            # maintained registration): its stored values cannot be converted,
-            # so rebuild from the tokens the source table currently holds.
-            logger.info(
-                f"Provenance table '{prov_table}' is not a current maintained mapping, rebuilding"
-            )
-            async with self._conn.transaction():
-                await self._conn.execute(
-                    SQL("DROP TABLE {} CASCADE").format(Identifier(prov_table))
-                )
-            has_mapping = False
-
-        if legacy_tables:
-            current = [
-                t for t in legacy_tables
-                if await self._mapping_is_current(schema_name, table_name, t)
-            ]
-            keep = current[0] if current and not has_mapping else None
-            await replace_legacy_tables(self._conn, legacy_tables, prov_table, keep)
-            has_mapping = has_mapping or keep is not None
-
-        if not has_mapping:
-            await self._ensure_reference_column(schema_name, table_name)
-
-            try:
-                async with self._conn.transaction():
-                    # Needs ProvSQL active (which the connection is): it copies the
-                    # source table with `TABLE oldtbl`, and ProvSQL hides the
-                    # provsql column from star expansion unless active, so with it
-                    # paused the copy has no provenance column and this fails.
-                    # maintained => true registers the mapping in
-                    # provenance_mapping_registry, so provenance_guard appends a row
-                    # for every subsequent INSERT into the source table. Requires
-                    # ProvSQL >= 1.11.0, and requires the attribute to be a column
-                    # name: the guard interpolates it as ($1).%I.
-                    await self._conn.execute(
-                        "SELECT create_provenance_mapping(%s, %s, %s, false, true)",
-                        (prov_table, table_name, REFERENCE_COLUMN),
-                    )
-            except Exception as e:
-                logger.error(f"Unexpected error in create_provenance_mapping: {e}")
-                raise
-
-        async with self._conn.transaction():
-            await self._rebuild_mapping_view(schema_name)
-
-        return not has_mapping
-
-    async def _existing_tables(self, schema_name: str, names: list[str]) -> set[str]:
-        """The tables of *names* that exist in the schema."""
-        async with self._conn.transaction():
-            cursor = await self._conn.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = %s AND tablename = ANY(%s)",
-                (schema_name, names),
-            )
-            return {row[0] for row in await cursor.fetchall()}
-
-    async def _mapping_is_current(
-        self, schema_name: str, table_name: str, prov_table: str
-    ) -> bool:
-        """
-        Check whether an existing mapping table has the current layout, and so
-        can be left alone.
-
-        This is a structural check rather than a check of the stored values:
-        the values a mapping built by an older version holds are CTIDs of a
-        temporary copy of the table, which identify nothing and cannot be
-        converted — such a mapping can only be rebuilt. Sampling a value would
-        also mis-classify an empty mapping table (annotating an empty source
-        table) as current, leaving it unmaintained forever.
-        """
-        async with self._conn.transaction():
-            cursor = await self._conn.execute(
-                "SELECT"
-                " EXISTS (SELECT 1 FROM information_schema.columns"
-                "         WHERE table_schema = %s AND table_name = %s AND column_name = %s),"
-                " EXISTS (SELECT 1 FROM provsql.provenance_mapping_registry"
-                "         WHERE mapping = to_regclass(%s)::oid)",
-                (
-                    schema_name,
-                    table_name,
-                    REFERENCE_COLUMN,
-                    f"{schema_name}.{prov_table}",
-                ),
-            )
-            has_reference_column, is_registered = await cursor.fetchone()
-
-        return bool(has_reference_column and is_registered)
-
-    async def _ensure_reference_column(self, schema_name: str, table_name: str) -> None:
-        """Add the reference column to a source table."""
-        await self._set_search_path(schema_name)
-
-        async with self._conn.transaction():
-            await self._conn.execute(
-                SQL(
-                    "ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} text NOT NULL DEFAULT ({})"
-                ).format(
-                    Identifier(table_name),
-                    Identifier(REFERENCE_COLUMN),
-                    SQL(cast(LiteralString, reference_default(table_name))),
-                )
-            )
-            # Deliberately not UNIQUE: ProvSQL's data-modification machinery
-            # re-inserts rows carrying their existing column values, which a
-            # unique index could reject.
-            await self._conn.execute(
-                SQL("CREATE INDEX IF NOT EXISTS {} ON {} ({})").format(
-                    Identifier(f"{table_name}_{REFERENCE_COLUMN}_idx"),
-                    Identifier(table_name),
-                    Identifier(REFERENCE_COLUMN),
-                )
-            )
-
-    async def _rebuild_mapping_view(self, schema_name: str) -> None:
-        """
-        Build or rebuild the view covering every mapping table of the schema.
-
-        The semiring retrieval functions (``sr_why(provenance(), 'provkey_mapping')``)
-        take a single regclass, so a query spanning several tables needs one
-        relation holding all of their tokens. It cannot be a single shared
-        mapping table instead: ``provenance_mapping_registry`` keys on the
-        mapping's oid, so one mapping table can only ever serve one source
-        table.
-
-        It is a view rather than the materialised snapshot this used to build,
-        so that the rows ``provenance_guard`` appends to a maintained mapping
-        are visible to queries without re-annotating.
-        """
-        await drop_union_relations(self._conn, schema_name)
-
-        mapping_tables = await self._mapping_tables(schema_name)
-        if not mapping_tables:
-            logger.warning(
-                f"No tables ending with {MAPPING_TABLE_SUFFIX} found in schema {schema_name}"
-            )
-            return
-
-        # UNION ALL, not UNION: provenance tokens are unique per input row, so
-        # deduplicating is pure cost and it stops the planner pushing the
-        # evaluator's token join down into each mapping table's index.
+        # shortcut: every annotated table of the schema, not those of the query,
+        # which would miss tables read through a view. ProvSQL rewrites each
+        # semiring lookup through this view, once per table: about 0.1 ms more
+        # per call with 2 tables, 1 ms with 30. Narrow it if schemas get that big.
+        #
+        # The hex alphabet keeps a reference unambiguous inside the
+        # ``{…}`` / ``,`` / ``⊗`` / ``⊕`` syntax the semirings emit. UNION ALL,
+        # not UNION: a token belongs to one row, and deduplicating would stop
+        # the planner pushing the lookup down into each table's provsql index.
         union_query = SQL(" UNION ALL ").join(
-            SQL("SELECT value, provenance FROM {}.{}").format(Identifier(schema_name), Identifier(table))
-            for table in mapping_tables
+            SQL("SELECT {} || translate(provsql::text, '-', '') AS value, provsql AS provenance FROM {}.{}").format(
+                Literal(f"{table}@k"), Identifier(schema_name), Identifier(table)
+            )
+            for table in tables
         )
         await self._conn.execute(
-            SQL("CREATE OR REPLACE VIEW {}.{} AS {}").format(
-                Identifier(schema_name), Identifier(MAPPING_VIEW), union_query
-            )
+            SQL("CREATE TEMP VIEW {} AS {}").format(Identifier(MAPPING_VIEW), union_query)
         )
-
-        logger.info(
-            f"Created {schema_name}.{MAPPING_VIEW} view from {len(mapping_tables)} mapping tables"
-        )
-
-    async def _mapping_tables(self, schema_name: str) -> list[str]:
-        """
-        One mapping table per annotated table of the schema: the shared one or,
-        for a table not migrated yet, one of its per-semiring tables, which hold
-        the same rows.
-        """
-
-        def ending_with(suffix: str) -> str:
-            # LIKE pattern; _ is a LIKE wildcard
-            return "%" + suffix.replace("_", "\\_")
-
-        suffixes = [MAPPING_TABLE_SUFFIX, *LEGACY_SUFFIXES]
-        cursor = await self._conn.execute(
-            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = %s AND tablename LIKE ANY(%s)",
-            (schema_name, [ending_with(suffix) for suffix in suffixes]),
-        )
-        names = [row[0] for row in await cursor.fetchall()]
-
-        # The shared table first: a table with both would have each of its tokens twice
-        by_table: dict[str, str] = {}
-        for suffix in suffixes:
-            for name in names:
-                if name.endswith(suffix):
-                    by_table.setdefault(name.removesuffix(suffix), name)
-        return sorted(by_table.values())
 
     async def _formula_rows_of(self, token: object, semiring: DbSemiring) -> tuple[str, bool]:
         """
@@ -793,22 +583,15 @@ class ProvSqlRepository:
 
         # Query each table for the relevant rows
         for table, references in table_groups.items():
-            query = SQL("SELECT * FROM {table} WHERE {column} = ANY(%s)").format(
-                table=Identifier(table), column=Identifier(REFERENCE_COLUMN)
-            )
+            # Aliased: ProvSQL hides a column named provsql from the results
+            query = SQL("SELECT provsql AS apx_token, * FROM {} WHERE provsql = ANY(%s)").format(Identifier(table))
             cursor = await self._conn.cursor(row_factory=dict_row).execute(
-                query, (references,)
+                query, ([token_of(reference) for reference in references],)
             )
-            data_by_reference = {r[REFERENCE_COLUMN]: r for r in await cursor.fetchall()}
+            data_by_token = {r.pop("apx_token"): r for r in await cursor.fetchall()}
 
             for reference in references:
-                if row := data_by_reference.get(reference):
-                    row = dict(row)
-                    row.pop(REFERENCE_COLUMN)
-                    # Belt and braces: this query runs with ProvSQL paused, so
-                    # there should be no provenance column to strip.
-                    row.pop("provsql", None)
-
+                if row := data_by_token.get(token_of(reference)):
                     results.append({"reference": reference, "data": row})
                 else:
                     logger.warning(

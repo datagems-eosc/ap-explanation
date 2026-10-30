@@ -68,7 +68,7 @@ def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, 
         "SELECT DISTINCT upper(name), EXTRACT(MONTH FROM d), * FROM t", [why_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, x.col_1, x.*, sr_why(provenance(), 'provkey_mapping') "
+        "SELECT x.col_0, x.col_1, x.*, sr_why(provenance(), 'apx_mapping') "
         "FROM (SELECT DISTINCT upper(name) AS col_0, EXTRACT(MONTH FROM d) AS col_1, * FROM t) AS x"
         " WHERE present(provenance())"
     )
@@ -86,7 +86,7 @@ def test_rewrite_sql_aggregate_names_every_group_key(sql_rewriter: SqlRewriter, 
     )
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, x.col_1, x.b, x.n, sr_formula(x.n, 'provkey_mapping') "
+        "SELECT x.col_0, x.col_1, x.b, x.n, sr_formula(x.n, 'apx_mapping') "
         "FROM (SELECT EXTRACT(MONTH FROM t.d) AS col_0, upper(t.a) AS col_1, CAST(t.b AS INT), count(*) AS n "
         "FROM t GROUP BY EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT)) AS x"
         " WHERE present(provenance())"
@@ -102,7 +102,7 @@ def test_rewrite_sql_wraps_set_operations_whole(
         f"SELECT a FROM t1 {operation} SELECT a FROM t2", [why_semiring], probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_why(provenance(), 'provkey_mapping'), probability_evaluate(provenance())"
+        "SELECT x.*, sr_why(provenance(), 'apx_mapping'), probability_evaluate(provenance())"
         f" FROM (SELECT a FROM t1 {operation} SELECT a FROM t2) AS x"
         " WHERE present(provenance())"
     )
@@ -137,9 +137,9 @@ def test_rewrite_sql_every_semiring_and_probability_in_one_query(
     rewritten = sql_rewriter.rewrite("SELECT a.id FROM assessment a", all_semirings, probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_formula(provenance(), 'provkey_mapping'), sr_why(provenance(), 'provkey_mapping'),"
-        " sr_boolexpr(provenance(), 'provkey_mapping'), sr_how(provenance(), 'provkey_mapping'),"
-        " sr_which(provenance(), 'provkey_mapping'), probability_evaluate(provenance())"
+        "SELECT x.*, sr_formula(provenance(), 'apx_mapping'), sr_why(provenance(), 'apx_mapping'),"
+        " sr_boolexpr(provenance(), 'apx_mapping'), sr_how(provenance(), 'apx_mapping'),"
+        " sr_which(provenance(), 'apx_mapping'), probability_evaluate(provenance())"
         " FROM (SELECT a.id FROM assessment a) AS x WHERE present(provenance())"
     )
 
@@ -151,7 +151,7 @@ def test_rewrite_sql_aggregate_keeps_semirings_supporting_it(
     rewritten = sql_rewriter.rewrite("SELECT a, count(*) AS n FROM t GROUP BY a", all_semirings, probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.a, x.n, sr_formula(x.n, 'provkey_mapping'), probability_evaluate(provenance())"
+        "SELECT x.a, x.n, sr_formula(x.n, 'apx_mapping'), probability_evaluate(provenance())"
         " FROM (SELECT a, count(*) AS n FROM t GROUP BY a) AS x WHERE present(provenance())"
     )
 
@@ -168,7 +168,7 @@ def test_rewrite_sql_aggregate_without_group_by(sql_rewriter: SqlRewriter, formu
     rewritten = sql_rewriter.rewrite("SELECT count(*) FROM t WHERE t.a = 1", [formula_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, sr_formula(x.col_0, 'provkey_mapping')"
+        "SELECT x.col_0, sr_formula(x.col_0, 'apx_mapping')"
         " FROM (SELECT count(*) AS col_0 FROM t WHERE t.a = 1) AS x WHERE present(provenance())"
     )
 
@@ -198,7 +198,7 @@ def test_rewrite_sql_aggregate_explained_by_a_supported_one(
     rewritten = sql_rewriter.rewrite("SELECT a, stddev(b) AS sd, count(*) AS n FROM t GROUP BY a", all_semirings)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.a, x.sd, x.n, sr_formula(x.n, 'provkey_mapping')"
+        "SELECT x.a, x.sd, x.n, sr_formula(x.n, 'apx_mapping')"
         " FROM (SELECT a, stddev(b) AS sd, count(*) AS n FROM t GROUP BY a) AS x WHERE present(provenance())"
     )
 
@@ -215,7 +215,7 @@ def test_rewrite_sql_window_function_is_not_an_aggregate(sql_rewriter: SqlRewrit
     rewritten = sql_rewriter.rewrite("SELECT a, sum(b) OVER (PARTITION BY a) FROM t", [why_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_why(provenance(), 'provkey_mapping')"
+        "SELECT x.*, sr_why(provenance(), 'apx_mapping')"
         " FROM (SELECT a, sum(b) OVER (PARTITION BY a) FROM t) AS x WHERE present(provenance())"
     )
 
@@ -231,7 +231,7 @@ def test_rewrite_sql_limits_the_actual_result(sql_rewriter: SqlRewriter, why_sem
         probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_why(provenance(), 'provkey_mapping'), probability_evaluate(provenance()) "
+        "SELECT x.*, sr_why(provenance(), 'apx_mapping'), probability_evaluate(provenance()) "
         "FROM (SELECT a FROM t WHERE b IN (SELECT b FROM u LIMIT plain(2)) ORDER BY a LIMIT plain(3)) AS x "
         "WHERE present(provenance())"
     )
@@ -244,13 +244,13 @@ def test_rewrite_sql_keeps_plain_limits(sql_rewriter: SqlRewriter, why_semiring:
 
 @pytest.mark.parametrize(("query", "expected"), [
     ("SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1",
-     "SELECT x.a, x.n, sr_formula(x.n, 'provkey_mapping') "
+     "SELECT x.a, x.n, sr_formula(x.n, 'apx_mapping') "
      "FROM (SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1) AS x WHERE present(provenance())"),
     ("SELECT DISTINCT a FROM t",
-     "SELECT x.a, sr_formula(provenance(), 'provkey_mapping') FROM (SELECT DISTINCT a FROM t) AS x "
+     "SELECT x.a, sr_formula(provenance(), 'apx_mapping') FROM (SELECT DISTINCT a FROM t) AS x "
      "WHERE present(provenance())"),
     ("SELECT a FROM t1 UNION SELECT a FROM t2",
-     "SELECT x.*, sr_formula(provenance(), 'provkey_mapping') FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x "
+     "SELECT x.*, sr_formula(provenance(), 'apx_mapping') FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x "
      "WHERE present(provenance())"),
 ])
 def test_rewrite_sql_keeps_the_rows_of_the_sql_answer(

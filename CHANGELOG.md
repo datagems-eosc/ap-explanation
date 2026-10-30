@@ -6,9 +6,7 @@
 
 - **DISTINCT queries return one derivation per result row** — semirings are now evaluated outside the `DISTINCT`, as they already were for `GROUP BY`. Previously the semiring value was part of the `DISTINCT` key, so a result row merged from several tuples came back once per tuple, each with that tuple's provenance only; it now comes back once, with provenance combining all of them.
 
-- **One mapping table per table** — annotating a table creates `<table>_provkey`, shared by every semiring, instead of five identical `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows). Tables annotated by earlier versions keep working, and are migrated the next time they are annotated: one per-semiring table is renamed, the others dropped.
-
-- **One mapping view per schema** — semirings now read `provkey_mapping` instead of a `<semiring>_mapping` view each, which held the same rows. Annotating a table prepares it for every semiring, and drops the old views of its schema.
+- **No mapping tables** — annotating a table now adds only ProvSQL's `provsql` column. Each query labels rows through a temporary view, `apx_mapping`, over the annotated tables of its schema, instead of the `provsql_ref` column, the `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows) and the `<semiring>_mapping` views. Annotating a table again removes those from existing databases. References still read `table@k<hex>`, but `<hex>` is now the row's provenance token, so a row gets a new reference when its probability changes. The database role needs the `TEMP` privilege, which PostgreSQL grants by default.
 
 - **Configuration is checked at startup** — environment variables are read by pydantic-settings. A value of the wrong type (`LLM_TIMEOUT=abc`, `JWKS_TTL_SECONDS=abc`) now stops the service from starting. `LLM_SSL_VERIFY` and `USE_EMBEDDED_CELERY_WORKER` accept `1`, `yes` and `on` as true and `0`, `no` and `off` as false, refuse anything else, and an empty value means their default, `true`: it was `false`.
 

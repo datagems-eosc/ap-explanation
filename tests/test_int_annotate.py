@@ -65,10 +65,7 @@ async def test_ok_reversibility(provenance_service: ProvenanceService, test_sche
 async def test_ok_removing_one_table_keeps_the_others(
     provenance_service: ProvenanceService, why_semiring: DbSemiring, test_schema: TestSchema
 ):
-    """
-    The tables of a schema share one mapping view: dropping one table's mapping
-    takes the view with it, so it has to come back for the others.
-    """
+    """The tables of a schema share one mapping view, which must not need the table removed."""
     await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.annotate_dataset("last_assessment_levels", test_schema.schema)
 

@@ -1,5 +1,5 @@
 -- Wrapped: present(provenance()) keeps the rows of the SQL answer, not those of other possible worlds
-SELECT x.*, sr_why(provenance(), 'provkey_mapping')
+SELECT x.*, sr_why(provenance(), 'apx_mapping')
 FROM (
     SELECT a.id, a.answer
     FROM assessment a
