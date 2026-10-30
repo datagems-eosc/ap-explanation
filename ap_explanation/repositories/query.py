@@ -384,13 +384,16 @@ class QueryRepository:
         sb = []
         async with self._conn.cursor() as cur:
             # 1. Get all tables in the schema
-            await cur.execute(f"""
+            await cur.execute(
+                """
                 SELECT table_name
                 FROM information_schema.tables
-                WHERE table_schema = '{schema_name}'
+                WHERE table_schema = %s
                 AND table_type='BASE TABLE'
                 ORDER BY table_name
-            """)
+            """,
+                (schema_name,),
+            )
             tables = [row[0] for row in await cur.fetchall()]
 
             for table_name in tables:
@@ -399,11 +402,11 @@ class QueryRepository:
                     """
                     SELECT column_name, data_type, is_nullable, column_default
                     FROM information_schema.columns
-                    WHERE table_schema = '{schema_name}'
+                    WHERE table_schema = %s
                     AND table_name = %s
                     ORDER BY ordinal_position
                 """,
-                    (table_name,),
+                    (schema_name, table_name),
                 )
                 columns = await cur.fetchall()
 
@@ -429,12 +432,12 @@ class QueryRepository:
                     FROM information_schema.table_constraints tc
                     JOIN information_schema.key_column_usage kcu
                     ON tc.constraint_name = kcu.constraint_name
-                    WHERE tc.table_schema = '{schema_name}'
+                    WHERE tc.table_schema = %s
                     AND tc.table_name = %s
                     AND tc.constraint_type = 'PRIMARY KEY'
                     ORDER BY kcu.ordinal_position
                 """,
-                    (table_name,),
+                    (schema_name, table_name),
                 )
                 pk_columns = [row[0] for row in await cur.fetchall()]
                 if pk_columns:
