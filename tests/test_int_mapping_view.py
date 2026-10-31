@@ -8,7 +8,7 @@ from psycopg import AsyncConnection
 
 from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import TableNotAnnotatedError
-from ap_explanation.repositories.provsql import references_in
+from ap_explanation.repositories.provsql import references_in, tables_to_label
 from ap_explanation.services.provenance import ProvenanceService
 from tests.conftest import TestSchema
 
@@ -49,6 +49,100 @@ def test_a_value_is_not_a_reference():
     reference = "people@k" + "d501604ee4954d38badc7697a0cfbbd0"
 
     assert references_in(f"min({reference}*anna@kfe.org)") == [("people", reference)]
+
+
+def test_the_view_holds_the_tables_of_the_plan():
+    def scan(schema: str, table: str) -> dict:
+        return {"Node Type": "Seq Scan", "Schema": schema, "Relation Name": table}
+
+    annotated = ["a", "b", "c"]
+    join = {"Node Type": "Hash Join", "Plans": [scan("s", "a"), {"Node Type": "Hash", "Plans": [scan("s", "plain")]}]}
+
+    assert tables_to_label(annotated, "s", join) == ["a"]
+    # Nothing to narrow it to: no table read, or an annotated table behind another schema's chunks
+    assert tables_to_label(annotated, "s", {"Node Type": "Result"}) == annotated
+    assert tables_to_label(annotated, "s", scan("_timescaledb_internal", "_hyper_1_1_chunk")) == annotated
+    assert tables_to_label(annotated, "s", {"Node Type": "Append", "Plans": [
+        scan("s", "a"), scan("_timescaledb_internal", "_hyper_1_1_chunk")]}) == annotated
+
+
+@pytest.mark.asyncio
+async def test_a_plan_names_the_tables_read_only(
+    provenance_service: ProvenanceService,
+    db_connection: AsyncConnection,
+    test_schema: TestSchema,
+):
+    """ProvSQL's rewriting adds no relation of its own, which would keep every table in the view."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
+
+    await db_connection.execute(f"SET search_path TO {test_schema.schema}, public, provsql")
+    cursor = await db_connection.execute(f"EXPLAIN (VERBOSE, FORMAT JSON) SELECT id FROM {test_schema.table}")
+    plan = (await cursor.fetchall())[0][0][0]["Plan"]
+
+    assert tables_to_label([test_schema.table, "other"], test_schema.schema, plan) == [test_schema.table]
+
+
+@pytest.mark.asyncio
+async def test_a_table_behind_a_view_is_labelled(
+    provenance_service: ProvenanceService,
+    db_connection: AsyncConnection,
+    why_semiring: DbSemiring,
+    test_schema: TestSchema,
+):
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
+    await provenance_service.annotate_dataset("last_assessment_levels", test_schema.schema)
+    async with db_connection.transaction():
+        await db_connection.execute("SET LOCAL provsql.active = 0")
+        await db_connection.execute(
+            f"CREATE VIEW {test_schema.schema}.a_view AS"
+            f" SELECT id, student_id, topic FROM {test_schema.schema}.{test_schema.table}"
+        )
+
+    rows = await provenance_service.compute_provenance(
+        test_schema.schema,
+        "SELECT a.id, l.last_level FROM a_view a"
+        " JOIN last_assessment_levels l ON a.student_id = l.student_id AND a.topic = l.topic"
+        " ORDER BY a.id LIMIT 3",
+        [why_semiring],
+    )
+
+    assert rows
+    for row in rows:
+        provenance = row.provenance[why_semiring.name]
+        assert {table for table, _ in references_in(provenance.expression)} == {
+            test_schema.table,
+            "last_assessment_levels",
+        }
+        assert len(provenance.data) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_left_join_the_planner_drops_is_labelled(
+    provenance_service: ProvenanceService,
+    db_connection: AsyncConnection,
+    why_semiring: DbSemiring,
+    test_schema: TestSchema,
+):
+    """A join on a unique key that selects nothing of it leaves a plain plan: provenance still reaches it."""
+    schema = test_schema.schema
+    async with db_connection.transaction():
+        await db_connection.execute("SET LOCAL provsql.active = 0")
+        await db_connection.execute(f"CREATE TABLE {schema}.lefts (id int)")
+        await db_connection.execute(f"CREATE TABLE {schema}.rights (id int PRIMARY KEY)")
+        await db_connection.execute(f"INSERT INTO {schema}.lefts VALUES (1), (2)")
+        await db_connection.execute(f"INSERT INTO {schema}.rights VALUES (1), (2)")
+    await provenance_service.annotate_dataset("lefts", schema)
+    await provenance_service.annotate_dataset("rights", schema)
+
+    rows = await provenance_service.compute_provenance(
+        schema, "SELECT l.id FROM lefts l LEFT JOIN rights r ON l.id = r.id ORDER BY l.id", [why_semiring]
+    )
+
+    assert len(rows) == 2
+    for row in rows:
+        provenance = row.provenance[why_semiring.name]
+        assert {table for table, _ in references_in(provenance.expression)} == {"lefts", "rights"}
+        assert len(provenance.data) == 2
 
 
 @pytest.mark.asyncio

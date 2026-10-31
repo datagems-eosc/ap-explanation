@@ -61,6 +61,35 @@ def token_of(reference: str) -> UUID:
     return UUID(reference.rpartition("@k")[2])
 
 
+def _relations(plan: dict) -> set[tuple[str, str]]:
+    """The ``(schema, table)`` pairs an ``EXPLAIN (VERBOSE)`` plan reads, views expanded."""
+    found = {(plan["Schema"], plan["Relation Name"])} if "Relation Name" in plan else set()
+    for child in plan.get("Plans", []):
+        found |= _relations(child)
+    return found
+
+
+def tables_to_label(annotated: list[str], schema_name: str, plan: dict) -> list[str]:
+    """
+    The annotated tables whose rows the query planned as *plan* can reach.
+
+    Reading a query's tables from its text would miss those behind a view; a
+    plan has them all.
+
+    Args:
+        annotated: The annotated tables of *schema_name*
+        schema_name: The schema the query runs in
+        plan: The query's plan, as ``EXPLAIN (VERBOSE, FORMAT JSON)`` gives it
+    """
+    read = _relations(plan)
+    tables = [table for table in annotated if (schema_name, table) in read]
+    # Nothing read (WHERE false), or a relation of another schema, which can be
+    # a Timescale chunk of an annotated table: all of them, to lose no label
+    if not tables or any(schema != schema_name for schema, _ in read):
+        return annotated
+    return tables
+
+
 class ProvSqlRepository:
     """
     What this service does with ProvSQL on one database: prepare tables and
@@ -343,7 +372,7 @@ class ProvSqlRepository:
             # would hold back VACUUM, or be ended by idle_in_transaction_session_timeout
             async with self._guard.reserve(aggregated_rows), self._conn.transaction():
                 await self._guard.apply_limits()
-                await self._create_mapping_view(schema_name)
+                await self._create_mapping_view(schema_name, edited_query)
 
                 if rows_semirings:
                     # An aggregate's token is only valid in the statement that built it, or
@@ -444,7 +473,7 @@ class ProvSqlRepository:
             SQL("SET search_path TO {}, public, provsql;").format(Identifier(schema_name))
         )
 
-    async def _create_mapping_view(self, schema_name: str) -> None:
+    async def _create_mapping_view(self, schema_name: str, edited_query: str) -> None:
         """
         Create the view semiring calls read to label rows, for the current
         transaction.
@@ -456,6 +485,15 @@ class ProvSqlRepository:
         on: its token is no longer the input gate its provenance reaches, and
         that gate loses its label.
 
+        ProvSQL rewrites each semiring lookup through this view, once per
+        table, so it holds the tables of *edited_query* only: on a query
+        returning 79,205 rows of a schema of 10 annotated tables, 130 s against
+        222 s.
+
+        Args:
+            schema_name: The schema the query runs in
+            edited_query: The query about to run, whose plan names its tables
+
         Raises:
             TableNotAnnotatedError: If no table of the schema is annotated
         """
@@ -465,15 +503,23 @@ class ProvSqlRepository:
             " WHERE n.nspname = %s AND t.tgname = 'provenance_guard'",
             (schema_name,),
         )
-        tables = [row[0] for row in await cursor.fetchall()]
-        if not tables:
+        annotated = [row[0] for row in await cursor.fetchall()]
+        if not annotated:
             raise TableNotAnnotatedError(schema_name=schema_name)
 
-        # shortcut: every annotated table of the schema, not those of the query,
-        # which would miss tables read through a view. ProvSQL rewrites each
-        # semiring lookup through this view, once per table: about 0.1 ms more
-        # per call with 2 tables, 1 ms with 30. Narrow it if schemas get that big.
-        #
+        # An empty view first: planning the query needs the one it names. The
+        # plan is the one that runs, ProvSQL on: without it, PostgreSQL drops
+        # the table of a LEFT JOIN on a unique key, which provenance still reaches.
+        await self._conn.execute(
+            SQL("CREATE TEMP VIEW {} AS SELECT NULL::text AS value, NULL::uuid AS provenance WHERE false").format(
+                Identifier(MAPPING_VIEW)
+            )
+        )
+        cursor = await self._conn.execute(
+            SQL(cast(LiteralString, f"EXPLAIN (VERBOSE, FORMAT JSON) {edited_query}"))
+        )
+        tables = tables_to_label(annotated, schema_name, (await cursor.fetchall())[0][0][0]["Plan"])
+
         # The hex alphabet keeps a reference unambiguous inside the
         # ``{…}`` / ``,`` / ``⊗`` / ``⊕`` syntax the semirings emit. UNION ALL,
         # not UNION: a token belongs to one row, and deduplicating would stop
@@ -485,7 +531,7 @@ class ProvSqlRepository:
             for table in tables
         )
         await self._conn.execute(
-            SQL("CREATE TEMP VIEW {} AS {}").format(Identifier(MAPPING_VIEW), union_query)
+            SQL("CREATE OR REPLACE TEMP VIEW {} AS {}").format(Identifier(MAPPING_VIEW), union_query)
         )
 
     async def _formula_rows_of(self, token: object, semiring: DbSemiring) -> tuple[str, bool]:
