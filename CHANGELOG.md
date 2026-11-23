@@ -4,6 +4,10 @@
 
 ### Breaking Changes
 
+- **ProvSQL 1.13 required** — every query is rewritten for ProvSQL's possible-worlds semantics: its rows are filtered on `present(provenance())`, so only the rows of the SQL answer come back, and every `LIMIT k` is written `LIMIT plain(k)`, the truncation of the actual result (under ProvSQL 1.13, `LIMIT k` keeps every row that may come first in some world). Tuple probabilities are changed with `replace_input` and read with `probability_is_set`. All three appear in ProvSQL 1.13: upgrade every database server before deploying. `docker-compose.yml` and the `Makefile` still pin 1.12.0.
+
+- **APs are validated when posted** — on moma-domain 2.17.1, every Data node (`Table`, `CSV`, `CsvSet`, `RelationalDatabase`…) needs a `name`, the provenance operator a non-empty `query`, and each CSV node a `contentUrl`. An AP missing one is refused with a 422 instead of being accepted and failing its task.
+
 - **DISTINCT queries return one derivation per result row** — semirings are now evaluated outside the `DISTINCT`, as they already were for `GROUP BY`. Previously the semiring value was part of the `DISTINCT` key, so a result row merged from several tuples came back once per tuple, each with that tuple's provenance only; it now comes back once, with provenance combining all of them.
 
 - **No mapping tables** — annotating a table now adds only ProvSQL's `provsql` column. Each query labels rows through a temporary view, `apx_mapping`, over the annotated tables it reads, found in its plan, instead of the `provsql_ref` column, the `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows) and the `<semiring>_mapping` views. Nothing reads those anymore, and they are not removed: on a database annotated by an earlier version, drop them by hand (`ALTER TABLE <table> DROP COLUMN provsql_ref`, `DROP TABLE <table>_provkey`, `DROP VIEW provkey_mapping`, and the per-semiring tables and views), or `provsql_ref` shows in `SELECT *` answers. References still read `table@k<hex>`, but `<hex>` is now the row's provenance token, so a row gets a new reference when its probability changes. The database role needs the `TEMP` privilege, which PostgreSQL grants by default.
@@ -23,14 +27,13 @@
 
 ### Misc
 
-- The per-database lock and the row budget of a server are one Redis semaphore (`RedisSemaphore`): the lock is fair, expires a minute after a crashed holder instead of five, and the budget's expiries follow Redis's clock rather than each worker's. Deploy with no explain task running: the lock's Redis key changes type, from a string to a sorted set.
-- An AP whose provenance operator has no `query`, or with a CSV node without `contentUrl`, is refused when posted (422) rather than failing its task.
+- The per-database lock and the row budget of a server are one Redis semaphore (`RedisSemaphore`). The lock is extended while its work runs, so an hour-long annotation no longer outlives it (letting a second worker in, then failing a finished task on release); it is granted in order, and expires a minute after a crashed holder instead of an hour. Expiries follow Redis's clock rather than each worker's. Deploy with no explain task running: the lock's Redis key changes type, from a string to a sorted set.
+- A task that waited for the lock of its database checks the cache again before working: an identical task that held the lock may have stored the result meanwhile.
 - `containedIn` is read from the item to its container (`Table → RelationalDatabase`, `CSV → CsvSet`), as MoMa stores it, so an AP built from a stored dataset finds its tables. APs running it the other way, as the fixtures and demos did, are still read.
 - The schema description given to the LLM now has its tables' columns and primary keys: the lookups never matched, so it listed empty tables.
 - Internal modules renamed: `types` → `domains`, `repository` → `repositories`, `middlewares` → `api/middlewares`.
 - Domains split by subject: `domains/provenance` (with `sql_rewriter` and the semirings, and `provenance.py` renamed `derivation.py`) and `domains/nl_explanation` (formerly `internal/explainer`).
 - Cached results are keyed on the new `probability` flag too, so entries cached before the upgrade are not reused.
-- The per-database lock is extended while its work runs, so an hour-long annotation no longer outlives it (letting a second worker in, then failing a finished task on release). It now expires 5 minutes after a crashed holder, instead of an hour.
 
 ## v1.0.0 — 2026-08-26
 
