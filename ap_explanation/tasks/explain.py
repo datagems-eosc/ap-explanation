@@ -8,24 +8,26 @@ safe regardless of whether the caller already has a running loop (e.g. pytest-as
 import asyncio
 import concurrent.futures
 import logging
+from collections.abc import Coroutine
+from typing import Any
+
+from celery import Task
 
 from ap_explanation.celery_app import celery_app
 from ap_explanation.di import (
     get_cache_provider,
-    get_lock_provider,
-    get_provenance_service_for_ap,
+    locked,
+    provenance_service_for,
 )
-from ap_explanation.internal.cache import RedisCacheProvider
-from ap_explanation.semirings import semirings as all_semirings
-from ap_explanation.types.provenance import Provenance
-from ap_explanation.types.provenance_analytical_pattern import (
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
+from ap_explanation.internal.cache import RedisCacheProvider
 
 logger = logging.getLogger(__name__)
 
 
-def _run_in_thread(coro):
+def _run_in_thread(coro: Coroutine[Any, Any, dict[str, Any]]) -> dict[str, Any]:
     """
     Execute *coro* inside a brand-new event loop running in a dedicated thread.
     This avoids 'cannot run nested event loop' errors when the task is executed
@@ -36,87 +38,58 @@ def _run_in_thread(coro):
         return future.result()
 
 
-async def _do_explain(
-    ap_dict: dict,
-    semiring_name: str | None = None,
-    compute_probability: bool = False,
-) -> list:
-    """
-    Core async logic: annotate tables → compute provenance → remove annotation.
+async def _explain(
+    ap: ProvenanceAnalyticalPattern,
+    semiring_name: str | None,
+    compute_probability: bool,
+    cache_key: str,
+    task_id: str,
+) -> dict[str, Any]:
+    """Explain *ap* under the lock of its database, unless a task did it while this one waited."""
+    db_name = ap.data_source.db_name
+    # TODO: We could consider finer-grained locks in the future, e.g. per-table instead of per-db, to allow more concurrency
+    logger.info(f"[task:{task_id}] Acquiring the lock of '{db_name}'")
+    async with locked(db_name):
+        logger.info(f"[task:{task_id}] Acquired the lock of '{db_name}'")
 
-    If *semiring_name* is ``None`` all configured semirings are used; otherwise
-    only the requested one. If *compute_probability* is set, tuple probabilities
-    are read from each data node's ``probabilityColumn`` and every result row
-    gets its probability.
-    """
+        # Edge case: Explaining is a long-running operation.
+        # So a task with the same key may have finished while this one waited.
+        cache = get_cache_provider()
+        res = cache.get(cache_key)
+        if res is None:
+            async with provenance_service_for(ap.data_source) as service:
+                provenance = await service.explain_ap(ap, semiring_name, compute_probability)
+            res = provenance.model_dump(mode="json")
+            cache.set(cache_key, res)
+    logger.info(f"[task:{task_id}] Released the lock of '{db_name}'")
 
-    # Resolve semirings to use
-    if semiring_name is not None:
-        semiring = next(
-            (s for s in all_semirings if s.name == semiring_name), None)
-        if not semiring:
-            available = ", ".join(s.name for s in all_semirings)
-            raise ValueError(
-                f"Semiring '{semiring_name}' not found. Available: {available}"
-            )
-        target_semirings = [semiring]
-    else:
-        target_semirings = all_semirings
-
-    ap = ProvenanceAnalyticalPattern.model_validate(ap_dict)
-    ds = ap.data_source
-    query = ap.sql_operator.properties["query"]
-
-    service_factory = get_provenance_service_for_ap(ds)
-
-    async for service in service_factory():
-        # 1. Annotate
-        for table_name in ds.table_names:
-            await service.annotate_dataset(table_name, ds.schema_name, target_semirings)
-
-        # 1b. Set tuple probabilities (if requested)
-        if compute_probability:
-            await service.set_probabilities(ds.schema_name, ds.probability_columns)
-
-        # 2. Compute provenance
-        derivations = await service.compute_provenance(
-            ds.schema_name, query, target_semirings, compute_probability)
-
-        # 3. Compute NL explanation (if enabled)
-        explanation = await service.explain(ds.schema_name, query, derivations)
-
-        # # 4. Remove annotation (see provsql issue #67 workaround)
-        # for table_name in ds.table_names:
-        #     await service.remove_annotation(table_name, ds.schema_name)
-
-        prov = Provenance(derivations=derivations, explanation=explanation)
-
-        # Serialize the provenance result to JSON for caching and eventual IPC back to the caller
-        return prov.model_dump(mode="json")
-
-    return []
+    return res
 
 
 @celery_app.task(bind=True, name="ap_explanation.tasks.explain.explain_task")
 def explain_task(
-    self,
-    ap_dict: dict,
+    # Quoted: Celery's Task cannot be subscripted at runtime
+    self: "Task[Any, Any]",  # noqa: UP037
+    ap_dict: dict[str, Any],
     semiring_name: str | None = None,
     compute_probability: bool = False,
-) -> list:
-    """Celery task: annotate + compute provenance + remove annotation.
-
-    Acquires a per-database Redis lock (key ``explain_lock:{db_name}``) so that
-    only one task runs at a time against a given *db_name*.
-
-    Results are cached in Redis under a SHA-256 key derived from all input
-    parameters.  A cache hit returns immediately without touching the database.
-    The TTL is controlled by ``RedisCacheProvider.DEFAULT_TTL`` (default 1 h).
+) -> dict[str, Any]:
     """
+    Run the explanation of an AP in a dedicated thread.
+    To prevent side effect, only one task can run at a time for a given database.
+    The result is cached for 1 hour, so that subsequent tasks with the same AP and semiring can skip the DB work.
+
+    :param ap_dict: The AP to explain. As dict because Celery tasks must be serializable.
+    :param semiring_name: The semiring to use for the explanation. If None, all configured semirings are used.
+    :param compute_probability: Whether to compute the probability of each result row. If True, tuple probabilities are read from each data node's probabilityColumn.
+
+    :return: The provenance of the AP as a dict.
+    """
+    # 1 : Check the cache for a previous result. If found, return it immediately.
     cache = get_cache_provider()
     cache_key = RedisCacheProvider.make_key(
-        ap_dict, semiring_name, compute_probability)
-
+        ap_dict, semiring_name, compute_probability
+    )
     cached = cache.get(cache_key)
     if cached is not None:
         logger.info(
@@ -124,29 +97,12 @@ def explain_task(
         )
         return cached
 
-    # Parse the AP to determine the lock target (db_name) without doing any I/O.
+    # 2 : If necessary, compute the result, putting a lock on the target db
     ap = ProvenanceAnalyticalPattern.model_validate(ap_dict)
-    db_name = ap.data_source.db_name
-
     logger.info(
-        f"[task:{self.request.id}] Explaining AP in db '{db_name}'"
+        f"[task:{self.request.id}] Explaining AP in db '{ap.data_source.db_name}'"
         + (f" with semiring '{semiring_name}'" if semiring_name else " with all semirings")
     )
-
-    # Acquire lock to ensure exclusive access to the database during the explain operation
-    # TODO: We could consider finer-grained locks in the future, e.g. per-table instead of per-db, to allow more concurrency
-    lock_provider = get_lock_provider()
-    lock_key = f"explain_lock:{db_name}"
-
-    logger.info(f"[task:{self.request.id}] Acquiring lock '{lock_key}'")
-    with lock_provider.acquire(lock_key):
-        logger.info(f"[task:{self.request.id}] Acquired lock '{lock_key}'")
-        res = _run_in_thread(
-            _do_explain(ap_dict, semiring_name, compute_probability)
-        )
-        logger.info(f"[task:{self.request.id}] Released lock '{lock_key}'")
-
-    cache.set(cache_key, res)
-    logger.debug(
-        f"[task:{self.request.id}] Result cached under key '{cache_key}'")
-    return res
+    return _run_in_thread(
+        _explain(ap, semiring_name, compute_probability, cache_key, str(self.request.id))
+    )

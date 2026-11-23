@@ -1,12 +1,14 @@
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 
+from ap_explanation.settings import settings
 
-async def _check_redis(uri: str) -> dict:
+
+async def _check_redis(uri: str) -> dict[str, str]:
     """Ping the Redis instance."""
-    client = aioredis.from_url(uri, socket_connect_timeout=5)
+    client = aioredis.from_url(uri, socket_connect_timeout=5)  # pyright: ignore[reportUnknownMemberType]
     try:
-        await client.ping()
+        await client.ping()  # pyright: ignore[reportUnknownMemberType]
         return {"status": "reachable"}
     except RedisError as e:
         return {"status": "unreachable", "detail": str(e)}
@@ -22,9 +24,7 @@ async def health_check():
 async def readiness_check():
     from fastapi.responses import JSONResponse
 
-    from ap_explanation.di import REDIS_BROKER_URI
-
-    redis_status = await _check_redis(REDIS_BROKER_URI)
+    redis_status = await _check_redis(settings.redis_broker_uri)
 
     # Put all dependency dicts in a list
     dependencies = [redis_status]

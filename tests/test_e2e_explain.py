@@ -17,15 +17,15 @@ from pathlib import Path
 import pytest
 from psycopg import AsyncConnection
 
-from ap_explanation.errors import TableOrSchemaNotFoundError
-from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository
-from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.provenance_analytical_pattern import (
+from ap_explanation.domains.nl_explanation.noop_explainer import NoOpExplainer
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
-from ap_explanation.types.semiring import DbSemiring
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
+from ap_explanation.errors import TableOrSchemaNotFoundError
+from ap_explanation.repositories.seeders import seed_database
+from ap_explanation.services.provenance import ProvenanceService
 
 # CSV fixture files reference paths like "s3:/assessment.csv" which resolve
 # to ``<src_dir>/assessment.csv``.  The real CSVs live in fixtures/real_mathe/.
@@ -45,35 +45,23 @@ async def test_e2e_explain_sql_query(
         json.loads(explain_sql_query_file.read_text())
     )
     ds = ap.data_source
-    query = ap.sql_operator.properties["query"]
 
     # Seed the database if needed (CSV sources create ephemeral schemas;
     # relational sources are no-ops).
-    async with ds.seed_database(db_connection, CSV_SRC_DIR):
-        repo = await ProvenanceRepository.create(db_connection, sql_rewriter)
-        service = ProvenanceService(repo, NoOpExplainer())
+    async with seed_database(ds, db_connection, CSV_SRC_DIR):
+        service = await ProvenanceService.create(db_connection, sql_rewriter, NoOpExplainer())
 
-        # 1. Annotate every table referenced by the data source
+        # Annotate, set tuple probabilities from the fixture's probabilityColumn
+        # properties (tables without one are certain), compute provenance for
+        # all configured semirings, and explain (no-op explainer: empty string)
         try:
-            for table_name in ds.table_names:
-                await service.annotate_dataset(table_name, ds.schema_name, all_semirings)
+            provenance = await service.explain_ap(ap, compute_probability=True)
         except TableOrSchemaNotFoundError:
             pytest.skip(
                 f"Required table(s) not present in the test DB for {explain_sql_query_file.name}"
             )
-
-        # 2. Set tuple probabilities from the fixture's probabilityColumn
-        #    properties; tables without one are certain
-        await service.set_probabilities(ds.schema_name, ds.probability_columns)
+        derivations = provenance.derivations
         uncertain = any(ds.probability_columns.values())
-
-        # 3. Compute provenance for all configured semirings, with probabilities
-        derivations = await service.compute_provenance(
-            ds.schema_name, query, all_semirings, compute_probability=True
-        )
-
-        # 4. Generate explanation (no-op explainer returns empty string)
-        explanation = await service.explain(ds.schema_name, query, derivations)
 
         # --- Assertions ---
         assert derivations is not None
@@ -104,4 +92,4 @@ async def test_e2e_explain_sql_query(
                     f"Provenance data for '{semiring.name}' must be a list"
                 )
 
-        assert isinstance(explanation, str)
+        assert isinstance(provenance.explanation, str)

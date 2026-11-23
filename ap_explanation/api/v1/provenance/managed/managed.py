@@ -1,18 +1,22 @@
 from enum import StrEnum
 from logging import getLogger
-from typing import Never
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Query, Response, status
 from pydantic import BaseModel
 
-from ap_explanation.middlewares.auth import require_authentication
-from ap_explanation.semirings import semirings
-from ap_explanation.tasks.explain import explain_task
-from ap_explanation.types.provenance_analytical_pattern import (
+from ap_explanation.api.middlewares.auth import require_authentication
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
+from ap_explanation.domains.provenance.semiring import semirings
+from ap_explanation.tasks.explain import explain_task
 
-SemiringName = StrEnum("SemiringName", {s.name: s.name for s in semirings})
+# Built from the semirings at runtime, so pyright only knows it is a str
+if TYPE_CHECKING:
+    SemiringName = str
+else:
+    SemiringName = StrEnum("SemiringName", {s.name: s.name for s in semirings})
 
 logger = getLogger(__name__)
 
@@ -35,8 +39,8 @@ ProbabilityFlag = Query(
 def managed_provenance_ap(
     ap: ProvenanceAnalyticalPattern,
     response: Response,
+    _auth: Annotated[dict[str, Any] | None, Depends(require_authentication())],
     probability: bool = ProbabilityFlag,
-    _auth: Never = Depends(require_authentication())
 ) -> ManagedProvenanceTaskResponse:
     """Dispatch an async task for the full explanation lifecycle with all semirings.
 
@@ -45,8 +49,7 @@ def managed_provenance_ap(
     ds = ap.data_source
     logger.info(
         f"Dispatching managed provenance task for tables: {ds.table_names} with all semirings")
-    # NOTE: Type of celery tasks must be ignored, as celery annotation monkey patches the function object
-    task = explain_task.delay(ap.to_wire(), compute_probability=probability)  # type: ignore
+    task = explain_task.delay(ap.to_wire(), compute_probability=probability)
     response.status_code = status.HTTP_202_ACCEPTED
     return ManagedProvenanceTaskResponse(task_id=task.id)
 
@@ -55,8 +58,8 @@ def managed_provenance_ap_with_semiring(
     semiring_name: SemiringName,
     ap: ProvenanceAnalyticalPattern,
     response: Response,
+    _auth: Annotated[dict[str, Any] | None, Depends(require_authentication())],
     probability: bool = ProbabilityFlag,
-    _auth: Never = Depends(require_authentication()),
 ) -> ManagedProvenanceTaskResponse:
     """Dispatch an async task for the full explanation lifecycle with a specific semiring.
 
@@ -66,7 +69,6 @@ def managed_provenance_ap_with_semiring(
     logger.info(
         f"Dispatching managed provenance task for tables: {ds.table_names} with semiring '{semiring_name}'"
     )
-    # NOTE: Type of celery tasks must be ignored, as celery annotation monkey patches the function object
-    task = explain_task.delay(ap.to_wire(), semiring_name, compute_probability=probability)  # type: ignore
+    task = explain_task.delay(ap.to_wire(), semiring_name, compute_probability=probability)
     response.status_code = status.HTTP_202_ACCEPTED
     return ManagedProvenanceTaskResponse(task_id=task.id)

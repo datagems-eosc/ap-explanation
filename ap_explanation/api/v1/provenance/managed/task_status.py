@@ -1,11 +1,11 @@
-from typing import Any, Literal, Never
+from typing import Annotated, Any, Literal
 
 from celery.result import AsyncResult
-from fastapi.params import Depends
+from fastapi import Depends
 from pydantic import BaseModel
 
+from ap_explanation.api.middlewares.auth import require_authentication
 from ap_explanation.celery_app import celery_app
-from ap_explanation.middlewares.auth import require_authentication
 
 TaskStatus = Literal["pending", "started",
                      "success", "failure", "retry", "revoked"]
@@ -20,13 +20,13 @@ class TaskStatusResponse(BaseModel):
 
 def get_managed_task_status(
         task_id: str,
-        _auth: Never = Depends(require_authentication())
+        _auth: Annotated[dict[str, Any] | None, Depends(require_authentication())],
 ) -> TaskStatusResponse:
     """Return the current status and (if completed) the result of a managed explanation task.
 
     Poll this endpoint after POST /aps/explanation or POST /aps/explanation/{semiring_name}.
     """
-    async_result: AsyncResult = celery_app.AsyncResult(task_id)
+    async_result: AsyncResult[Any] = celery_app.AsyncResult(task_id)
     celery_status = (async_result.status or "pending").lower()
 
     if celery_status == "success":
@@ -44,6 +44,6 @@ def get_managed_task_status(
             error=str(exc) if exc else "Unknown error",
         )
 
-    mapped: TaskStatus = celery_status if celery_status in (  # type: ignore[assignment]
+    mapped: TaskStatus = celery_status if celery_status in (
         "pending", "started", "retry", "revoked") else "pending"
     return TaskStatusResponse(task_id=task_id, status=mapped)

@@ -8,9 +8,9 @@ import pytest
 import pytest_asyncio
 from psycopg import AsyncConnection
 
+from ap_explanation.domains.provenance.semiring import DbSemiring
 from ap_explanation.errors import InvalidProbabilityColumnError
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
 from tests.conftest import TestSchema
 
 
@@ -29,40 +29,26 @@ async def probability_columns(db_connection: AsyncConnection, test_schema: TestS
 
 
 @pytest.mark.asyncio
-async def test_ok_probability_merges_distinct_rows(
+@pytest.mark.parametrize("merged_by", ["DISTINCT", "UNION"])
+async def test_ok_probability_of_merged_rows(
     provenance_service: ProvenanceService,
     why_semiring: DbSemiring,
     test_schema: TestSchema,
     two_rows_of_one_student: str,
+    merged_by: str,
 ):
-    """A DISTINCT row present if either of two independent 0.5 tuples is: 1 - 0.5 * 0.5."""
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
-    await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
-
-    query = f"SELECT DISTINCT student_id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
-    derivations = await provenance_service.compute_provenance(
-        test_schema.schema, query, [why_semiring], compute_probability=True)
-
-    assert len(derivations) == 1
-    assert derivations[0].probability == pytest.approx(0.75)
-
-
-@pytest.mark.asyncio
-async def test_ok_probability_merges_union_rows(
-    provenance_service: ProvenanceService,
-    why_semiring: DbSemiring,
-    test_schema: TestSchema,
-    two_rows_of_one_student: str,
-):
-    """A UNION row found in both branches, each a 0.5 tuple: 1 - 0.5 * 0.5."""
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    """A row present if either of two independent 0.5 tuples is: 1 - 0.5 * 0.5."""
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     first, second = two_rows_of_one_student.split(", ")
-    query = (
-        f"SELECT student_id FROM {test_schema.table} WHERE id = {first}"
-        f" UNION SELECT student_id FROM {test_schema.table} WHERE id = {second}"
-    )
+    query = {
+        "DISTINCT": f"SELECT DISTINCT student_id FROM {test_schema.table} WHERE id IN ({first}, {second})",
+        "UNION": (
+            f"SELECT student_id FROM {test_schema.table} WHERE id = {first}"
+            f" UNION SELECT student_id FROM {test_schema.table} WHERE id = {second}"
+        ),
+    }[merged_by]
     derivations = await provenance_service.compute_provenance(
         test_schema.schema, query, [why_semiring], compute_probability=True)
 
@@ -80,18 +66,20 @@ async def test_ok_probability_overwritten_by_later_calls(
     """
     Probabilities outlive the request that set them: a later call must replace
     them, whether with another column or with certainty when none is declared.
-    ProvSQL writes a probability once, so a changed one is a new input gate:
-    the rows' mapping values must follow it, the why-provenance unchanged.
+    ProvSQL writes a probability once, so a changed one is a new input gate,
+    and a new reference: the rows they resolve to must stay the same.
     """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     query = f"SELECT id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
-    explanations = []
+    explanations: list[list[str]] = []
 
     async def probabilities(column: str | None) -> list[float | None]:
         await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: column})
         derivations = await provenance_service.compute_provenance(
             test_schema.schema, query, [why_semiring], compute_probability=True)
-        explanations.append(sorted(str(d.provenance[why_semiring.name]) for d in derivations))
+        explanations.append(sorted(
+            str([entry["data"] for entry in d.provenance[why_semiring.name].data]) for d in derivations
+        ))
         return [d.probability for d in derivations]
 
     assert await probabilities("reliability") == [pytest.approx(0.5)] * 2
@@ -108,39 +96,12 @@ async def test_ko_invalid_probability_column(
     test_schema: TestSchema,
     column: str,
 ):
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
 
     with pytest.raises(InvalidProbabilityColumnError) as exc_info:
         await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: column})
 
     assert column in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_ok_probability_on_aggregate(
-    provenance_service: ProvenanceService,
-    formula_semiring: DbSemiring,
-    test_schema: TestSchema,
-    two_rows_of_one_student: str,
-):
-    """
-    Only formula: the other semirings do not support aggregates ("value gates").
-    """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
-    await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
-
-    query = (
-        f"SELECT topic, COUNT(*) AS cnt FROM {test_schema.table}"
-        f" WHERE id IN ({two_rows_of_one_student}) GROUP BY topic"
-    )
-    derivations = await provenance_service.compute_provenance(
-        test_schema.schema, query, [formula_semiring], compute_probability=True)
-
-    assert len(derivations) > 0
-    for d in derivations:
-        # A group of one 0.5 tuple, or of both
-        assert d.probability is not None
-        assert d.probability in (pytest.approx(0.5), pytest.approx(0.75))
 
 
 @pytest.mark.asyncio
@@ -150,7 +111,7 @@ async def test_ok_no_probability_unless_requested(
     test_schema: TestSchema,
     two_rows_of_one_student: str,
 ):
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     query = f"SELECT id FROM {test_schema.table} WHERE id IN ({two_rows_of_one_student})"
@@ -161,17 +122,18 @@ async def test_ok_no_probability_unless_requested(
 
 
 @pytest.mark.asyncio
-async def test_ok_probability_on_every_group(
+async def test_ok_probability_of_every_group(
     provenance_service: ProvenanceService,
     formula_semiring: DbSemiring,
     test_schema: TestSchema,
 ):
     """
-    Every group of a multi-group aggregate gets its probability. Computed in a
-    separate run, it was keyed by a token ProvSQL does not keep across runs
-    for groups, and was lost.
+    Every group of an aggregate gets its probability: a group of k independent
+    0.5 tuples exists with probability 1 - 0.5^k. Computed in a separate run,
+    it was keyed by a token ProvSQL does not keep across runs for groups, and
+    was lost. In formula only: the other semirings do not support aggregates.
     """
-    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await provenance_service.annotate_dataset(test_schema.table, test_schema.schema)
     await provenance_service.set_probabilities(test_schema.schema, {test_schema.table: "reliability"})
 
     query = f"SELECT student_id, COUNT(*) AS cnt FROM {test_schema.table} WHERE student_id < 50 GROUP BY student_id"
@@ -179,5 +141,7 @@ async def test_ok_probability_on_every_group(
         test_schema.schema, query, [formula_semiring], compute_probability=True)
 
     assert len(derivations) > 1
-    # A group of k independent 0.5 tuples exists with probability 1 - 0.5^k
-    assert all(d.probability is not None and 0.5 <= d.probability <= 1 for d in derivations)
+    for d in derivations:
+        # An aggregate's value reads '<value> (*)': ProvSQL's aggregation token
+        count = int(d.answer["cnt"].split()[0])
+        assert d.probability == pytest.approx(1 - 0.5 ** count)

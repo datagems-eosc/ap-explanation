@@ -10,29 +10,20 @@ from psycopg import AsyncConnection
 from psycopg.pq import TransactionStatus
 from testcontainers.community.redis import RedisContainer
 
+from ap_explanation.domains.nl_explanation.noop_explainer import NoOpExplainer
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import QueryLimitExceededError
-from ap_explanation.internal.distributed_lock import RedisRowBudget
-from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository, QueryLimits
+from ap_explanation.internal.semaphore import RedisSemaphore, Semaphore
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
+from ap_explanation.settings import QueryLimits
 from tests.conftest import TestSchema
 
 
 async def _service(
-    conn: AsyncConnection, limits: QueryLimits, budget: RedisRowBudget | None = None
+    conn: AsyncConnection, limits: QueryLimits, budget: Semaphore | None = None
 ) -> ProvenanceService:
-    repo = await ProvenanceRepository.create(conn, SqlRewriter(), limits, budget)
-    return ProvenanceService(repo, NoOpExplainer())
-
-
-def test_unset_limits_are_left_out():
-    limits = QueryLimits(statement_timeout="1s", provsql_max_memory=None, temp_file_limit=None)
-    assert limits.settings() == {
-        "statement_timeout": "1s",
-        "max_parallel_workers_per_gather": "0",
-    }
+    return await ProvenanceService.create(conn, SqlRewriter(), NoOpExplainer(), limits, budget)
 
 
 @pytest.mark.asyncio
@@ -41,7 +32,7 @@ async def test_ko_statement_timeout(
 ):
     """A query running past statement_timeout fails with a clear error."""
     service = await _service(db_connection, QueryLimits(statement_timeout="200ms"))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     with pytest.raises(QueryLimitExceededError) as exc_info:
@@ -64,10 +55,10 @@ async def test_limits_are_local_to_the_query(
 ):
     """The limits revert once the query ends, so annotation is not bounded by them."""
     cursor = await db_connection.execute("SHOW statement_timeout")
-    before = (await cursor.fetchone())[0]
+    before = (await cursor.fetchall())[0][0]
 
     service = await _service(db_connection, QueryLimits(statement_timeout="5min"))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [why_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
     await service.compute_provenance(
         test_schema.schema,
         f"SELECT * FROM {test_schema.schema}.{test_schema.table} LIMIT 1",
@@ -75,7 +66,7 @@ async def test_limits_are_local_to_the_query(
     )
 
     cursor = await db_connection.execute("SHOW statement_timeout")
-    assert (await cursor.fetchone())[0] == before
+    assert (await cursor.fetchall())[0][0] == before
 
 
 def test_aggregated_rows_reads_the_input_of_each_aggregate():
@@ -88,9 +79,9 @@ def test_aggregated_rows_reads_the_input_of_each_aggregate():
             ]},
         ],
     }
-    from ap_explanation.repository.provenance import _aggregated_rows
+    from ap_explanation.repositories.query_guard import aggregated_rows
 
-    assert _aggregated_rows(plan) == [3000, 7]
+    assert aggregated_rows(plan) == [3000, 7]
 
 
 @pytest.mark.asyncio
@@ -99,7 +90,7 @@ async def test_ko_too_many_aggregated_rows(
 ):
     """An aggregate over more rows than max_aggregated_rows is refused before its provenance is built."""
     service = await _service(db_connection, QueryLimits(max_aggregated_rows=3))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     with pytest.raises(QueryLimitExceededError) as exc_info:
@@ -127,9 +118,9 @@ async def test_ko_aggregated_rows_add_up(
     table = f"{test_schema.schema}.{test_schema.table}"
     async with db_connection.transaction():
         await db_connection.execute("SET LOCAL provsql.active = 0")
-        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
+        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchall())[0][0]
     service = await _service(db_connection, QueryLimits(max_aggregated_rows=2 * count - 1))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     with pytest.raises(QueryLimitExceededError) as exc_info:
         await service.compute_provenance(
@@ -146,15 +137,15 @@ async def test_ok_query_waits_for_the_server_budget(
 ):
     """A query waits until the queries of the other databases of its server leave it enough rows."""
     with RedisContainer("redis:7-alpine") as redis:
-        budget = RedisRowBudget(
+        budget = RedisSemaphore(
             f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0", poll=0.05)
         service = await _service(db_connection, QueryLimits(max_aggregated_rows=1_000_000), budget)
-        await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+        await service.annotate_dataset(test_schema.table, test_schema.schema)
 
         table = f"{test_schema.schema}.{test_schema.table}"
         server = f"{db_connection.info.host}:{db_connection.info.port}"
         # Another database's query holds the whole budget
-        async with budget.reserve(server, 1_000_000, 1_000_000):
+        async with budget.acquire(f"row_budget:{server}", 1_000_000, 1_000_000):
             query = asyncio.create_task(service.compute_provenance(
                 test_schema.schema, f"SELECT COUNT(*) FROM {table}", [formula_semiring]))
             await asyncio.sleep(1)
@@ -171,7 +162,7 @@ async def test_ko_precheck_timeout(
 ):
     """A query too slow even without provenance is refused, and the settings revert."""
     service = await _service(db_connection, QueryLimits(precheck_timeout="200ms"))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     with pytest.raises(QueryLimitExceededError) as exc_info:
@@ -181,7 +172,7 @@ async def test_ko_precheck_timeout(
     assert exc_info.value.limit == "the plain query's statement_timeout"
 
     cursor = await db_connection.execute("SHOW provsql.active")
-    assert (await cursor.fetchone())[0] == "on"
+    assert (await cursor.fetchall())[0][0] == "on"
 
 
 @pytest.mark.asyncio
@@ -195,12 +186,12 @@ async def test_ok_aggregate_formula_as_rows(
     of those terms only.
     """
     service = await _service(db_connection, QueryLimits(max_formula_rows=3))
-    await service.annotate_dataset(test_schema.table, test_schema.schema, [formula_semiring])
+    await service.annotate_dataset(test_schema.table, test_schema.schema)
 
     table = f"{test_schema.schema}.{test_schema.table}"
     async with db_connection.transaction():
         await db_connection.execute("SET LOCAL provsql.active = 0")
-        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchone())[0]
+        count = (await (await db_connection.execute(f"SELECT COUNT(*) FROM {table}")).fetchall())[0][0]
     rows = await service.compute_provenance(test_schema.schema, f"SELECT COUNT(*) AS n FROM {table}", [formula_semiring])
 
     assert len(rows) == 1

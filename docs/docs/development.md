@@ -52,30 +52,32 @@ Tests use testcontainers to spin up PostgreSQL with ProvSQL automatically.
 
 ```
 ap_explanation/
-├── api/v1/              # API endpoints
-│   ├── provenance/
-│   │   ├── managed/     # Async lifecycle (dispatch + poll)
-│   │   └── manual/      # Sync lifecycle (annotate / compute / remove)
-│   ├── dependencies/    # FastAPI dependencies (AP parser)
-│   └── health.py        # Health & readiness endpoints
+├── api/
+│   ├── middlewares/     # Authentication, correlation ID
+│   └── v1/              # API endpoints
+│       ├── provenance/managed/  # Async lifecycle (dispatch + poll)
+│       └── health.py    # Health & readiness endpoints
 ├── tasks/               # Celery tasks
 ├── services/            # Business logic
-├── repository/          # Data access layer
-│   ├── mapping/         # Mapping strategies (ctid, etc.)
-│   └── resources/       # SQL scripts for semiring setup
+├── repositories/        # Data access layer
+│   ├── provsql.py       # ProvSqlRepository: enable, disable, probabilities, compute
+│   ├── query_guard.py   # Limits of a provenance query, aggregate check, row budget
+│   ├── schema.py        # Schema description for the LLM
+│   └── seeders/         # Sets a database up for a data source (CSV)
 ├── internal/            # Internal modules
-│   ├── explainer/       # LLM-powered NL explanations
 │   ├── cache.py         # Redis cache provider
-│   ├── distributed_lock.py  # Redis distributed lock
-│   └── sql_rewriter.py  # SQL rewriting for provenance
-├── types/               # Type definitions
-│   ├── data_sources/    # Data source types (relational DB, CSV set)
-│   ├── analytical_pattern.py
-│   ├── semiring.py
-│   └── provenance.py
+│   └── semaphore.py     # Redis semaphore: per-database lock, row budget per server
+├── domains/             # One directory per domain
+│   ├── provenance/
+│   │   ├── data_sources/    # Data source types (relational DB, CSV set)
+│   │   ├── derivation.py    # Results: Derivation, Provenance
+│   │   ├── provenance_analytical_pattern.py
+│   │   ├── semiring.py      # DbSemiring and the configured semirings
+│   │   └── sql_rewriter.py  # SQL rewriting for provenance
+│   └── nl_explanation/  # LLM-powered NL explanations
 ├── errors/              # Custom exceptions
-├── semirings.py         # Semiring configurations
 ├── di.py                # Dependency injection & lifespan
+├── settings.py          # Configuration, read from the environment
 ├── celery_app.py        # Celery application
 └── main.py              # FastAPI application entry point
 ```
@@ -84,26 +86,17 @@ ap_explanation/
 
 ## Adding a New Semiring
 
-1. **Define the semiring** in `ap_explanation/semirings.py`:
+1. **Define the semiring** in `ap_explanation/domains/provenance/semiring.py`:
 
 ```python
 DbSemiring(
     name="custom",
     retrieval_function="custom_prov",
-    aggregate_function="custom_agg",  # Optional
-    mapping_table="custom_mapping",
-    mappingStrategy=CtidMapping(),
+    supports_aggregates=True,  # Optional
 )
 ```
 
-2. **Create database functions** in `repository/resources/03_setup_semiring_parallel.sql`:
-
-```sql
-CREATE OR REPLACE FUNCTION custom_prov(...)
--- Implementation
-```
-
-3. **Test** the new semiring:
+2. **Test** the new semiring:
 
 ```python
 # Add test in tests/

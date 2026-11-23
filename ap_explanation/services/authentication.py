@@ -2,6 +2,7 @@ import base64
 import logging
 import threading
 import time
+from typing import Any, cast
 
 import requests
 from jose import jwt
@@ -26,7 +27,7 @@ class Authentication:
         self._client_secret = client_secret
         self._exchange_scope = exchange_scope
         self._lock = threading.Lock()
-        self._jwks: dict | None = None
+        self._jwks: dict[str, Any] | None = None
         self._fetched_at: float = 0.0
 
         if not (self._client_id and self._client_secret and self._exchange_scope):
@@ -34,7 +35,7 @@ class Authentication:
                 "Token exchange requires client_id, client_secret and exchange_scope"
             )
 
-    def _get_jwks(self) -> dict:
+    def _get_jwks(self) -> dict[str, Any]:
         """Return the JWKS, refreshing the cache when stale."""
         now = time.monotonic()
         with self._lock:
@@ -43,11 +44,11 @@ class Authentication:
                 logger.info("Refreshing JWKS from %s", url)
                 resp = requests.get(url, timeout=10)
                 resp.raise_for_status()
-                self._jwks = resp.json()
+                self._jwks = cast(dict[str, Any], resp.json())
                 self._fetched_at = now
-        return self._jwks
+            return self._jwks
 
-    def validate(self, token: str) -> dict:
+    def validate(self, token: str) -> dict[str, Any]:
         """Decode and validate *token*.
 
         Verifies signature (RS256), issuer, and audience (when configured).

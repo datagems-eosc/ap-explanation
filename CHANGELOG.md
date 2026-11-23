@@ -6,7 +6,9 @@
 
 - **DISTINCT queries return one derivation per result row** — semirings are now evaluated outside the `DISTINCT`, as they already were for `GROUP BY`. Previously the semiring value was part of the `DISTINCT` key, so a result row merged from several tuples came back once per tuple, each with that tuple's provenance only; it now comes back once, with provenance combining all of them.
 
-- **One mapping table per table** — annotating a table creates `<table>_provkey`, shared by every semiring, instead of five identical `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows). Tables annotated by earlier versions keep working, and are migrated the next time they are annotated: one per-semiring table is renamed, the others dropped.
+- **No mapping tables** — annotating a table now adds only ProvSQL's `provsql` column. Each query labels rows through a temporary view, `apx_mapping`, over the annotated tables it reads, found in its plan, instead of the `provsql_ref` column, the `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows) and the `<semiring>_mapping` views. Nothing reads those anymore, and they are not removed: on a database annotated by an earlier version, drop them by hand (`ALTER TABLE <table> DROP COLUMN provsql_ref`, `DROP TABLE <table>_provkey`, `DROP VIEW provkey_mapping`, and the per-semiring tables and views), or `provsql_ref` shows in `SELECT *` answers. References still read `table@k<hex>`, but `<hex>` is now the row's provenance token, so a row gets a new reference when its probability changes. The database role needs the `TEMP` privilege, which PostgreSQL grants by default.
+
+- **Configuration is checked at startup** — environment variables are read by pydantic-settings. A value of the wrong type (`LLM_TIMEOUT=abc`, `JWKS_TTL_SECONDS=abc`) now stops the service from starting. `LLM_SSL_VERIFY` and `USE_EMBEDDED_CELERY_WORKER` accept `1`, `yes` and `on` as true and `0`, `no` and `off` as false, refuse anything else, and an empty value means their default, `true`: it was `false`.
 
 ### New Features
 
@@ -17,11 +19,16 @@
 - **One budget of aggregated rows per server** — ProvSQL builds the aggregates of all the databases of a server in one store worker, so concurrent queries of different databases added up and could crash it where each alone would not. `PROVENANCE_MAX_AGGREGATED_ROWS` is now shared by all the provenance queries of a server: each reserves the rows of its aggregates (all of them: they were counted per aggregate before), at least `PROVENANCE_MIN_RESERVED_ROWS` (an eighth of the budget: at most eight queries at once), and waits until they are free.
 
 - **Provenance query limits** — each provenance query runs with `statement_timeout` (`10min`), `provsql.max_memory` (`1GB`), `temp_file_limit` (`5GB`) and no parallel workers, configurable with `PROVENANCE_*` variables. A query past them fails with an error naming the limit, rather than running until the database dies.
-- **Circuit cleanup** — `POST /api/v1/aps/explanation/maintenance/circuit-cleanup/{db_name}` runs ProvSQL's `circuit_cleanup()` under the database's lock (ProvSQL >= 1.13).
 - **Result probabilities** — `POST /api/v1/aps/explanation[/{semiring_name}]?probability=true` evaluates each result row's probability with ProvSQL's `probability_evaluate`, returned as `probability` on each derivation. Tuple probabilities are read from the column named by each `Table`/`CSV` node's `probabilityColumn` property; tables without one are certain.
 
 ### Misc
 
+- The per-database lock and the row budget of a server are one Redis semaphore (`RedisSemaphore`): the lock is fair, expires a minute after a crashed holder instead of five, and the budget's expiries follow Redis's clock rather than each worker's. Deploy with no explain task running: the lock's Redis key changes type, from a string to a sorted set.
+- An AP whose provenance operator has no `query`, or with a CSV node without `contentUrl`, is refused when posted (422) rather than failing its task.
+- `containedIn` is read from the item to its container (`Table → RelationalDatabase`, `CSV → CsvSet`), as MoMa stores it, so an AP built from a stored dataset finds its tables. APs running it the other way, as the fixtures and demos did, are still read.
+- The schema description given to the LLM now has its tables' columns and primary keys: the lookups never matched, so it listed empty tables.
+- Internal modules renamed: `types` → `domains`, `repository` → `repositories`, `middlewares` → `api/middlewares`.
+- Domains split by subject: `domains/provenance` (with `sql_rewriter` and the semirings, and `provenance.py` renamed `derivation.py`) and `domains/nl_explanation` (formerly `internal/explainer`).
 - Cached results are keyed on the new `probability` flag too, so entries cached before the upgrade are not reused.
 - The per-database lock is extended while its work runs, so an hour-long annotation no longer outlives it (letting a second worker in, then failing a finished task on release). It now expires 5 minutes after a crashed holder, instead of an hour.
 

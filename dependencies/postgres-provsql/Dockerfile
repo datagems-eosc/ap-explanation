@@ -2,9 +2,6 @@ ARG PG_MAJOR=17
 FROM postgres:${PG_MAJOR}
 
 ARG PG_MAJOR=17
-ARG PROVSQL_VERSION=v1.12.0
-# A commit of PROVSQL_VERSION's branch to build instead of its head, as a release-less master
-ARG PROVSQL_COMMIT=
 
 # Install build dependencies, git, and other necessary tools
 RUN apt-get update && apt-get install -y \
@@ -22,6 +19,12 @@ RUN apt-get update && apt-get install -y \
     git \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
+
+# Declared here, not above: a RUN after an ARG is rebuilt when its value changes,
+# and a new ProvSQL must not reinstall the build dependencies
+ARG PROVSQL_VERSION=v1.12.0
+# A commit of PROVSQL_VERSION's branch to build instead of its head, as a release-less master
+ARG PROVSQL_COMMIT=
 
 # Compile and install ProvSQL
 RUN git clone --branch ${PROVSQL_VERSION} --depth 1 https://github.com/PierreSenellart/provsql.git /provsql && \

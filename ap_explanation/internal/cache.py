@@ -35,7 +35,7 @@ class RedisCacheProvider:
     DEFAULT_TTL = 3600  # seconds
 
     def __init__(self, redis_url: str):
-        self._client = redis.from_url(redis_url)
+        self._client = redis.from_url(redis_url)  # pyright: ignore[reportUnknownMemberType]
 
     # ------------------------------------------------------------------
     # Helpers

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ap_explanation.types.provenance_analytical_pattern import (
+from ap_explanation.domains.provenance.provenance_analytical_pattern import (
     ProvenanceAnalyticalPattern,
 )
 
@@ -13,17 +13,13 @@ def ap(explain_sql_query_file: Path) -> ProvenanceAnalyticalPattern:
     return ProvenanceAnalyticalPattern.model_validate(json.loads(explain_sql_query_file.read_text()))
 
 
-def test_ap_parses_as_provenance_ap(ap: ProvenanceAnalyticalPattern):
-    assert len(ap.nodes) > 0
-    assert len(ap.edges) > 0
-    assert ap.data_source is not None
+def test_ap_without_query_is_refused(explain_sql_query_file: Path):
+    raw = json.loads(explain_sql_query_file.read_text())
+    operator = next(n for n in raw["nodes"] if ProvenanceAnalyticalPattern.PROVENANCE_OP in n["labels"])
+    del operator["properties"]["query"]
 
-
-def test_ap_has_sql_operator(ap: ProvenanceAnalyticalPattern):
-    sql_node = ap.sql_operator
-    assert sql_node is not None
-    assert sql_node.properties is not None
-    assert "query" in sql_node.properties
+    with pytest.raises(ValueError, match="'query'"):
+        ProvenanceAnalyticalPattern.model_validate(raw)
 
 
 def test_ap_survives_a_wire_round_trip(ap: ProvenanceAnalyticalPattern):
@@ -41,21 +37,7 @@ def test_ap_survives_a_wire_round_trip(ap: ProvenanceAnalyticalPattern):
 
     reparsed = ProvenanceAnalyticalPattern.model_validate(dumped)
     assert reparsed.data_source.table_names == ap.data_source.table_names
-    assert reparsed.sql_operator.properties["query"] == ap.sql_operator.properties["query"]
-
-
-def test_ap_relational_db_source(ap: ProvenanceAnalyticalPattern):
-    ds = ap.data_source
-    if not hasattr(ds, 'table_nodes'):  # not a RelationalDbDataSource
-        pytest.skip("AP data source is not a relational database")
-    assert isinstance(ds.schema_name, str) and len(ds.schema_name) > 0
-    assert isinstance(ds.db_name, str) and len(ds.db_name) > 0
-    assert isinstance(ds.table_names, list) and len(ds.table_names) > 0
-
-
-def test_ap_probability_columns_keyed_by_table(ap: ProvenanceAnalyticalPattern):
-    ds = ap.data_source
-    assert list(ds.probability_columns) == ds.table_names
+    assert reparsed.query == ap.query
 
 
 def test_ap_probability_column_read_from_data_node(explain_sql_query_file: Path):
@@ -66,8 +48,24 @@ def test_ap_probability_column_read_from_data_node(explain_sql_query_file: Path)
     ap = ProvenanceAnalyticalPattern.model_validate(raw)
     columns = ap.data_source.probability_columns
 
+    assert list(columns) == ap.data_source.table_names
     assert list(columns.values()).count("reliability") == 1
     assert list(columns.values()).count(None) == len(data_nodes) - 1
     # The property must reach the Celery worker too
     reparsed = ProvenanceAnalyticalPattern.model_validate(ap.to_wire())
     assert reparsed.data_source.probability_columns == columns
+
+
+def test_ap_reads_contained_in_both_ways(explain_sql_query_file: Path):
+    """containedIn runs from the item to its container, as moma has it; APs written
+    the other way round still find the same tables."""
+    raw = json.loads(explain_sql_query_file.read_text())
+    reversed_raw = json.loads(explain_sql_query_file.read_text())
+    for edge in reversed_raw["edges"]:
+        if "containedIn" in edge["labels"]:
+            edge["from"], edge["to"] = edge["to"], edge["from"]
+
+    tables = ProvenanceAnalyticalPattern.model_validate(raw).data_source.table_names
+    assert tables
+    assert ProvenanceAnalyticalPattern.model_validate(reversed_raw).data_source.table_names == tables
+

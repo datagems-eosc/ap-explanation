@@ -65,12 +65,6 @@ The minimum is because evaluations add up as well: two `sr_formula` evaluations 
 
 Within a database, provenance queries still run one at a time (the per-database lock).
 
-### Maintenance
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `CIRCUIT_CLEANUP_WAIT` | No | `60` | Seconds a circuit cleanup retries while other sessions are connected to the database, before failing |
-
 ### LLM — Natural-language explanations (optional)
 
 When `LLM_API_BASE` is not set, natural-language explanations are silently disabled and the service falls back to returning only the raw semiring result.
@@ -132,12 +126,7 @@ The service **requires** a PostgreSQL database with the following:
 
 1. **ProvSQL Extension**: The database must have the [ProvSQL extension](https://github.com/PierreSenellart/provsql) installed and enabled. ProvSQL provides provenance tracking capabilities for SQL queries.
 
-2. **Semiring Definitions**: The service automatically initializes semiring type definitions and aggregate functions when connecting to the database. This includes:
-   - Custom composite types (`formula_state`, `whyprov_state`, etc.)
-   - Semiring operation functions (plus, times, monus)
-   - Aggregate functions for provenance tracking
-
-   These definitions are automatically created from the SQL script at `ap_explanation/repository/resources/03_setup_semiring_parallel.sql` during the first connection.
+2. **Semirings**: ProvSQL's built-in semirings are used directly; the service creates no custom types or functions in your database.
 
 ### Using the Pre-configured Docker Image
 

@@ -16,11 +16,11 @@
       "to": "ce77ef2b-d668-4dca-9314-3f38cde9cee2"
     },
     {
-      "from": "1928a6b4-9e92-40f9-b8e3-d28553694d6d",
+      "from": "2a494fe5-e6bb-4202-b9cc-38ee26878d7f",
       "labels": [
         "containedIn"
       ],
-      "to": "2a494fe5-e6bb-4202-b9cc-38ee26878d7f"
+      "to": "1928a6b4-9e92-40f9-b8e3-d28553694d6d"
     }
   ],
   "nodes": [
@@ -62,7 +62,8 @@
         "Data"
       ],
       "properties": {
-        "delimiter": ","
+        "delimiter": ",",
+        "name": "assessments"
       }
     },
     {

@@ -44,13 +44,13 @@ The service has specific database prerequisites:
   - **Relational Database** (`RelationalDbDataSource`): connects to existing PostgreSQL tables
   - **CSV Set** (`CsvSetDataSource`): loads CSV files into a temporary schema in a `playground` database, runs provenance, then drops the schema
 
-- **Automatic Initialization**: When the service connects to the database, it automatically sets up per-table provenance side tables and the union mapping table for each active semiring. No custom PostgreSQL functions are installed — all provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
+- **Automatic Initialization**: When the service connects to the database, it automatically sets up a mapping table for each annotated table and one view over them per schema. No custom PostgreSQL functions are installed — all provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
 
 ## Core Concepts
 
 ### Semiring Annotations
 
-The service supports the following ProvSQL built-in semirings, all defined in `ap_explanation/semirings.py`:
+The service supports the following ProvSQL built-in semirings, all defined in `ap_explanation/domains/provenance/semiring.py`:
 
 | Name | ProvSQL function | Description |
 |---|---|---|
@@ -62,12 +62,14 @@ The service supports the following ProvSQL built-in semirings, all defined in `a
 
 Each semiring has:
 - A **retrieval function** — one of ProvSQL's compiled `sr_*` functions, typed as `ANYELEMENT` so it works for both plain and aggregate provenance tokens without a separate aggregate function.
-- A **mapping table name** — a view (`why_mapping`...) mapping provenance tokens to source row labels, the `UNION ALL` of the per-table mapping tables.
-- A **mapping strategy** — `KeyMapping`, which labels each row with the reference stored in its `provsql_ref` column. A mapping table only depends on the strategy, so each annotated table has one, `<table>_provkey`, shared by every semiring. Tables annotated by earlier versions have one identical `<table>_prov<semiring>` per semiring: the views still read them, and annotating the table again renames one to `<table>_provkey` and drops the others.
+
+Every semiring reads the same labels:
+- **Rows are labelled by their token** — `<table>@k<hex>`, where `<hex>` is the row's `provsql` token. Annotating a table therefore adds only ProvSQL's own column, and prepares the table for every semiring. A row's token, and so its reference, only changes with its probability.
+- **One temporary view per query** — `compute` creates `apx_mapping` in its transaction, the `UNION ALL` of the annotated tables the query's plan reads (views expanded), and drops it before committing. ProvSQL's `sr_*` functions need a single relation holding every table's tokens. Left in place, the view would stop other sessions dropping those tables.
 
 ### SQL Rewriting
 
-The `SqlRewriter` class (`internal/sql_rewriter.py`) transforms SQL queries to include provenance tracking:
+The `SqlRewriter` class (`domains/provenance/sql_rewriter.py`) transforms SQL queries to include provenance tracking:
 
 **Non-aggregate queries:**
 ```sql
@@ -75,7 +77,7 @@ The `SqlRewriter` class (`internal/sql_rewriter.py`) transforms SQL queries to i
 SELECT name FROM students WHERE grade > 80
 
 -- Rewritten (e.g. with sr_why)
-SELECT name, sr_why(provenance(), 'why_mapping')
+SELECT name, sr_why(provenance(), 'apx_mapping')
 FROM students WHERE grade > 80
 ```
 
@@ -85,7 +87,7 @@ FROM students WHERE grade > 80
 SELECT department, COUNT(*) FROM employees GROUP BY department
 
 -- Rewritten (e.g. with sr_formula)
-SELECT x.department, sr_formula(x.cnt, 'formula_mapping')
+SELECT x.department, sr_formula(x.cnt, 'apx_mapping')
 FROM (
     SELECT department, COUNT(*) AS cnt
     FROM employees GROUP BY department
@@ -101,10 +103,6 @@ All `sr_*` functions are `ANYELEMENT` polymorphic — the same function name is 
 - **Query types**: Only `SELECT` queries are supported
 - **ProvSQL version**: 1.13 or later is required (`plain()` for `LIMIT`, `HAVING` support)
 - **EXCEPT / INTERSECT**: Not supported in query rewriting
-
-### Mapping Strategy
-- Currently uses PostgreSQL `ctid` (row identifier)
-- `ctid` can change on VACUUM FULL operations
 
 ## Key Design Patterns
 
@@ -147,14 +145,15 @@ Key points:
 ### Caching and Locking
 
 - **Redis Cache** (`RedisCacheProvider`): Results are cached under a SHA-256 key derived from all input parameters. Cache hits skip the database entirely. Default TTL is 1 hour.
-- **Distributed Lock** (`RedisLockProvider`): A per-database Redis lock (`explain_lock:{db_name}`) ensures only one explain task runs against a given database at a time, preventing annotation conflicts. It expires 5 minutes after its holder stops extending it, and a heartbeat thread extends it while the work runs, however long that is: annotating tens of millions of rows takes an hour. The provenance query's `statement_timeout` bounds how long a query holds it.
+- **Semaphore** (`RedisSemaphore`): named capacities shared by every worker through Redis, held a number of units at a time. Holds are granted in order (a large one is not starved by small ones), extended while their holder runs however long that is, expired a minute after a holder that crashed, and timed by Redis's clock. Two uses:
+    - **Per-database lock** (`explain_lock:{db_name}`, 1 unit of 1): only one explain task runs against a given database at a time, preventing annotation conflicts. A task waits up to 2 hours for it: annotating tens of millions of rows takes an hour.
+    - **Row budget per server** (`row_budget:{host}:{port}`): the rows of aggregates the provenance queries of a PostgreSQL server build at once (see [Configuration](configuration.md#one-budget-per-server)).
 - **Query limits** (`QueryLimits`): `statement_timeout`, `provsql.max_memory`, `temp_file_limit` and `max_parallel_workers_per_gather` are set on the transaction of each provenance query (see [Configuration](configuration.md#provenance-query-limits)).
-- **Circuit cleanup** (`tasks/maintenance.py`): ProvSQL keeps the circuit of every query in its store, failed and stopped ones included. `POST /api/v1/aps/explanation/maintenance/circuit-cleanup/{db_name}` takes the database's lock and runs `provsql.circuit_cleanup()`, which keeps what stored tokens reference.
 
 ### Dependency Injection
 
 The service uses a DI container (defined in `di.py`) to manage dependencies:
-- **Dynamic Service Creation**: Service instances are created per-AP processing request using a factory function (`get_provenance_service_for_ap`)
+- **Dynamic Service Creation**: Service instances are created per-AP processing request using a context manager (`provenance_service_for`)
 - **Connection Pool Management**: Connection pools are created when an AP is processed and cleaned up after completion
 - **Database Routing**: The DI system handles automatic routing between primary PostgreSQL and Timescale instances
 - **Repository Layer**: Repositories are created with database connections from the appropriate pool

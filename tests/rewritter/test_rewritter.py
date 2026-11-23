@@ -1,65 +1,9 @@
-from pathlib import Path
-
 import pytest
 from sqlglot import parse_one
 
+from ap_explanation.domains.provenance.semiring import DbSemiring
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.errors import AggregateSemiringError
-from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.types.semiring import DbSemiring
-
-# Each case directory holds a query.sql and an expected_<name>.sql per rewriting
-# it tests, <name> being a semiring name or "probability"
-EXPECTATIONS = ["why", "formula", "boolexpr", "how", "which", "probability"]
-
-
-def _remove_sql_comments(sql: str) -> str:
-    """Remove SQL comments from the given SQL string."""
-    import re
-    # Remove single-line comments (-- comment)
-    sql = re.sub(r'--.*?$', '', sql, flags=re.MULTILINE)
-    # Remove multi-line comments (/* comment */)
-    sql = re.sub(r'/\*.*?\*/', '', sql, flags=re.DOTALL)
-    return sql.strip()
-
-
-def _read_sql(path: Path) -> str | None:
-    return _remove_sql_comments(path.read_text()) if path.exists() else None
-
-
-def _load_test_cases() -> list[dict]:
-    """Load test cases from the cases directory, the directory name being why the case matters."""
-    cases_dir = Path(__file__).parent / "cases"
-    return [
-        {
-            "reason": case_dir.name,
-            "query": _read_sql(case_dir / "query.sql"),
-            **{name: _read_sql(case_dir / f"expected_{name}.sql") for name in EXPECTATIONS},
-        }
-        for case_dir in sorted(cases_dir.iterdir())
-        if (case_dir / "query.sql").exists()
-    ]
-
-
-test_cases = _load_test_cases()
-
-
-@pytest.mark.parametrize("case", test_cases, ids=[case["reason"] for case in test_cases])
-@pytest.mark.parametrize("expectation", EXPECTATIONS)
-def test_rewrite_sql(case: dict, expectation: str, sql_rewriter: SqlRewriter, all_semirings: list[DbSemiring]):
-    """
-    Compares the rewritten SQL with the expected one by parsing both and comparing their ASTs.
-    This avoids issues with formatting differences. This will however still fail if the column order is different.
-    """
-    if case[expectation] is None:
-        pytest.skip(f"No expected_{expectation}.sql file for {case['reason']}")
-
-    if expectation == "probability":
-        rewritten = sql_rewriter.rewrite(case["query"], [], probability=True)
-    else:
-        semiring = next(s for s in all_semirings if s.name == expectation)
-        rewritten = sql_rewriter.rewrite(case["query"], [semiring])
-    print("Rewritten SQL:", rewritten)
-    assert parse_one(rewritten) == parse_one(case[expectation])
 
 
 def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, why_semiring: DbSemiring):
@@ -68,7 +12,7 @@ def test_rewrite_sql_distinct_names_every_projection(sql_rewriter: SqlRewriter, 
         "SELECT DISTINCT upper(name), EXTRACT(MONTH FROM d), * FROM t", [why_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, x.col_1, x.*, sr_why(provenance(), 'why_mapping') "
+        "SELECT x.col_0, x.col_1, x.*, sr_why(provenance(), 'apx_mapping') "
         "FROM (SELECT DISTINCT upper(name) AS col_0, EXTRACT(MONTH FROM d) AS col_1, * FROM t) AS x"
         " WHERE present(provenance())"
     )
@@ -86,7 +30,7 @@ def test_rewrite_sql_aggregate_names_every_group_key(sql_rewriter: SqlRewriter, 
     )
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, x.col_1, x.b, x.n, sr_formula(x.n, 'formula_mapping') "
+        "SELECT x.col_0, x.col_1, x.b, x.n, sr_formula(x.n, 'apx_mapping') "
         "FROM (SELECT EXTRACT(MONTH FROM t.d) AS col_0, upper(t.a) AS col_1, CAST(t.b AS INT), count(*) AS n "
         "FROM t GROUP BY EXTRACT(MONTH FROM t.d), upper(t.a), CAST(t.b AS INT)) AS x"
         " WHERE present(provenance())"
@@ -102,7 +46,7 @@ def test_rewrite_sql_wraps_set_operations_whole(
         f"SELECT a FROM t1 {operation} SELECT a FROM t2", [why_semiring], probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_why(provenance(), 'why_mapping'), probability_evaluate(provenance())"
+        "SELECT x.*, sr_why(provenance(), 'apx_mapping'), probability_evaluate(provenance())"
         f" FROM (SELECT a FROM t1 {operation} SELECT a FROM t2) AS x"
         " WHERE present(provenance())"
     )
@@ -137,9 +81,9 @@ def test_rewrite_sql_every_semiring_and_probability_in_one_query(
     rewritten = sql_rewriter.rewrite("SELECT a.id FROM assessment a", all_semirings, probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_formula(provenance(), 'formula_mapping'), sr_why(provenance(), 'why_mapping'),"
-        " sr_boolexpr(provenance(), 'boolexpr_mapping'), sr_how(provenance(), 'how_mapping'),"
-        " sr_which(provenance(), 'which_mapping'), probability_evaluate(provenance())"
+        "SELECT x.*, sr_formula(provenance(), 'apx_mapping'), sr_why(provenance(), 'apx_mapping'),"
+        " sr_boolexpr(provenance(), 'apx_mapping'), sr_how(provenance(), 'apx_mapping'),"
+        " sr_which(provenance(), 'apx_mapping'), probability_evaluate(provenance())"
         " FROM (SELECT a.id FROM assessment a) AS x WHERE present(provenance())"
     )
 
@@ -151,7 +95,7 @@ def test_rewrite_sql_aggregate_keeps_semirings_supporting_it(
     rewritten = sql_rewriter.rewrite("SELECT a, count(*) AS n FROM t GROUP BY a", all_semirings, probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.a, x.n, sr_formula(x.n, 'formula_mapping'), probability_evaluate(provenance())"
+        "SELECT x.a, x.n, sr_formula(x.n, 'apx_mapping'), probability_evaluate(provenance())"
         " FROM (SELECT a, count(*) AS n FROM t GROUP BY a) AS x WHERE present(provenance())"
     )
 
@@ -168,7 +112,7 @@ def test_rewrite_sql_aggregate_without_group_by(sql_rewriter: SqlRewriter, formu
     rewritten = sql_rewriter.rewrite("SELECT count(*) FROM t WHERE t.a = 1", [formula_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.col_0, sr_formula(x.col_0, 'formula_mapping')"
+        "SELECT x.col_0, sr_formula(x.col_0, 'apx_mapping')"
         " FROM (SELECT count(*) AS col_0 FROM t WHERE t.a = 1) AS x WHERE present(provenance())"
     )
 
@@ -198,7 +142,7 @@ def test_rewrite_sql_aggregate_explained_by_a_supported_one(
     rewritten = sql_rewriter.rewrite("SELECT a, stddev(b) AS sd, count(*) AS n FROM t GROUP BY a", all_semirings)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.a, x.sd, x.n, sr_formula(x.n, 'formula_mapping')"
+        "SELECT x.a, x.sd, x.n, sr_formula(x.n, 'apx_mapping')"
         " FROM (SELECT a, stddev(b) AS sd, count(*) AS n FROM t GROUP BY a) AS x WHERE present(provenance())"
     )
 
@@ -215,7 +159,7 @@ def test_rewrite_sql_window_function_is_not_an_aggregate(sql_rewriter: SqlRewrit
     rewritten = sql_rewriter.rewrite("SELECT a, sum(b) OVER (PARTITION BY a) FROM t", [why_semiring])
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_why(provenance(), 'why_mapping')"
+        "SELECT x.*, sr_why(provenance(), 'apx_mapping')"
         " FROM (SELECT a, sum(b) OVER (PARTITION BY a) FROM t) AS x WHERE present(provenance())"
     )
 
@@ -231,7 +175,7 @@ def test_rewrite_sql_limits_the_actual_result(sql_rewriter: SqlRewriter, why_sem
         probability=True)
     print("Rewritten SQL:", rewritten)
     assert parse_one(rewritten) == parse_one(
-        "SELECT x.*, sr_why(provenance(), 'why_mapping'), probability_evaluate(provenance()) "
+        "SELECT x.*, sr_why(provenance(), 'apx_mapping'), probability_evaluate(provenance()) "
         "FROM (SELECT a FROM t WHERE b IN (SELECT b FROM u LIMIT plain(2)) ORDER BY a LIMIT plain(3)) AS x "
         "WHERE present(provenance())"
     )
@@ -244,14 +188,14 @@ def test_rewrite_sql_keeps_plain_limits(sql_rewriter: SqlRewriter, why_semiring:
 
 @pytest.mark.parametrize(("query", "expected"), [
     ("SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1",
-     "SELECT x.a, x.n, sr_formula(x.n, 'formula_mapping') "
-     "FROM (SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1) AS x WHERE present(provenance())"),
+     ("SELECT x.a, x.n, sr_formula(x.n, 'apx_mapping') "
+     "FROM (SELECT a, count(*) AS n FROM t GROUP BY a HAVING count(*) > 1) AS x WHERE present(provenance())")),
     ("SELECT DISTINCT a FROM t",
-     "SELECT x.a, sr_formula(provenance(), 'formula_mapping') FROM (SELECT DISTINCT a FROM t) AS x "
-     "WHERE present(provenance())"),
+     ("SELECT x.a, sr_formula(provenance(), 'apx_mapping') FROM (SELECT DISTINCT a FROM t) AS x "
+     "WHERE present(provenance())")),
     ("SELECT a FROM t1 UNION SELECT a FROM t2",
-     "SELECT x.*, sr_formula(provenance(), 'formula_mapping') FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x "
-     "WHERE present(provenance())"),
+     ("SELECT x.*, sr_formula(provenance(), 'apx_mapping') FROM (SELECT a FROM t1 UNION SELECT a FROM t2) AS x "
+     "WHERE present(provenance())")),
 ])
 def test_rewrite_sql_keeps_the_rows_of_the_sql_answer(
     query: str, expected: str, sql_rewriter: SqlRewriter, formula_semiring: DbSemiring

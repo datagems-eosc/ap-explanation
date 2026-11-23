@@ -29,7 +29,8 @@ The service processes **Analytical Patterns (AP)** in PG-JSON format—a graph s
 
 Node and edge ids must be valid UUIDs, and every node must carry a `properties`
 object. Edge direction matters: `input` runs *from* the data node *to* the
-operator, and `containedIn` runs *from* the container *to* what it contains.
+operator, and `containedIn` runs *from* what is contained *to* its container
+(`Table` → `RelationalDatabase`, `CSV` → `CsvSet`), as in MoMa.
 
 ```json
 {
@@ -69,8 +70,8 @@ operator, and `containedIn` runs *from* the container *to* what it contains.
       "labels": ["input"]
     },
     {
-      "from": "0f1a2b3c-0003-4a00-8a00-000000000003",
-      "to": "0f1a2b3c-0004-4a00-8a00-000000000004",
+      "from": "0f1a2b3c-0004-4a00-8a00-000000000004",
+      "to": "0f1a2b3c-0003-4a00-8a00-000000000003",
       "labels": ["containedIn"]
     }
   ]

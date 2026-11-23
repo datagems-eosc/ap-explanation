@@ -1,6 +1,8 @@
-from collections.abc import AsyncGenerator
+import fcntl
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import LiteralString
 from urllib.parse import urlparse, urlunparse
 
 import pytest
@@ -10,18 +12,16 @@ from psycopg_pool import AsyncConnectionPool
 from testcontainers.core.image import DockerImage
 from testcontainers.postgres import PostgresContainer
 
-from ap_explanation.internal.explainer.noop_explainer import NoOpExplainer
-from ap_explanation.internal.sql_rewriter import SqlRewriter
-from ap_explanation.repository.provenance import ProvenanceRepository
-from ap_explanation.semirings import semirings
+from ap_explanation.domains.nl_explanation.noop_explainer import NoOpExplainer
+from ap_explanation.domains.provenance.semiring import DbSemiring, semirings
+from ap_explanation.domains.provenance.sql_rewriter import SqlRewriter
 from ap_explanation.services.provenance import ProvenanceService
-from ap_explanation.types.semiring import DbSemiring
 
 
 @dataclass
 class TestSchema:
-    table: str = "assessment"
-    schema: str = "mathe"
+    table: LiteralString = "assessment"
+    schema: LiteralString = "mathe"
 
 
 @pytest.fixture(scope="session")
@@ -46,17 +46,26 @@ async def two_rows_of_one_student(db_connection: AsyncConnection, test_schema: T
         return ", ".join(str(r[0]) for r in await cursor.fetchall())
 
 
-@pytest.fixture(scope="function")
-def postgres_container():
-    # Get the project root directory (parent of tests/)
-    project_root = Path(__file__).parent.parent
+@pytest.fixture(scope="session")
+def provsql_image(tmp_path_factory: pytest.TempPathFactory) -> str:
+    """
+    The tag of the PostgreSQL + ProvSQL image, built once per run.
 
-    with (
+    The xdist workers build it one after the other: on a cache miss the first
+    compiles ProvSQL and the others find it cached, instead of four builds at
+    once. On the host network: inside the dev container's Docker-in-Docker,
+    the build's own network cannot resolve names, and apt-get hangs.
+    """
+    # Shared by the workers of a run, unlike each one's basetemp
+    lock = tmp_path_factory.getbasetemp().parent / "provsql_image.lock"
+    with lock.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
         DockerImage(
-            path=str(project_root),
+            path=str(Path(__file__).parent.parent),
             dockerfile_path="dependencies/postgres-provsql/Dockerfile",
             tag="testdb:latest",
             clean_up=False,
+            network_mode="host",
             buildargs={
                 "FIXTURES_PATH": "fixtures/postgres-seed",
                 # Pin explicitly: an unset arg used to fall through to the
@@ -68,11 +77,15 @@ def postgres_container():
                 "PROVSQL_VERSION": "master",
                 "PROVSQL_COMMIT": "3b8d309820aae10b81f1aaca29a20f0768fb0ef0",
             },
-        ) as image,
-        PostgresContainer(
-            image=str(image), username="provdemo", password="provdemo", dbname="mathe"
-        ) as postgres,
-    ):
+        ).build()
+    return "testdb:latest"
+
+
+@pytest.fixture(scope="function")
+def postgres_container(provsql_image: str):
+    with PostgresContainer(
+        image=provsql_image, username="provdemo", password="provdemo", dbname="mathe"
+    ) as postgres:
         print(postgres.get_logs())
         yield postgres
 
@@ -92,15 +105,15 @@ def connstr(postgres_container: PostgresContainer):
 
 
 @pytest_asyncio.fixture
-async def db_pool(connstr) -> AsyncGenerator[AsyncConnectionPool]:
+async def db_pool(connstr: Callable[..., str]) -> AsyncGenerator[AsyncConnectionPool[AsyncConnection]]:
     """Provides a connection to the test database."""
-    pool = AsyncConnectionPool(
+    pool: AsyncConnectionPool[AsyncConnection] = AsyncConnectionPool(
         conninfo=connstr(),
         min_size=1,
         max_size=5,
     )
     await pool.open()
-    yield pool  # type: ignore
+    yield pool
     await pool.close()
 
 
@@ -118,18 +131,8 @@ async def db_connection(
 
 
 @pytest_asyncio.fixture
-async def provenance_repository(
-    db_connection: AsyncConnection, sql_rewriter: SqlRewriter
-):
-    """
-    Returns a ProvenanceRepository with semiring setup ensured.
-    """
-    return await ProvenanceRepository.create(db_connection, sql_rewriter)
-
-
-@pytest.fixture
-def provenance_service(provenance_repository: ProvenanceRepository):
-    return ProvenanceService(provenance_repository, NoOpExplainer())
+async def provenance_service(db_connection: AsyncConnection, sql_rewriter: SqlRewriter):
+    return await ProvenanceService.create(db_connection, sql_rewriter, NoOpExplainer())
 
 
 @pytest.fixture(scope="session")
@@ -156,30 +159,12 @@ def formula_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
     return next(s for s in all_semirings if s.name == "formula")
 
 
-@pytest.fixture(scope="session")
-def boolexpr_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
-    """Boolean-expression provenance semiring configuration for testing."""
-    return next(s for s in all_semirings if s.name == "boolexpr")
-
-
-@pytest.fixture(scope="session")
-def how_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
-    """How-provenance semiring configuration for testing."""
-    return next(s for s in all_semirings if s.name == "how")
-
-
-@pytest.fixture(scope="session")
-def which_semiring(all_semirings: list[DbSemiring]) -> DbSemiring:
-    """Which-provenance semiring configuration for testing."""
-    return next(s for s in all_semirings if s.name == "which")
-
-
 @pytest.fixture(
     scope="session",
     params=list(Path(__file__).parent.parent.glob("fixtures/explain_sql_query*.json")),
     ids=lambda p: p.stem,
 )
-def explain_sql_query_file(request) -> Path:
+def explain_sql_query_file(request: pytest.FixtureRequest) -> Path:
     """Parametrized fixture yielding each explain_sql_query*.json fixture file path."""
     return request.param
 
