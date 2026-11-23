@@ -1,39 +1,30 @@
 # Changelog
 
-## Unreleased
+## v2.0.0 — 2026-11-23
 
 ### Breaking Changes
 
-- **ProvSQL 1.14 required** — every query is rewritten for ProvSQL's possible-worlds semantics: its rows are filtered on `present(provenance())`, so only the rows of the SQL answer come back, and every `LIMIT k` is written `LIMIT plain(k)`, the truncation of the actual result (since ProvSQL 1.13, `LIMIT k` keeps every row that may come first in some world). Tuple probabilities are changed with `replace_input` and read with `probability_is_set` (1.13), and an aggregate's formula with `sr_formula_rows` (1.13.1). 1.14.0 adds no function, but evaluates probabilities faster (independent parts, a cache of compiled d-DNNFs). The `postgres-provsql` image is now `17-v1.14.0`; its entrypoint upgrades the extension of an existing volume (`ALTER EXTENSION provsql UPDATE`) on start. Upgrade every database server before deploying.
-
-- **APs are validated when posted** — on moma-domain 2.17.1, every Data node (`Table`, `CSV`, `CsvSet`, `RelationalDatabase`…) needs a `name`, the provenance operator a non-empty `query`, and each CSV node a `contentUrl`. An AP missing one is refused with a 422 instead of being accepted and failing its task.
-
-- **DISTINCT queries return one derivation per result row** — semirings are now evaluated outside the `DISTINCT`, as they already were for `GROUP BY`. Previously the semiring value was part of the `DISTINCT` key, so a result row merged from several tuples came back once per tuple, each with that tuple's provenance only; it now comes back once, with provenance combining all of them.
-
-- **No mapping tables** — annotating a table now adds only ProvSQL's `provsql` column. Each query labels rows through a temporary view, `apx_mapping`, over the annotated tables it reads, found in its plan, instead of the `provsql_ref` column, the `<table>_prov<semiring>` tables (5 × 5 GB for 41 million rows) and the `<semiring>_mapping` views. Nothing reads those anymore, and they are not removed: on a database annotated by an earlier version, drop them by hand (`ALTER TABLE <table> DROP COLUMN provsql_ref`, `DROP TABLE <table>_provkey`, `DROP VIEW provkey_mapping`, and the per-semiring tables and views), or `provsql_ref` shows in `SELECT *` answers. References still read `table@k<hex>`, but `<hex>` is now the row's provenance token, so a row gets a new reference when its probability changes. The database role needs the `TEMP` privilege, which PostgreSQL grants by default.
-
-- **Configuration is checked at startup** — environment variables are read by pydantic-settings. A value of the wrong type (`LLM_TIMEOUT=abc`, `JWKS_TTL_SECONDS=abc`) now stops the service from starting. `LLM_SSL_VERIFY` and `USE_EMBEDDED_CELERY_WORKER` accept `1`, `yes` and `on` as true and `0`, `no` and `off` as false, refuse anything else, and an empty value means their default, `true`: it was `false`.
+- **ProvSQL 1.14 required** — queries use ProvSQL's possible-worlds functions (`present()`, `LIMIT plain(k)`, `replace_input`, `sr_formula_rows`). Upgrade every database server first: the `postgres-provsql:17-v1.14.0` image upgrades the extension of an existing volume on start.
+- **No mapping tables** — annotating a table only adds ProvSQL's `provsql` column; rows are labelled through a temporary view. On a database annotated by an earlier version, drop the leftovers by hand (`provsql_ref` column, `<table>_provkey` and `<table>_prov<semiring>` tables, `*_mapping` views), or `provsql_ref` shows in `SELECT *` answers. Row references now change when a row's probability changes. The database role needs the `TEMP` privilege (granted by default).
+- **APs are validated when posted** — Data nodes need a `name`, the provenance operator a `query`, and CSV nodes a `contentUrl`. An invalid AP gets a 422 instead of a failed task.
+- **DISTINCT queries return one row per result** — with the provenance of all the tuples it merges, instead of one row per tuple.
+- **Configuration is checked at startup** — an invalid value (`LLM_TIMEOUT=abc`) stops the service. `LLM_SSL_VERIFY` and `USE_EMBEDDED_CELERY_WORKER` accept `true/false`, `1/0`, `yes/no`, `on/off`; empty now means `true` (was `false`).
 
 ### New Features
 
-- **An aggregate's formula is returned as its first rows** — the formula of an aggregate is read with `sr_formula_rows`: the aggregate and its number of terms, then one term per line, up to `PROVENANCE_MAX_FORMULA_ROWS` (100) lines, and the tuples those terms name. `truncated` says that rows were left out. ProvSQL computes only the rows read, so an aggregate over millions of rows is explained in seconds instead of writing a formula of a term per row (and an evaluation that never stops, on some conditions on aggregates). A formula of one row is returned as before.
-
-- **Aggregates over too many rows are refused before they run** — ProvSQL builds a gate per aggregated row while the query runs, before `provsql.max_memory` applies: past a few million rows on a 4 GB server, its store worker is killed and the server restarts. The query now first runs without provenance, under `EXPLAIN ANALYZE` (PostgreSQL's estimates are far off on joins on expressions), and is refused with `QueryLimitExceededError` if an aggregate receives more than `PROVENANCE_MAX_AGGREGATED_ROWS` rows (8,000,000, see the configuration docs) or the plain run exceeds `PROVENANCE_PRECHECK_TIMEOUT` (180s).
-
-- **One budget of aggregated rows per server** — ProvSQL builds the aggregates of all the databases of a server in one store worker, so concurrent queries of different databases added up and could crash it where each alone would not. `PROVENANCE_MAX_AGGREGATED_ROWS` is now shared by all the provenance queries of a server: each reserves the rows of its aggregates (all of them: they were counted per aggregate before), at least `PROVENANCE_MIN_RESERVED_ROWS` (an eighth of the budget: at most eight queries at once), and waits until they are free.
-
-- **Provenance query limits** — each provenance query runs with `statement_timeout` (`10min`), `provsql.max_memory` (`1GB`), `temp_file_limit` (`5GB`) and no parallel workers, configurable with `PROVENANCE_*` variables. A query past them fails with an error naming the limit, rather than running until the database dies.
-- **Result probabilities** — `POST /api/v1/aps/explanation[/{semiring_name}]?probability=true` evaluates each result row's probability with ProvSQL's `probability_evaluate`, returned as `probability` on each derivation. Tuple probabilities are read from the column named by each `Table`/`CSV` node's `probabilityColumn` property; tables without one are certain.
+- **Result probabilities** — `?probability=true` returns each result row's probability. Tuple probabilities come from the column named by a `Table`/`CSV` node's `probabilityColumn`; other tables are certain.
+- **Query limits** — each provenance query runs with `statement_timeout` (10 min), `provsql.max_memory` (1 GB), `temp_file_limit` (5 GB) and no parallel workers, set with `PROVENANCE_*` variables. A query past a limit fails with an error naming it.
+- **Large aggregates refused before they run** — a plain `EXPLAIN ANALYZE` run counts the rows each aggregate receives; past `PROVENANCE_MAX_AGGREGATED_ROWS` (8 million), or if that run exceeds `PROVENANCE_PRECHECK_TIMEOUT` (180 s), the query is refused instead of crashing the database server. The budget is shared by all queries of a server, which wait their turn.
+- **Aggregate formulas truncated** — an aggregate's formula is returned as its first `PROVENANCE_MAX_FORMULA_ROWS` (100) lines, with `truncated` set, so aggregates over millions of rows are explained in seconds.
 
 ### Misc
 
-- The per-database lock and the row budget of a server are one Redis semaphore (`RedisSemaphore`). The lock is extended while its work runs, so an hour-long annotation no longer outlives it (letting a second worker in, then failing a finished task on release); it is granted in order, and expires a minute after a crashed holder instead of an hour. Expiries follow Redis's clock rather than each worker's. Deploy with no explain task running: the lock's Redis key changes type, from a string to a sorted set.
-- A task that waited for the lock of its database checks the cache again before working: an identical task that held the lock may have stored the result meanwhile.
-- `containedIn` is read from the item to its container (`Table → RelationalDatabase`, `CSV → CsvSet`), as MoMa stores it, so an AP built from a stored dataset finds its tables. APs running it the other way, as the fixtures and demos did, are still read.
-- The schema description given to the LLM now has its tables' columns and primary keys: the lookups never matched, so it listed empty tables.
-- Internal modules renamed: `types` → `domains`, `repository` → `repositories`, `middlewares` → `api/middlewares`.
-- Domains split by subject: `domains/provenance` (with `sql_rewriter` and the semirings, and `provenance.py` renamed `derivation.py`) and `domains/nl_explanation` (formerly `internal/explainer`).
-- Cached results are keyed on the new `probability` flag too, so entries cached before the upgrade are not reused.
+- The per-database lock and the row budget share one Redis semaphore. The lock is renewed while a task runs and expires a minute after a crash (was an hour). Deploy with no task running: the lock's Redis key changes type.
+- A task that waited for the lock checks the cache again before running.
+- `containedIn` is read from item to container, as MoMa stores it; the reverse direction is still accepted.
+- The schema given to the LLM now lists its tables' columns and primary keys.
+- Cached results are keyed on `probability` too: older cache entries are not reused.
+- Internal modules reorganised (`domains/provenance`, `domains/nl_explanation`, `repositories`, `api/middlewares`).
 
 ## v1.0.0 — 2026-08-26
 
