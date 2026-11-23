@@ -71,11 +71,7 @@ def provsql_image(tmp_path_factory: pytest.TempPathFactory) -> str:
                 # Pin explicitly: an unset arg used to fall through to the
                 # Dockerfile default, so the suite validated against a different
                 # ProvSQL than docker-compose runs.
-                # 1.14 is not released yet: master at this commit (1.14.0-dev) has
-                # sr_formula_rows. A commit, not the branch's head, so that the
-                # image's cached clone is not a stale master.
-                "PROVSQL_VERSION": "master",
-                "PROVSQL_COMMIT": "3b8d309820aae10b81f1aaca29a20f0768fb0ef0",
+                "PROVSQL_VERSION": "v1.14.0",
             },
         ).build()
     return "testdb:latest"

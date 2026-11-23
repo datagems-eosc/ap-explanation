@@ -24,9 +24,9 @@ class DbSemiring(BaseModel):
     supports_aggregates: bool = False
 
     # ProvSQL function writing an aggregate's formula as rows of bounded size
-    # (sr_formula_rows, ProvSQL 1.14), of which only the first are read: the
-    # whole formula of an aggregate holds a term per aggregated row. None, or
-    # an older ProvSQL, evaluates the aggregate with retrieval_function
+    # (sr_formula_rows), of which only the first are read: the whole formula
+    # of an aggregate holds a term per aggregated row. None evaluates the
+    # aggregate with retrieval_function
     rows_function: str | None = None
 
 

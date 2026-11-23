@@ -71,7 +71,7 @@ SELECT * FROM provsql.circuit_cleanup();
 It keeps the gates a stored token references, and returns ProvSQL's counts before and after (`gates_before`, `gates_after`, `wires_before`, ...).
 
 - Like `DROP DATABASE`, `provsql.circuit_cleanup()` refuses to run while another session is connected to the database. Every other client must be disconnected first, this service's workers included, so schedule it with operations, at a quiet time.
-- Requires ProvSQL >= 1.13.
+- Requires ProvSQL >= 1.14.
 
 ---
 

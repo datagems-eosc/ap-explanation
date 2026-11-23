@@ -102,8 +102,6 @@ class ProvSqlRepository:
     _conn: AsyncConnection
     _sql_rewriter: SqlRewriter
     _limits: QueryLimits
-    #: Whether ProvSQL writes formulas as rows (sr_formula_rows, ProvSQL 1.14)
-    _formula_rows: bool = False
 
     #: Where an aggregate query's result is kept, for the rows of its formulas
     #: to be read from its tokens, valid in this transaction only
@@ -135,8 +133,6 @@ class ProvSqlRepository:
         # services querying the same database are never subject to ProvSQL's
         # rewriter, which does not support every SQL construct.
         await conn.execute("SET provsql.active = 1")
-        cursor = await conn.execute("SELECT to_regproc('provsql.sr_formula_rows') IS NOT NULL")
-        repo._formula_rows = (await cursor.fetchall())[0][0]
         return repo
 
     async def enable(self, schema_name: str, table_name: str) -> bool:
@@ -331,9 +327,9 @@ class ProvSqlRepository:
 
         Each returned row separates the original query output (``answer``) from
         its provenance in each semiring. On an aggregate query, only the
-        semirings that support aggregates are evaluated, and with ProvSQL 1.14
-        only the first rows of the aggregate's formula are read
-        (``max_formula_rows``): the whole formula holds a term per aggregated row.
+        semirings that support aggregates are evaluated, and only the first
+        rows of the aggregate's formula are read (``max_formula_rows``): the
+        whole formula holds a term per aggregated row.
 
         Args:
             schema_name: Schema where the query should be executed
@@ -352,7 +348,7 @@ class ProvSqlRepository:
         # The semirings whose aggregate formula is read as rows
         rows_semirings = (
             [s for s in semirings if s.rows_function and s.supports_aggregates]
-            if self._formula_rows and self._sql_rewriter.is_aggregate(query) else []
+            if self._sql_rewriter.is_aggregate(query) else []
         )
         edited_query = self._sql_rewriter.rewrite(query, semirings, compute_probability, bool(rows_semirings))
         internal_columns = {

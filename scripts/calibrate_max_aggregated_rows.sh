@@ -8,9 +8,9 @@
 # Usage: sh calibrate_max_aggregated_rows.sh "host=... user=... password=..." [budget, default 1GB]
 #
 # Each step sums n x n rows, the shape of a reading x elevation point join, under
-# provsql.max_memory, in a scratch database, and reads its formula: its first rows with
-# sr_formula_rows (ProvSQL 1.14), or all of it with sr_formula (1.13). It stops at the first n
-# where the server dies, or the step hangs past 15 minutes, instead of failing the query.
+# provsql.max_memory, in a scratch database, and reads its first rows with sr_formula_rows,
+# as ap-explanation does. It stops at the first n where the server dies, or the step hangs
+# past 15 minutes, instead of failing the query.
 conn=$1; budget=${2:-1GB}
 db=calibrate_aggregated_rows
 safe=0
@@ -28,12 +28,7 @@ SELECT add_provenance('b');
 SELECT create_provenance_mapping('a_map', 'a', 'id');
 SET provsql.max_memory = '$budget';
 SET statement_timeout = '600s';
-SELECT to_regproc('provsql.sr_formula_rows') IS NOT NULL AS has_rows \gset
-\\if :has_rows
 SELECT sr_formula_rows(x.s, 'a_map') FROM (SELECT SUM(a.v) AS s FROM a, b) AS x LIMIT plain(4);
-\\else
-SELECT length(sr_formula(x.s, 'a_map')) FROM (SELECT SUM(a.v) AS s FROM a, b) AS x;
-\\endif
 SQL
 )
   hung=$?

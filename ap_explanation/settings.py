@@ -70,8 +70,8 @@ class QueryLimits(BaseSettings):
         env_prefix="PROVENANCE_", env_file=_ENV_FILE, extra="ignore", frozen=True
     )
 
-    #: The one guard that holds whatever process grows: ProvSQL >= 1.13
-    #: honours cancellation.
+    #: The one guard that holds whatever process grows: ProvSQL honours
+    #: cancellation.
     statement_timeout: Annotated[str | None, _EmptyIsNone] = "10min"
     #: provsql.max_memory, the memory ProvSQL's evaluations may add to the
     #: backend. It does not cover ProvSQL's store worker, hence the timeout.
@@ -100,9 +100,9 @@ class QueryLimits(BaseSettings):
     #: provenance query takes 0.3 s was refused at 60 s, and explained in
     #: 157 s with 300 s.
     precheck_timeout: str = "180s"
-    #: Most rows of an aggregate's formula to read (sr_formula_rows, ProvSQL
-    #: 1.14): the first is the aggregate with its number of terms, each other
-    #: a term of a few dozen symbols.
+    #: Most rows of an aggregate's formula to read (sr_formula_rows): the
+    #: first is the aggregate with its number of terms, each other a term of
+    #: a few dozen symbols.
     max_formula_rows: int = 100
 
     @field_validator("precheck_timeout", "max_formula_rows", mode="before")

@@ -101,7 +101,7 @@ All `sr_*` functions are `ANYELEMENT` polymorphic — the same function name is 
 
 ### SQL Support
 - **Query types**: Only `SELECT` queries are supported
-- **ProvSQL version**: 1.13 or later is required (`plain()` for `LIMIT`, `HAVING` support)
+- **ProvSQL version**: 1.14 or later is required (`plain()` for `LIMIT`, `HAVING` support, `sr_formula_rows` for aggregates)
 - **EXCEPT / INTERSECT**: Not supported in query rewriting
 
 ## Key Design Patterns

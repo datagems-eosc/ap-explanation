@@ -33,7 +33,7 @@ services:
 
   # --- PostgreSQL Service with ProvSQL compiled from source ---
   postgres-provsql:
-    image : ghcr.io/datagems-eosc/postgres-provsql:17-v1.12.0
+    image : ghcr.io/datagems-eosc/postgres-provsql:17-v1.14.0
     # build:
     #   context: .
     #   dockerfile: dependencies/postgres-provsql/Dockerfile

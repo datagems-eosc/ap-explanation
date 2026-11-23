@@ -8,9 +8,9 @@ on:
         required: true
         default: "17"
       provsql_version:
-        description: "ProvSQL version (branch or tag, e.g. v1.8.0)"
+        description: "ProvSQL version (branch or tag, e.g. v1.14.0)"
         required: true
-        default: "v1.8.0"
+        default: "v1.14.0"
 
 env:
   REGISTRY: ghcr.io
