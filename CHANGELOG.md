@@ -4,7 +4,7 @@
 
 ### New Features
 
-- **Circuit store reclaimed** — ProvSQL keeps every query's circuit on disk and never frees it (1.6 GB for the meteo demo's 46 MB database), and a full disk restarts the server. After a task that grew its database by 100 MB or more, the service now frees it with `provsql.circuit_cleanup()`, in under a second. Skipped while another client is connected to the database. A service role that is not a superuser needs `SELECT` on the tables with a provenance column, `provsql.update_provenance` included.
+- **Disk space freed after large queries** — ProvSQL never frees the disk its queries use, and a full disk restarts the database server. The service now frees it after each query that used 100 MB or more, unless another application is connected to the database. If the service's database role is not a superuser, grant it `SELECT` on the annotated tables and on `provsql.update_provenance`.
 - **`WORKER_CONCURRENCY`** — how many tasks a worker runs at once (default 2). Raise it so that a busy database does not hold back the others; `PROVENANCE_MIN_RESERVED_ROWS` still bounds the queries a server runs at once.
 
 ### Misc
