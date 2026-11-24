@@ -143,6 +143,7 @@ sequenceDiagram
         Worker->>Redis: reserve rows of row_budget:{host}:{port}
         Worker->>PG: compute provenance (rewritten query)
         Worker->>Redis: release rows
+        Worker->>PG: reclaim the circuit store, if the task grew it
         Worker->>Redis: set(cache_key, result, ttl=1h)
         Worker->>Redis: release lock
         Worker-->>Client: result
@@ -155,6 +156,7 @@ Key points:
 - **Annotation** adds ProvSQL provenance tokens to the target tables, once: they stay for the next requests.
 - The **pre-check** refuses a query too large to explain, and the **row budget** keeps the queries of all the server's databases from building too much at once.
 - **Computation** runs the rewritten query, under the [query limits](configuration.md#provenance-query-limits).
+- **Reclaiming** frees the gates the task left in ProvSQL's circuit store, which ProvSQL never frees (see [Usage](usage.md#reclaiming-the-circuit-store)).
 
 ### Caching and Locking
 

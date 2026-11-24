@@ -4,6 +4,8 @@
 
 ### New Features
 
+- **Circuit store reclaimed** — after a task that grew its database by 100 MB or more, the service frees the gates its queries left in ProvSQL's store (`provsql.circuit_cleanup()`), which ProvSQL never frees: 1.6 GB for the meteo use case's 46 MB database. Skipped while another client is connected to the database. A service role that is not a superuser needs `SELECT` on every table with a provenance column, `provsql.update_provenance` included; its connections are named `ap-explanation` (`application_name`).
+
 - **`WORKER_CONCURRENCY`** — tasks a worker runs at once, embedded or standalone (default 2, as before for the embedded worker). A standalone `celery worker` now runs 2 by default, instead of one per CPU, unless given `--concurrency`.
 
 ### Docs

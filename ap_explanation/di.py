@@ -1,11 +1,12 @@
 import logging
 import threading
+import time
 from collections.abc import AsyncGenerator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from functools import lru_cache
 
 from fastapi import FastAPI
-from psycopg import AsyncConnection, OperationalError
+from psycopg import AsyncConnection, Error, OperationalError
 from psycopg.conninfo import make_conninfo
 from psycopg_pool import AsyncConnectionPool
 
@@ -27,6 +28,11 @@ from ap_explanation.services.provenance import ProvenanceService
 from ap_explanation.settings import QueryLimits, settings
 
 logger = logging.getLogger(__name__)
+# The service's connections, told apart from other clients' by reclaim_circuit_store
+APPLICATION_NAME = "ap-explanation"
+# A task that grew its database by less than this leaves ProvSQL's circuit store as it is:
+# circuit_cleanup reads every provenance column of the database, too much after every task
+CLEANUP_MIN_GROWTH = 100 * 2**20
 # Poor man singleton
 semaphore: Semaphore = RedisSemaphore(redis_url=settings.redis_broker_uri)
 cache_provider = RedisCacheProvider(redis_url=settings.redis_broker_uri)
@@ -189,6 +195,7 @@ async def find_database(db_name: str) -> str:
             user=settings.postgres_user,
             password=settings.postgres_password,
             dbname=db_name,
+            application_name=APPLICATION_NAME,
         )
         try:
             check_conn = await AsyncConnection.connect(connection_string)
@@ -213,6 +220,57 @@ async def provenance_service_for(data_source: DataSource) -> AsyncGenerator[Prov
         DatabaseNotFoundError: If the database doesn't exist on either Postgres or Timescale
     """
     qs = await find_database(data_source.db_name)
-    # NOTE: Some data sources require set up
-    async with create_connection_pool(qs) as pool, seed_database(data_source, pool, settings.s3_mount_path):
-        yield await ProvenanceService.create(pool, SqlRewriter(), get_explainer(), query_limits, get_semaphore())
+    size_before = None
+    try:
+        async with create_connection_pool(qs) as conn:
+            # Before seeding: the tables a data source loads are dropped on exit
+            size_before = await _database_size(conn)
+            # NOTE: Some data sources require set up
+            async with seed_database(data_source, conn, settings.s3_mount_path):
+                yield await ProvenanceService.create(
+                    conn, SqlRewriter(), get_explainer(), query_limits, get_semaphore())
+    finally:
+        # Once the pool is closed, and whether the task succeeded or not
+        if size_before is not None:
+            await reclaim_circuit_store(qs, size_before)
+
+
+async def _database_size(conn: AsyncConnection) -> int:
+    """The size of *conn*'s database, ProvSQL's circuit store included."""
+    cursor = await conn.execute("SELECT pg_database_size(current_database())")
+    return (await cursor.fetchall())[0][0]
+
+
+async def reclaim_circuit_store(connection_string: str, size_before: int) -> None:
+    """
+    Free the gates a task left in ProvSQL's circuit store, if they take room.
+
+    The store keeps every gate ever built, and the service none of their tokens: its
+    result table is dropped at commit. circuit_cleanup keeps the gates the database's
+    tables reference. It never fails the task, whose answer is computed already.
+    """
+    try:
+        async with await AsyncConnection.connect(connection_string, autocommit=True) as conn:
+            if await _database_size(conn) - size_before < CLEANUP_MIN_GROWTH:
+                return
+            # circuit_cleanup refuses while another client is connected, after holding new
+            # connections back for 5 s: skip it then. It waits for the service's own
+            # connections still closing, and stops autovacuum (no user). Other roles'
+            # sessions show a user and a name, but not their backend_type, to a non-superuser.
+            cursor = await conn.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() "
+                "AND usename IS NOT NULL AND application_name IS DISTINCT FROM %s",
+                (APPLICATION_NAME,),
+            )
+            others = (await cursor.fetchall())[0][0]
+            if others:
+                logger.info(f"Circuit store not reclaimed: {others} other client(s) on the database")
+                return
+            # Cancelling it leaves the store consistent: ProvSQL's worker finishes the cleanup
+            await conn.execute("SET statement_timeout = '60s'")
+            started = time.monotonic()
+            cursor = await conn.execute("SELECT gates_before, gates_after FROM provsql.circuit_cleanup()")
+            before, after = (await cursor.fetchall())[0]
+            logger.info(f"Circuit store reclaimed: {before:,} -> {after:,} gates in {time.monotonic() - started:.1f} s")
+    except Error as e:
+        logger.warning(f"Circuit store not reclaimed: {e}")

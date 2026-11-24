@@ -78,15 +78,17 @@ Tuple probabilities come from a column of each queried table, named by the `prob
 
 ## Reclaiming the circuit store
 
-ProvSQL keeps the circuit of every provenance query in its store (`provsql_*.mmap` in the database directory), including failed and stopped ones, so the store only grows. One costly query can add gigabytes. The service does not reclaim it. To do so by hand, in a session on the database:
+ProvSQL keeps the circuit of every provenance query in its store (`provsql_*.mmap` in the database directory), including failed and stopped ones, and never frees it. One costly query can add gigabytes: the meteo use case's 46 MB database reached a 1.6 GB store after its 188 questions, 90% of it from three of them. `pg_database_size()` counts the store.
 
-```sql
-SELECT * FROM provsql.circuit_cleanup();
-```
+The service keeps none of the tokens it builds, so after a task that grew its database by 100 MB or more, it reclaims the store with `provsql.circuit_cleanup()`, still holding the database's lock. That keeps the gates the database's tables reference, and frees the rest: 1.6 GB in 0.4 s. A query whose gates were freed runs at its first-time speed the next time it is asked, 0 to 25% slower than with its gates stored; the same request within an hour comes from the cache.
 
-It keeps the gates a stored token references, and returns ProvSQL's counts before and after (`gates_before`, `gates_after`, `wires_before`, ...).
+- `circuit_cleanup` refuses to run while another client is connected to the database, after holding new connections back for 5 s. The service skips it then (logged as `Circuit store not reclaimed`), so a database other clients always hold is never reclaimed: schedule it with operations, at a quiet time, in a session on the database:
 
-- Like `DROP DATABASE`, `provsql.circuit_cleanup()` refuses to run while another session is connected to the database. Every other client must be disconnected first, this service's workers included, so schedule it with operations, at a quiet time.
+    ```sql
+    SELECT * FROM provsql.circuit_cleanup();
+    ```
+
+- It reads the provenance column of every table of the database: a service role that is not a superuser needs `SELECT` on all of them, ProvSQL's own `provsql.update_provenance` included, or the cleanup fails (logged, the task is not affected).
 - Requires ProvSQL >= 1.14.
 
 ---
