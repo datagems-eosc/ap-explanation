@@ -1,17 +1,17 @@
 # Changelog
 
-## Unreleased
+## v2.1.0 — 2026-11-24
 
 ### New Features
 
-- **Circuit store reclaimed** — after a task that grew its database by 100 MB or more, the service frees the gates its queries left in ProvSQL's store (`provsql.circuit_cleanup()`), which ProvSQL never frees: 1.6 GB for the meteo use case's 46 MB database. Skipped while another client is connected to the database. A service role that is not a superuser needs `SELECT` on every table with a provenance column, `provsql.update_provenance` included; its connections are named `ap-explanation` (`application_name`).
+- **Circuit store reclaimed** — ProvSQL keeps every query's circuit on disk and never frees it (1.6 GB for the meteo demo's 46 MB database), and a full disk restarts the server. After a task that grew its database by 100 MB or more, the service now frees it with `provsql.circuit_cleanup()`, in under a second. Skipped while another client is connected to the database. A service role that is not a superuser needs `SELECT` on the tables with a provenance column, `provsql.update_provenance` included.
+- **`WORKER_CONCURRENCY`** — how many tasks a worker runs at once (default 2). Raise it so that a busy database does not hold back the others; `PROVENANCE_MIN_RESERVED_ROWS` still bounds the queries a server runs at once.
 
-- **`WORKER_CONCURRENCY`** — tasks a worker runs at once, embedded or standalone (default 2, as before for the embedded worker). A standalone `celery worker` now runs 2 by default, instead of one per CPU, unless given `--concurrency`.
+### Misc
 
-### Docs
-
-- How many queries a 4 GB server runs at once, and how to bound them with `PROVENANCE_MIN_RESERVED_ROWS`.
-- Architecture, usage, troubleshooting, README and `.env.example` brought up to date with 2.0.0.
+- A standalone `celery worker` runs `WORKER_CONCURRENCY` tasks (2 by default) instead of one per CPU, unless given `--concurrency`.
+- The service's database connections are named `ap-explanation` (`application_name`).
+- Docs brought up to date with 2.0.0, with a new section on how many queries a server runs at once, and how much memory and disk they need.
 
 ## v2.0.0 — 2026-11-23
 
