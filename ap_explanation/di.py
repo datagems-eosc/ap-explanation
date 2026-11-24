@@ -52,7 +52,6 @@ def _start_celery_worker() -> threading.Thread:
     """Start an embedded Celery worker in a daemon thread."""
     worker = celery_app.Worker(
         loglevel="INFO",
-        concurrency=2,
         pool="threads",
     )
 

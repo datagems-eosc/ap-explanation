@@ -26,4 +26,5 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     result_expires=3600,  # Results are kept for 1 hour
+    worker_concurrency=settings.worker_concurrency,
 )

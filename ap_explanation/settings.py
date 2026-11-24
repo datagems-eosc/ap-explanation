@@ -6,7 +6,7 @@ It imports nothing from the service, so that any module can import it.
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BeforeValidator, PositiveFloat, field_validator
+from pydantic import BeforeValidator, PositiveFloat, PositiveInt, field_validator
 from pydantic_core import PydanticUseDefault
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # thread so no separate worker process is needed. Set to 'false' when running
     # dedicated standalone workers (e.g. via Docker) to avoid double-processing.
     use_embedded_celery_worker: bool = True
+    # Tasks a worker runs at once. A task waiting for its database's lock or for the
+    # server's row budget holds its slot, so more slots keep a busy database from
+    # blocking the others; the row budget, not this, bounds the queries on a server.
+    worker_concurrency: PositiveInt = 2
 
     postgres_user: str | None = None
     postgres_password: str | None = None
