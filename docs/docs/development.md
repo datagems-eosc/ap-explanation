@@ -8,7 +8,7 @@ Open in VS Code with the Dev Containers extension. PostgreSQL with ProvSQL is pr
 
 ### Local Setup
 
-Requirements: Python 3.14, `uv` package manager, PostgreSQL with ProvSQL
+Requirements: Python 3.14, `uv` package manager, PostgreSQL with ProvSQL 1.14 or later
 
 ```bash
 # Install dependencies

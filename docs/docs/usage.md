@@ -32,8 +32,24 @@ curl http://localhost:5000/api/v1/aps/explanation/abc123
 
 **Response when complete:**
 ```json
-{ "task_id": "abc123", "status": "success", "result": [...] }
+{
+  "task_id": "abc123",
+  "status": "success",
+  "result": {
+    "derivations": [
+      {
+        "answer": { "name": "Alice" },
+        "provenance": { "formula": { "expression": "students@k3fa1…", "data": [...], "truncated": false } },
+        "probability": null
+      }
+    ],
+    "explanation": "..."
+  },
+  "error": null
+}
 ```
+
+On failure, `status` is `failure` and `error` says why, e.g. a [limit](troubleshooting.md#query-stopped-by-a-limit) the query exceeded.
 
 ---
 
@@ -81,7 +97,7 @@ All semirings use ProvSQL's built-in `sr_*` functions and identify rows by their
 
 | Name | ProvSQL function | Description |
 |---|---|---|
-| `formula` | `sr_formula` | Algebraic expression showing how each result was derived |
+| `formula` | `sr_formula` (`sr_formula_rows` on aggregates) | Algebraic expression showing how each result was derived. The only one that explains aggregates, cut at `PROVENANCE_MAX_FORMULA_ROWS` rows (`truncated`) |
 | `why` | `sr_why` | Flat list of source tuples that contributed to each result row |
 | `boolexpr` | `sr_boolexpr` | Boolean provenance expression over source identifiers |
 | `how` | `sr_how` | How-provenance: multiset polynomial showing multiplicities |

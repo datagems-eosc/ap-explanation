@@ -98,7 +98,7 @@ The best solution is to use the provided `.devcontainer` configuration. The Post
 To run it locally without the devcontainer:
 
 ```bash
-# Requirements: Python 3.14, uv, PostgreSQL with ProvSQL extension
+# Requirements: Python 3.14, uv, PostgreSQL with ProvSQL 1.14 or later
 uv sync --all-groups
 cp .env.example .env
 # Fill in the required variables in .env:

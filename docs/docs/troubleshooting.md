@@ -22,7 +22,7 @@ Or install ProvSQL manually on your PostgreSQL instance.
 
 ### Table Not Annotated
 
-**Error:** `Table 'students' in schema 'public' is not annotated with semiring 'formula'`
+**Error:** `Table 'students' in schema 'public' is not annotated. Please annotate the table first.`
 
 **Cause:** Attempting to compute provenance before annotating tables
 
@@ -49,11 +49,26 @@ WHERE table_schema = 'public';
 
 ### Semiring Operation Not Supported
 
-**Error:** `Semiring 'why' does not support aggregate queries`
+**Error:** `Aggregate results can only be explained with the formula semiring; requested: why`
 
-**Cause:** Using a semiring without aggregate function support on aggregation queries
+**Cause:** Only `formula` explains aggregates (see [Limitations](architecture.md#aggregates))
 
-**Solution:** Use the `formula` semiring which supports aggregates, or rewrite query without aggregation.
+**Solution:** Request all semirings (`POST /api/v1/aps/explanation`) or `formula`, or rewrite the query without aggregation.
+
+---
+
+### Query Refused
+
+**Errors:**
+
+- `Aggregates ProvSQL cannot explain: percentile_cont. Add a column with COUNT, SUM, ...`
+- `EXCEPT and INTERSECT queries are not supported, rewrite INTERSECT as a JOIN with DISTINCT.`
+- `The provenance query was stopped because it exceeded max_aggregated_rows (8,000,000)`
+- `The provenance query was stopped because it exceeded the plain query's statement_timeout (180s)`
+
+**Cause:** The query is refused before its provenance is computed. The last two come from the pre-check, which runs the query without provenance: its aggregates receive more rows than `PROVENANCE_MAX_AGGREGATED_ROWS`, or it takes longer than `PROVENANCE_PRECHECK_TIMEOUT` (see [Configuration](configuration.md#provenance-query-limits)).
+
+**Solution:** Narrow the query. Raise `PROVENANCE_MAX_AGGREGATED_ROWS` only after [measuring](configuration.md#choosing-provenance_max_aggregated_rows) what the server holds.
 
 ---
 
@@ -71,13 +86,9 @@ WHERE table_schema = 'public';
 
 ### Cannot Connect to Database
 
-Check connection string format in AP:
+The service connects with `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER` and `POSTGRES_PASSWORD`, to the database named by the AP's `RelationalDatabase` node:
 ```json
-{
-  "properties": {
-    "contentUrl": "postgresql://user:password@host:5432/dbname"
-  }
-}
+{ "labels": ["RelationalDatabase"], "properties": { "name": "mathe" } }
 ```
 
 Verify:
@@ -93,7 +104,7 @@ Verify:
 **Cause:** The database doesn't exist on either the primary PostgreSQL server or the Timescale fallback server
 
 **Solution:** 
-1. Verify the database name in the AP's `contentUrl` is correct
+1. Verify the `name` of the AP's `RelationalDatabase` node
 2. Check if the database exists on the primary PostgreSQL server:
    ```bash
    psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -l

@@ -23,6 +23,7 @@ Copy `.env.example` to `.env` and fill in the values.
 |---|---|---|---|
 | `REDIS_BROKER_URI` | No | `redis://redis:6379/0` | Redis URL used as Celery broker, result backend, cache and distributed lock |
 | `USE_EMBEDDED_CELERY_WORKER` | No | `true` | Start a Celery worker inside the FastAPI process. Set to `false` when using standalone workers |
+| `WORKER_CONCURRENCY` | No | `2` | Tasks a worker runs at once, embedded or standalone. A task waiting for its database's lock or for the row budget holds its slot, so with 2, two tasks on a busy database block those of the others. It does not bound PostgreSQL's memory, but more tasks need more free disk: see [Queries at once](#queries-at-once) |
 | `S3_MOUNT_PATH` | No | `/mnt/s3` | Local path where CSV source files are mounted (used by the CSV data source) |
 | `ROOT_PATH` | No | `""` | API root path when behind a reverse proxy |
 
@@ -63,7 +64,25 @@ So `PROVENANCE_MAX_AGGREGATED_ROWS` is shared by all the provenance queries of a
 
 The minimum is because evaluations add up as well: two `sr_formula` evaluations of 4 million rows at once crash a 3 GB server, where one alone is stopped by `provsql.max_memory` (ap-explanation reads an aggregate's formula with `sr_formula_rows` instead, which stops at its first rows). Queries without aggregates weigh little: ProvSQL keeps a gate per result row, about 140 bytes, and evaluating each row's provenance takes about 85 µs, so `statement_timeout` stops them first. On a 3 GB server, eight of 1 million result rows run together (the store worker reaches 0.7 GB), and eight of 2 million are all stopped by `statement_timeout`, without a crash. Hence the default of an eighth.
 
-Within a database, provenance queries still run one at a time (the per-database lock).
+#### Queries at once
+
+Three things bound the provenance queries running together:
+
+- **Per database**: one at a time (the per-database lock). A server with a single database never runs two.
+- **Per worker**: `WORKER_CONCURRENCY` tasks, waiting ones included. It sets throughput, not load: a task waiting for a lock or for the budget holds its slot, so raising it keeps a busy database from holding back the others.
+- **Per server**: the row budget, `PROVENANCE_MAX_AGGREGATED_ROWS / PROVENANCE_MIN_RESERVED_ROWS` queries at most, whatever the number of workers. This is the bound that protects the server's memory.
+
+`provsql.max_memory` applies to each query: a query's backend measured up to 1.16 GB with `1GB`. On a 4 GB server with the default limits, the meteo use case's heaviest questions, sent all at once:
+
+| Queries at once on the server | Peak memory (processes) | Result |
+|---|---|---|
+| 1 (one database) | 1.6 GB | no crash |
+| 4 (four databases) | 2.9 GB | no crash |
+| 3 (five databases, `PROVENANCE_MIN_RESERVED_ROWS=2000000`, `PROVENANCE_TEMP_FILE_LIMIT=1GB`) | 2.1 GB | no out-of-memory kill; the test stopped when the disk ran out |
+
+So on a 4 GB server, set `PROVENANCE_MIN_RESERVED_ROWS` to a quarter of `PROVENANCE_MAX_AGGREGATED_ROWS` (2,000,000) for at most four queries, or to half (4,000,000) for two, the most that cannot exceed the RAM even if each reaches `provsql.max_memory`. The default, an eighth, allows eight. Aggregates of millions of rows lower it further: two of 3.2 million rows leave too little of 8 million for a third.
+
+The disk, not the memory, gave out first. ProvSQL writes the circuit of every query to its store, on disk, and keeps it (see [Reclaiming the circuit store](usage.md#reclaiming-the-circuit-store)); queries also write up to `PROVENANCE_TEMP_FILE_LIMIT` of temporary files each, the pre-check included, which the budget does not count. Three of the meteo use case's heaviest questions running together took 4.5 GB in two minutes. When the disk fills, ProvSQL's store worker dies (`SIGBUS`) and the whole server restarts. A server runs at most one task per database, and no more than the `WORKER_CONCURRENCY` of all workers together: keep several GB free per task it may run, and reclaim the store regularly.
 
 ### LLM — Natural-language explanations (optional)
 

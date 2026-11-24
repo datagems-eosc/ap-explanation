@@ -242,19 +242,6 @@
   },
   "components": {
     "schemas": {
-      "DataSource": {
-        "properties": {
-          "base_node": {
-            "$ref": "#/components/schemas/Node"
-          }
-        },
-        "type": "object",
-        "required": [
-          "base_node"
-        ],
-        "title": "DataSource",
-        "description": "Base class for data sources."
-      },
       "Edge": {
         "properties": {
           "from": {
@@ -305,8 +292,8 @@
           "source/fileSet",
           "statistics",
           "intervalStatistics",
-          "dataQuality",
-          "error",
+          "HAS_DATA_QUALITY",
+          "HAS_ERROR",
           "consist_of",
           "input",
           "output",
@@ -469,23 +456,14 @@
               }
             ],
             "title": "Edges"
-          },
-          "data_source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DataSource"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "type": "object",
         "required": [
           "nodes"
         ],
-        "title": "ProvenanceAnalyticalPattern"
+        "title": "ProvenanceAnalyticalPattern",
+        "description": "A MoMa Analytical Pattern with a provenance operator over one data source."
       },
       "SemiringName": {
         "type": "string",

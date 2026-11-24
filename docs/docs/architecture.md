@@ -44,7 +44,7 @@ The service has specific database prerequisites:
   - **Relational Database** (`RelationalDbDataSource`): connects to existing PostgreSQL tables
   - **CSV Set** (`CsvSetDataSource`): loads CSV files into a temporary schema in a `playground` database, runs provenance, then drops the schema
 
-- **Automatic Initialization**: When the service connects to the database, it automatically sets up a mapping table for each annotated table and one view over them per schema. No custom PostgreSQL functions are installed — all provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
+- **Automatic Initialization**: The service annotates the AP's tables with ProvSQL's `add_provenance` the first time it queries them, and keeps them annotated. Nothing else is installed: no mapping table, no custom function. All provenance computation relies on ProvSQL's compiled built-in `sr_*` functions.
 
 ## Core Concepts
 
@@ -81,20 +81,24 @@ SELECT name, sr_why(provenance(), 'apx_mapping')
 FROM students WHERE grade > 80
 ```
 
-**Aggregate queries** — wrapped as a subquery so ProvSQL can capture the aggregate token:
+**Aggregate queries** — wrapped as a subquery so ProvSQL can capture the aggregate token, then read with `sr_formula_rows`:
 ```sql
 -- Original
 SELECT department, COUNT(*) FROM employees GROUP BY department
 
--- Rewritten (e.g. with sr_formula)
-SELECT x.department, sr_formula(x.cnt, 'apx_mapping')
+-- Rewritten: the aggregate's token, in a temporary table
+CREATE TEMP TABLE apx_result ON COMMIT DROP AS
+SELECT x.department, x.cnt, x.cnt AS sr_formula_rows
 FROM (
     SELECT department, COUNT(*) AS cnt
     FROM employees GROUP BY department
 ) AS x
+
+-- Then, for each row, the first rows of its formula
+SELECT * FROM provsql.sr_formula_rows(<token>, 'apx_mapping') LIMIT 101
 ```
 
-All `sr_*` functions are `ANYELEMENT` polymorphic — the same function name is used for both plain provenance tokens (`provenance()`) and aggregate tokens, so no separate aggregate function is needed.
+An aggregate's formula has a term per row aggregated, millions on a large table. `sr_formula_rows` writes it one row at a time and stops at the `LIMIT`: the service returns the first `PROVENANCE_MAX_FORMULA_ROWS` and marks the formula `truncated`.
 
 
 ## Limitations and Known Issues
@@ -103,6 +107,12 @@ All `sr_*` functions are `ANYELEMENT` polymorphic — the same function name is 
 - **Query types**: Only `SELECT` queries are supported
 - **ProvSQL version**: 1.14 or later is required (`plain()` for `LIMIT`, `HAVING` support, `sr_formula_rows` for aggregates)
 - **EXCEPT / INTERSECT**: Not supported in query rewriting
+
+### Aggregates
+- Only `COUNT`, `SUM`, `MIN`, `MAX`, `AVG`, `ARRAY_AGG`, `BOOL_AND` and `BOOL_OR` can be explained. A query with others (`percentile_cont`, `stddev`...) is refused, unless one of these sits in a column of its own next to them: `COUNT(*)` lists the rows aggregated.
+- Only the `formula` semiring explains an aggregate. With all semirings requested, the derivations carry `formula` only; requesting only other semirings is an error.
+- The formula is cut at `PROVENANCE_MAX_FORMULA_ROWS` rows, and marked `truncated`.
+- A query whose aggregates receive more than `PROVENANCE_MAX_AGGREGATED_ROWS` rows is refused before it runs (see [Configuration](configuration.md#choosing-provenance_max_aggregated_rows)).
 
 ## Key Design Patterns
 
@@ -118,7 +128,7 @@ sequenceDiagram
     participant Worker as Celery Worker
     participant PG as PostgreSQL + ProvSQL
 
-    Client->>API: POST /explain
+    Client->>API: POST /api/v1/aps/explanation
     API->>Redis: dispatch explain_task
     Redis->>Worker: consume task
 
@@ -128,11 +138,13 @@ sequenceDiagram
         Worker-->>Client: result (no DB work)
     else cache miss
         Worker->>Redis: acquire explain_lock:{db}
-        Worker->>PG: annotate tables (add provenance tokens)
+        Worker->>PG: annotate tables (kept for later requests)
+        Worker->>PG: pre-check: run the plain query, count aggregated rows
+        Worker->>Redis: reserve rows of row_budget:{host}:{port}
         Worker->>PG: compute provenance (rewritten query)
-        Worker->>PG: remove annotation
-        Worker->>Redis: release lock
+        Worker->>Redis: release rows
         Worker->>Redis: set(cache_key, result, ttl=1h)
+        Worker->>Redis: release lock
         Worker-->>Client: result
     end
 ```
@@ -140,7 +152,9 @@ sequenceDiagram
 Key points:
 - The **cache** (Redis) is checked first — identical requests are served without touching the database.
 - The **distributed lock** ensures only one task runs against a given database at a time, preventing annotation conflicts.
-- **Annotation** adds ProvSQL provenance tokens to the target tables, **computation** runs the rewritten query, and **removal** cleans up the tokens afterwards.
+- **Annotation** adds ProvSQL provenance tokens to the target tables, once: they stay for the next requests.
+- The **pre-check** refuses a query too large to explain, and the **row budget** keeps the queries of all the server's databases from building too much at once.
+- **Computation** runs the rewritten query, under the [query limits](configuration.md#provenance-query-limits).
 
 ### Caching and Locking
 

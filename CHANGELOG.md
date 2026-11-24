@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+- **`WORKER_CONCURRENCY`** — tasks a worker runs at once, embedded or standalone (default 2, as before for the embedded worker). A standalone `celery worker` now runs 2 by default, instead of one per CPU, unless given `--concurrency`.
+
+### Docs
+
+- How many queries a 4 GB server runs at once, and how to bound them with `PROVENANCE_MIN_RESERVED_ROWS`.
+- Architecture, usage, troubleshooting, README and `.env.example` brought up to date with 2.0.0.
+
 ## v2.0.0 — 2026-11-23
 
 ### Breaking Changes

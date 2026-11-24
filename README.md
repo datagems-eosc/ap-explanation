@@ -3,7 +3,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/datagems-eosc/ap-explanation)](https://img.shields.io/github/commit-activity/m/datagems-eosc/ap-explanation)
 [![License](https://img.shields.io/github/license/datagems-eosc/ap-explanation)](https://img.shields.io/github/license/datagems-eosc/ap-explanation)
 
-A FastAPI service that explains **where SQL query results come from**, using [ProvSQL](https://github.com/PierreSenellart/provsql) to track data lineage through joins, aggregations, and transformations.
+A FastAPI service that explains **where SQL query results come from**, using [ProvSQL](https://github.com/PierreSenellart/provsql) (1.14 or later) to track data lineage through joins, aggregations, and transformations.
 
 Given a query, the service returns one or more provenance annotations:
 
@@ -173,6 +173,7 @@ Copy `.env.example` to `.env` and fill in the values.
 |---|---|---|---|
 | `REDIS_BROKER_URI` | No | `redis://redis:6379/0` | Redis URL used as Celery broker, result backend, cache and distributed lock |
 | `USE_EMBEDDED_CELERY_WORKER` | No | `true` | Start a Celery worker inside the FastAPI process. Set to `false` when using standalone workers |
+| `WORKER_CONCURRENCY` | No | `2` | Tasks a worker runs at once. See [Queries at once](docs/docs/configuration.md#queries-at-once) |
 | `S3_MOUNT_PATH` | No | `/mnt/s3` | Local path where CSV source files are mounted (used by the CSV data source) |
 | `ROOT_PATH` | No | `""` | API root path when behind a reverse proxy |
 
@@ -186,6 +187,10 @@ Set on the provenance query's transaction only, in PostgreSQL's syntax; an empty
 | `PROVENANCE_MAX_MEMORY` | No | `1GB` | `provsql.max_memory` |
 | `PROVENANCE_TEMP_FILE_LIMIT` | No | `5GB` | `temp_file_limit` (superuser or `GRANT SET`, skipped otherwise) |
 | `PROVENANCE_MAX_PARALLEL_WORKERS` | No | `0` | `max_parallel_workers_per_gather` |
+| `PROVENANCE_MAX_AGGREGATED_ROWS` | No | `8000000` | Most rows the aggregates of the queries running at once on a server may receive; a larger query is refused |
+| `PROVENANCE_MIN_RESERVED_ROWS` | No | an eighth of the above | Rows of that budget each query reserves at least: bounds the queries running at once on a server |
+| `PROVENANCE_PRECHECK_TIMEOUT` | No | `180s` | `statement_timeout` of the plain query run first to count aggregated rows |
+| `PROVENANCE_MAX_FORMULA_ROWS` | No | `100` | Most rows of an aggregate's formula returned (`truncated` past it) |
 
 ### LLM — Natural-language explanations (optional)
 
@@ -239,7 +244,7 @@ The API is then available at `http://localhost:5000`. Interactive docs at `http:
 
 ### Running a standalone Celery worker
 
-For scale-out or to run the worker separately from the API:
+For scale-out or to run the worker separately from the API (it runs `WORKER_CONCURRENCY` tasks at once, unless given `--concurrency`):
 
 ```bash
 docker run --rm \
